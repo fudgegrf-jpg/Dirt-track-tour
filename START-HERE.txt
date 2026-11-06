@@ -1,0 +1,163 @@
+DIRT TRACK TOUR - late model dirt racing + team management + hauling across the US
+==================================================================================
+
+The game runs in your web browser (Chrome, Edge or Firefox recommended), but it has
+to be served by a tiny local web server. Opening index.html directly will NOT work
+(browsers block ES modules from file://).
+
+WINDOWS
+  1. Unzip this folder somewhere (e.g. Desktop).
+  2. Double-click  play-windows.bat
+     A black window opens and your browser goes to http://localhost:8080
+     (refresh the page once if it loaded before the server was ready).
+  3. Close the black window when you're done.
+  Needs Python (python.org - tick "Add python.exe to PATH") or Node.js (nodejs.org).
+
+MAC
+  1. Unzip, then double-click  play-mac.command
+     First time: macOS may say it's from an unidentified developer. Right-click the file >
+     Open > Open. If it says "permission denied", open Terminal and run:
+        chmod +x ~/Downloads/dirt-track-tour/play-mac.command
+  2. Your browser opens http://localhost:8080. Close the Terminal window to stop.
+  macOS ships with python3 (or it will offer to install the developer tools).
+
+ANY OS (manual)
+  Open a terminal in this folder and run ONE of:
+     python3 -m http.server 8080        (Windows: py -m http.server 8080)
+     npx serve -l 8080 .
+  then browse to http://localhost:8080
+
+CONTROLS
+  Race:     W/Up throttle, S/Down brake (hold when stopped = reverse), A/D or Left/Right steer,
+            C camera (chase / in-car / TV), R reset to track, P pause, M mute, G graphics quality, H driving guide
+  Loading:  W creep forward, S brake/reverse, A/D steer, stop in the GREEN box on the trailer,
+            X let the crew winch it ($300, slow), C camera
+  Highway:  W throttle, S brake, A/D steer, Q cruise control, E take the truck-stop exit
+            (right lane, near the EXIT sign), C camera (chase / cab / cinematic), P pause
+  Shop & US map are point-and-click.
+  Esc or P: pause menu (resume / settings / return to title). Settings (also on the title screen):
+            volume, crowd, camera shake, graphics, default race camera (chase or in-car).
+  Steering assist (Settings): Off / Low / Medium / High (new default) / Max. It smooths keyboard steering and
+            gas, catches the car if it starts to swap ends, and keeps a slide controllable. You can still
+            throttle-steer and slide the car; turn it to Low or Off once you have the feel.
+  Controller: plug in any standard gamepad - left stick steer, RT gas, LT brake, Y camera,
+            A/B/X actions, Start pause.
+
+  AI difficulty (Settings): Easy / Normal (default) / Hard. Harder AI is faster, reads the track
+            better, races you harder (slide jobs, crossovers, blocking) and makes fewer mistakes.
+            Every AI driver has a personality: cushion slider, bottom-feeder, veteran, rookie, etc.
+  Sound:    the V8, transmission, tires, crowd and semi (diesel + jake brake) are all synthesized live
+            in code (no recordings). Sample WAVs rendered from the same engine are in audio-samples/.
+
+Progress saves automatically between stages in your browser (localStorage).
+Returning to title restarts the current race, loading attempt or highway leg.
+If it runs slowly, press G in a race to lower graphics quality.
+
+VOLUSIA BANKING & LIGHTING UPDATE
+- Round 1 now has smooth curve easements and progressive banking: 6 degrees
+  on the straights; 18 degrees low / about 22 middle / 25 high in the turns.
+- Four-wheel surface following and individual wheel travel keep the car planted.
+- AI groove pace is calibrated to the new banks. The latest High assist adds a gentler keyboard catch; lower assist levels
+  retain the earlier dirt-slide feel.
+- Softer paint/glass reflections, physical depth-occluded lamps, and restrained bloom
+  across the race, night highway and loading scenes.
+
+RUTS, RIDE HEIGHT & PIT LIGHTING UPDATE
+- Fresh clay resets at each race. Actual tire paths paint a shared surface field:
+  black rubber grooves, rutted entries/exits and thrown clay building the cushion.
+- The mesh, bump shading, tires and car physics all use that same surface.
+  Ruts work the suspension and gently deflect steering; rubber gains dry grip.
+  AI drivers read accumulated rubber and roughness when choosing their groove.
+- Detail uses a 512 x 96 surface field; Balanced 384 x 72; Performance 256 x 48. Switching
+  with G preserves the developed surface.
+- Additive light flare overlays are removed from pits, loading and race scenes.
+  Wheels are now satin metal, not blown-out chrome. Ambient fill lifts shadows.
+- Cars and haulers have body/tire contact shadows. Tire height is solved against
+  the actual surface, including ruts and the loading ramp.
+
+REFERENCE-2 CAR AND FORGIVING KEYBOARD UPDATE
+- New smooth rounded nose/valance, long raised hood with a left-offset round air
+  cleaner, flat overhanging roof, livery-colored cage/window net, tall rear sails
+  and an angled spoiler with solid side plates. Decals, mud and LOD preserved.
+- High is now the default (including a one-time migration for existing saves).
+  Choose Off/Low/Medium/High/Max in Settings; later choices are remembered.
+  High catches excessive yaw, fades counter-steer as you recover, softens brake,
+  lift and cushion transitions, and reduces contact/rut steering kicks.
+  You can still slide on the clay; Off/Low/Medium retain the earlier handling.
+- To reverse, stop and keep holding brake for 0.7 seconds. A mid-turn brake stomp
+  no longer instantly puts the car in reverse.
+
+WHOLE-TOUR POLISH
+- All five ovals have smooth easements and progressive turn banking suited to
+  their character. Volusia remains 6 degrees straight / 18-25 degrees in turns.
+- Three graphics presets: Performance / Balanced (new-player default) / Detail.
+  G cycles them. Detail geometry/scenery updates at the next stage; pixel ratio,
+  shadow maps, LOD, dust budget and rut-field quality switch live without losing
+  the developed track. Materials/exposure are consistent; only Detail adds bloom.
+- Cached surface waves and a one-pass normal update reduce periodic CPU hitches.
+- New race shop: setup, crew and championship tabs; clear costs, benefits and
+  per-race salaries. Choose body/accent/cage colors and any of 8 liveries on title.
+- H opens the driving guide and pauses. First-race hints teach steering taps,
+  cameras, drying clay and tear-offs. Completed saves resume the season recap.
+- Gentler chase camera/FOV, more restrained dust and mud, softer field audio and
+  a final sound limiter. Full keyboard/gamepad controls remain in Settings.
+- Loading has striped/ribbed ramp guides, clearer alignment help, a slower crawl
+  and detailed crew; its intro no longer backs the car away by itself.
+- The night cab has legible gauges and a visible matte steering wheel. The rig
+  and traffic tires conform to road crests; truck stops clearly show time costs.
+
+
+PHONE / TABLET PLAY
+-------------------
+Open the public HTTPS link in your phone's browser and rotate sideways. The game
+waits while the rotate prompt is showing. First touch wakes the audio engine.
+Touch devices start on Performance graphics (512-pixel shadows, 450 dust particles,
+0.85 render pixel ratio at normal phone DPR); a later graphics choice is retained.
+
+Left: slide the steering bar. Right: hold GAS or BRAKE (reverse when stopped).
+Two fingers work together: steer while holding a pedal. Lifting one finger does
+not release the other. Cancelled touches, pause and leaving the page release all
+controls so nothing gets stuck.
+Top buttons: Cam changes view, Pause opens the pause/settings menu, the square
+icon requests fullscreen. Clear removes windshield mud; Reset recovers the car.
+On the highway, Cruise toggles cruise control and Exit takes a signed truck-stop
+exit (keep right and slow down). When loading, Winch uses $300 of game money.
+
+Optional tilt: hold the phone comfortably and tap Tilt, then grant motion access
+if iOS asks. The first motion reading calibrates your neutral position. Turn the
+phone gently left/right. The steering bar still overrides tilt while held. Tap
+Touch to switch tilt off; toggle again to recalibrate. Motion requires HTTPS and
+browser/device support; denied permission never disables touch steering.
+
+Menus and settings scroll vertically with one finger. The shop's middle content
+scrolls independently of its tabs and Go racing button. Driver/team inputs remain
+editable. Phone-sized targets are at least 44 pixels high.
+
+INSTALL / FULLSCREEN
+Safari on iPhone: Share > Add to Home Screen, then launch the new icon. iPhone
+Safari may not allow the regular Fullscreen API; the game explains the home-screen
+option instead. Chrome/Android can use the fullscreen button or install shortcut.
+The manifest includes landscape/fullscreen preferences and home-screen icons.
+This is NOT an offline build: a live server/link is still required.
+
+TEMPORARY PUBLIC LINKS
+The account-free tunnel is separate from the zip. On this box, the prepared
+/workspace/start-tunnel.sh starts/reuses a tunnel and prints its HTTPS address.
+Anyone with that address can access the game. The release server exposes only
+runtime assets, never .git, test/, reference/, screenshots/ or node_modules/.
+The link dies if the tunnel, server, or box stops. Running the script after a
+restart creates a new URL; an old installed shortcut must be replaced. If the
+same tunnel is still running, rerunning the script keeps the current link.
+No account, password, payment, or stored credentials are required.
+
+serve.py is the release-only server with explicit JS, WASM and manifest MIME types:
+  python3 serve.py --port 8080
+For local development screenshot harnesses under test/, use a separate local-only
+development server instead (for example python3 -m http.server 8092 --bind 127.0.0.1).
+Do not expose the development server through a public tunnel.
+
+STATIC GITHUB RELEASE NOTE
+The public GitHub/static-hosting copy embeds fonts in css/fonts.css and icons in
+HTML/manifest data URLs. Unused development WAV previews are omitted. The local
+Quick Tunnel instructions above concern box-based development only; a published
+GitHub/static-hosting copy does not need that box or tunnel to stay running.

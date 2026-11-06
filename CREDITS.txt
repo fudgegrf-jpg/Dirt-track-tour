@@ -1,0 +1,30 @@
+DIRT TRACK TOUR - credits and licenses
+======================================
+
+CODE, ART AND SOUND
+  All game code, 3D models, textures, liveries and decals are made procedurally in this project's
+  own code (js/). The race cars, haulers, tracks and scenery are built from code at run time.
+
+  AUDIO: every sound is synthesized live in code with the Web Audio API (js/audio.js):
+  the V8 (firing-order pulse synthesis, intake/exhaust, valvetrain and gear whine),
+  tire/dirt noise, crowd, wind, and the semi's diesel and jake brake.
+  No audio recordings or third-party sound assets are used.
+  The WAV files in audio-samples/ are offline renders of that same synthesizer, made for previewing.
+
+  SPONSORS AND BRANDS: all sponsor, contingency, tire and fuel brand names on the cars are made up
+  for this game. Any resemblance to a real company is unintended. Track names refer to real US
+  venues for flavor only; the game is not affiliated with or endorsed by any track or sanctioning body.
+
+THIRD-PARTY LIBRARY
+  three.js (vendor/three.module.js and vendor/addons/) - MIT License,
+  Copyright 2010-2026 three.js authors. https://github.com/mrdoob/three.js
+
+THIRD-PARTY FONTS (car numbers and sponsor lettering)
+  Kanit Black Italic (vendor/fonts/Kanit-BlackItalic.ttf) - Copyright 2020 The Kanit Project Authors,
+  SIL Open Font License 1.1 (vendor/fonts/OFL-kanit.txt).
+  Archivo Black (vendor/fonts/ArchivoBlack-Regular.ttf) - Copyright 2017 The Archivo Black Project Authors,
+  SIL Open Font License 1.1 (vendor/fonts/OFL-archivoblack.txt).
+
+STATIC GITHUB RELEASE
+  Font bytes are embedded in css/fonts.css; the OFL license texts remain in vendor/fonts/.
+  Unused offline WAV previews are not included in this static release.
