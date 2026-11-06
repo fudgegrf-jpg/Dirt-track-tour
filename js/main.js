@@ -1,0 +1,236 @@
+import { MobileControls, isTouchDevice } from './mobile.js';
+import {QUALITY,qualityPreset} from './quality.js';
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { TRACKS, ROUTES, AI_DRIVERS, CREW_POOL } from './data.js';
+import { RaceScene } from './race.js';
+import { LoadScene } from './load.js';
+import { HighwayScene } from './highway.js';
+import { ShowroomScene } from './showroom.js';
+import * as UI from './ui.js';
+import { GameAudio } from './audio.js';
+import { loadCarFonts } from './models.js';
+
+const SAVE_KEY = 'dirtTrackTour.v1';
+
+class App {
+  constructor() {
+    this.isMobile = isTouchDevice();
+    this.canvas = document.getElementById('gl');
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.0;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.composer = new EffectComposer(this.renderer);
+    this.renderPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.1, 0.25, 3.0);
+    this.composer.addPass(this.renderPass); this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass());
+    if(this.isMobile && !localStorage.getItem('dtt.mobileDefaults.v1')){localStorage.setItem('dtt.quality','low');localStorage.setItem('dtt.mobileDefaults.v1','1');}
+    this.quality = localStorage.getItem('dtt.quality') || (this.isMobile?'low':'medium');if(!QUALITY[this.quality])this.quality=this.isMobile?'low':'medium';
+    this.ui = document.getElementById('ui');
+    this.keys = new Set(); this.pressed = new Set();
+    addEventListener('keydown', e => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code) && !['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) e.preventDefault(); if (!this.keys.has(e.code)) this.pressed.add(e.code); this.keys.add(e.code); });
+    addEventListener('keyup', e => this.keys.delete(e.code));
+    addEventListener('blur', () => this.keys.clear());
+    addEventListener('resize', () => this.resize());
+    this.mode = null; this.last = performance.now(); this.paused = false; this.manual = false;
+    this.settings = Object.assign({ shake: 1, volume: 0.8, crowd: 1, cam: 'chase', assist: 'high', diff: 'normal' }, (() => { try { return JSON.parse(localStorage.getItem('dtt.settings')) || {}; } catch (e) { return {}; } })());
+    // One-time migration: existing saves receive the safer new default too.
+    // Subsequent explicit Off/Low/Medium/High/Max choices are respected.
+    if(this.settings.assistVersion!==2){this.settings.assist='high';this.settings.assistVersion=2;localStorage.setItem('dtt.settings',JSON.stringify(this.settings));}
+    if(!['off','low','med','high','max'].includes(this.settings.assist))this.settings.assist='high';
+    this.audio = new GameAudio(this);
+    this.mobile = new MobileControls(this);
+    addEventListener('gamepadconnected', e => this.toast?.(`Controller connected: ${e.gamepad.id.slice(0, 32)}`));
+    this.state = this.load();
+    this.applyQuality();
+    this.resize();
+    document.getElementById('loading')?.remove();
+    this.goto('title');
+    requestAnimationFrame(t => this.frame(t));
+  }
+  // ---------- input helpers ----------
+  key(...codes) { return codes.some(c => this.keys.has(c)); }
+  tap(code) { if (this.pressed.has(code)) { this.pressed.delete(code); return true; } return false; }
+  input() {
+    const l = this.key('ArrowLeft', 'KeyA'), r = this.key('ArrowRight', 'KeyD');
+    const inp = { steer: (r ? 1 : 0) - (l ? 1 : 0), throttle: this.key('ArrowUp', 'KeyW') ? 1 : 0, brake: this.key('ArrowDown', 'KeyS') ? 1 : 0 };
+    const g = this.pad;
+    if (g) { // analog gamepad: left stick steers (with a small deadzone), RT gas, LT brake
+      const ax = Math.abs(g.steer) < 0.08 ? 0 : g.steer;
+      if (ax) inp.steer = Math.max(-1, Math.min(1, ax));
+      inp.throttle = Math.max(inp.throttle, g.gas); inp.brake = Math.max(inp.brake, g.brake);
+    }
+    this.mobile?.apply(inp);
+    return inp;
+  }
+  // poll the first connected gamepad; buttons become key taps so every scene's shortcuts work on a controller
+  pollPad() {
+    const gp = navigator.getGamepads ? [...navigator.getGamepads()].find(x => x && x.connected) : null;
+    if (!gp) { this.pad = null; return; }
+    const b = i => gp.buttons[i] ? (gp.buttons[i].value ?? (gp.buttons[i].pressed ? 1 : 0)) : 0;
+    this.pad = { steer: gp.axes[0] || 0, gas: b(7), brake: b(6) };
+    const map = { 0: 'Space', 1: 'KeyX', 2: 'KeyE', 3: 'KeyC', 4: 'KeyQ', 5: 'KeyT', 8: 'KeyR', 9: 'Escape', 12: 'ArrowUp', 13: 'ArrowDown' };
+    this.padPrev = this.padPrev || {};
+    for (const [i, code] of Object.entries(map)) {
+      const down = b(+i) > 0.5;
+      if (down && !this.padPrev[i]) { this.pressed.add(code); this.keys.add(code); }
+      if (!down && this.padPrev[i]) this.keys.delete(code);
+      this.padPrev[i] = down;
+    }
+  }
+  saveSettings() { localStorage.setItem('dtt.settings', JSON.stringify(this.settings)); this.audio.applyVolume(); }
+  toast(msg) {
+    const d = document.createElement('div'); d.className = 'toast'; d.textContent = msg; document.body.appendChild(d);
+    setTimeout(() => d.classList.add('out'), 2200); setTimeout(() => d.remove(), 2800);
+  }
+  // ---------- pause + settings overlay (Esc / Start) ----------
+  togglePause(force) {
+    const on = force ?? !this.paused;
+    this.mobile?.reset();
+    document.getElementById('pause')?.remove();
+    this.paused = on;
+    if (!on) return;
+    this.audio.stop();
+    const d = document.createElement('div'); d.id = 'pause';
+    d.innerHTML = `<div class="panel" style="width:420px"><h2>PAUSED</h2>
+      <div class="row" style="flex-direction:column;align-items:stretch;gap:8px">
+        <button id="p-res">Resume</button><button id="p-set" class="alt">Settings</button><button id="p-quit" class="alt">Return to title</button></div>
+      <p class="muted" style="margin:10px 0 0">Esc / Start to resume • leaving restarts this stage; earlier stages stay saved</p></div>`;
+    document.body.appendChild(d);
+    d.querySelector('#p-res').onclick = () => this.togglePause(false);
+    d.querySelector('#p-set').onclick = () => this.openSettings();
+    d.querySelector('#p-quit').onclick = () => { this.togglePause(false); this.goto('title'); };
+  }
+  openHelp() {
+    if(document.getElementById('help')){this.closeHelp();return;}
+    this.mobile?.reset();this.helpWasPaused=this.paused;this.paused=true;this.audio.stop();this.keys.clear();
+    const d=document.createElement('div');d.id='help';d.innerHTML=`<div class="panel"><div class="kicker">DRIVING GUIDE</div><h2 style="margin-top:8px">Find your rhythm, not full lock.</h2><p class="muted">High assist is the keyboard-friendly default. The car still slides; the assist catches excess yaw and softens bumps. Start with short steering taps and let it settle.</p><div class="help-grid"><section><h3>On the clay</h3><p><kbd>W</kbd> / <kbd>↑</kbd> Throttle<br><kbd>S</kbd> / <kbd>↓</kbd> Brake; hold when stopped to reverse<br><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd> Steer<br><kbd>C</kbd> Chase / cockpit / trackside<br><kbd>T</kbd> Tear off muddy windshield<br><kbd>R</kbd> Recover to center of the track</p><p>Fresh clay: try the bottom. As it dries, explore the middle and cushion. Ruts bounce the body; High assist keeps the steering effects gentle.</p></section><section><h3>In the paddock & on the road</h3><p>Loading: creep up the striped ramp, stop in the green box. <kbd>X</kbd> lets the crew winch for $300.<br>Highway: arrows/WASD, <kbd>S</kbd> / <kbd>↓</kbd> brake, <kbd>E</kbd> take a signed exit, <kbd>C</kbd> change camera.<br><kbd>Q</kbd> Cruise control, <kbd>H</kbd> this guide.</p><p>Controller: left stick, RT gas, LT brake; Y camera, A/B/X actions, Start pause.<br><kbd>P</kbd> / Esc pause · <kbd>M</kbd> mute · <kbd>G</kbd> graphics</p></section></div><div class="row" style="margin-top:18px;justify-content:space-between"><span class="muted">High / Max assist are recommended for a relaxed keyboard race.</span><button id="help-close">Got it →</button></div></div>`;document.body.appendChild(d);d.querySelector('#help-close').onclick=()=>this.closeHelp();
+  }
+  closeHelp(){document.getElementById('help')?.remove();this.paused=!!this.helpWasPaused;this.keys.clear();this.pressed.clear();}
+  openSettings() {
+    this.mobile?.reset();document.getElementById('settings')?.remove();this.settingsWasPaused=this.paused;this.paused=true;this.audio.stop();
+    const S = this.settings, d = document.createElement('div'); d.id = 'settings';
+    const sl = (id, label, v, min, max, step) => `<div class="row set-row"><label>${label}</label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${v}"><span id="${id}-v">${Math.round(v * 100)}%</span></div>`;
+    d.innerHTML = `<div class="panel" style="width:460px"><h2>SETTINGS</h2>
+      ${sl('s-vol', 'Master volume', S.volume, 0, 1, 0.05)}
+      ${sl('s-crowd', 'Crowd &amp; field', S.crowd, 0, 1, 0.05)}
+      ${sl('s-shake', 'Camera shake', S.shake, 0, 1.5, 0.05)}
+      <div class="row set-row"><label>Graphics</label><select id="s-q"><option value="low">Performance — faster / 85% resolution</option><option value="medium">Balanced — recommended</option><option value="high">Detail — higher resolution + subtle bloom</option></select></div>
+      <div class="row set-row"><label>Steering assist</label><select id="s-assist"><option value="off">Off (pro: all on you)</option><option value="low">Low</option><option value="med">Medium</option><option value="high">High (recommended)</option><option value="max">Max (extra forgiving)</option></select></div>
+      <div class="row set-row"><label>AI difficulty</label><select id="s-diff"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
+      <div class="row set-row"><label>Race camera</label><select id="s-cam"><option value="chase">Chase</option><option value="incar">In-car cockpit</option></select></div>
+      <div class="row set-row"><label>Sound</label><button id="s-mute" class="alt">${this.audio.muted ? 'Unmute' : 'Mute'}</button></div>
+      ${this.isMobile?'<p class="muted">Touch: slide the steering bar on the left; hold GAS / BRAKE on the right. Tap Tilt to enable and calibrate tilt steering (hold your phone comfortably first). Camera, pause and fullscreen are above the road. On iPhone, use Share → Add to Home Screen for fullscreen.</p>':''}
+      <p class="muted">Keyboard: arrows/WASD drive • C camera • P/Esc pause • M mute • G graphics.<br>Controller: left stick steer • RT gas • LT brake • Y camera • A/B/X actions • Start pause.</p>
+      <div class="row"><button id="s-help" class="alt">Driving guide</button><span style="flex:1"></span><button id="s-done">Done</button></div></div>`;
+    document.body.appendChild(d);
+    d.querySelector('#s-q').value = this.quality; d.querySelector('#s-cam').value = S.cam; d.querySelector('#s-assist').value = S.assist || 'high'; d.querySelector('#s-diff').value = S.diff || 'normal';
+    const bind = (id, key) => { const e = d.querySelector('#' + id); e.oninput = () => { S[key] = +e.value; d.querySelector(`#${id}-v`).textContent = Math.round(S[key] * 100) + '%'; this.saveSettings(); }; };
+    bind('s-vol', 'volume'); bind('s-crowd', 'crowd'); bind('s-shake', 'shake');
+    d.querySelector('#s-q').onchange = e => { this.quality = e.target.value; this.applyQuality(); };
+    d.querySelector('#s-assist').onchange = e => { S.assist = e.target.value; this.saveSettings(); };
+    d.querySelector('#s-diff').onchange = e => { S.diff = e.target.value; this.saveSettings(); };
+    d.querySelector('#s-cam').onchange = e => { S.cam = e.target.value;if(this.phase==='race'){this.mode.camMode=S.cam==='incar'?1:0;this.mode.camInit=false;} this.saveSettings(); };
+    d.querySelector('#s-mute').onclick = e => { this.audio.toggleMute(); e.target.textContent = this.audio.muted ? 'Unmute' : 'Mute'; };
+    d.querySelector('#s-help').onclick=()=>this.openHelp();d.querySelector('#s-done').onclick = () => this.closeSettings();
+  }
+  closeSettings(){document.getElementById('settings')?.remove();this.paused=!!this.settingsWasPaused;this.keys.clear();}
+  fade() {
+    const f = document.getElementById('fade'); if (!f || this.manual) return;
+    f.style.transition = 'none'; f.style.opacity = 1; void f.offsetWidth;
+    f.style.transition = 'opacity 0.4s ease-out'; f.style.opacity = 0;
+  }
+  // ---------- state ----------
+  newState(opts = {}) {
+    const standings = {}; for (const d of AI_DRIVERS) standings[d.name] = 0;
+    const driver = opts.driver || 'You'; standings[driver] = 0;
+    return { v: 1, driver, team: opts.team || 'Red Clay Racing', num: opts.num || '21', color: opts.color ?? 0xc81d25, accent: opts.accent ?? 0xffffff, cageColor:opts.cageColor??0xc92127, scheme:opts.scheme??4,
+      round: 0, money: 15000, carDmg: 0, haulerDmg: 0, fuel: 0.7, fatigue: 0, up: { engine: 0, tires: 0, shocks: 0 }, crew: ['m2'],
+      standings, results: [], phase: 'shop', late: false, slackBonus: 0, arrival: null, earnings: 0, log: [] };
+  }
+  load() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.v === 1) return s; } catch (e) { } return null; }
+  save() { if (this.state) localStorage.setItem(SAVE_KEY, JSON.stringify(this.state)); }
+  clearSave() { localStorage.removeItem(SAVE_KEY); }
+  get track() { return TRACKS[Math.min(this.state.round, TRACKS.length - 1)]; }
+  get route() { return ROUTES[this.state.round]; }
+  crew(role) { return (this.state?.crew || []).map(id => CREW_POOL.find(c => c.id === id)).find(c => c && c.role === role); }
+  carParams() {
+    const s = this.state, chief = this.crew('Crew Chief'), tire = this.crew('Tire Guy');
+    return { power: 1 + 0.065 * s.up.engine, grip: 1 + 0.03 * s.up.tires + (chief ? 0.01 * chief.skill : 0) + (tire ? 0.008 * tire.skill : 0), stab: 0.25 * s.up.shocks, damage: s.carDmg };
+  }
+  // ---------- flow ----------
+  goto(phase, params = {}) {
+    this.mobile?.reset();
+    document.body.dataset.phase=phase;
+    if (this.mode) { this.mode.dispose?.(); this.mode = null; }
+    this.ui.innerHTML = ''; this.phase = phase; this.audio.stop();
+    this.helpWasPaused=false;document.getElementById('help')?.remove();this.togglePause(false); document.getElementById('settings')?.remove(); this.fade();
+    this.bloom.strength = 0.1; this.bloom.radius = 0.25; this.bloom.threshold = 3.0; this.renderer.toneMappingExposure = 1; // scenes may override
+    document.getElementById('vignette').style.opacity = 0;
+    if (this.state && !['title', 'schedule', 'season'].includes(phase)) { this.state.phase = phase; this.save(); }
+    switch (phase) {
+      case 'title': this.mode = new RaceScene(this, { track: TRACKS[4], attract: true }); UI.title(this); break;
+      case 'schedule': this.mode = new RaceScene(this, { track: TRACKS[0], attract: true }); UI.schedule(this); break;
+      case 'shop': this.mode = new ShowroomScene(this); UI.shop(this); break;
+      case 'race': this.mode = new RaceScene(this, { track: this.track, startBack: this.state.late }); break;
+      case 'results': this.mode = new ShowroomScene(this, { spin: true }); UI.results(this, params); break;
+      case 'load': this.mode = new LoadScene(this); break;
+      case 'map': this.mode = null; UI.map(this); break;
+      case 'highway': this.mode = new HighwayScene(this, { route: this.route }); break;
+      case 'arrive': this.mode = new ShowroomScene(this); UI.arrive(this, params); break;
+      case 'season': this.mode = new RaceScene(this, { track: TRACKS[4], attract: true }); UI.season(this); break;
+    }
+    if (this.mode) { this.renderPass.scene = this.mode.scene; this.renderPass.camera = this.mode.camera; this.applyQuality(); }
+    this.canvas.style.visibility = this.mode ? 'visible' : 'hidden';
+    this.mobile?.sync();
+  }
+  applyQuality(){
+    const p={...qualityPreset(this.quality)};if(this.isMobile){p.dpr=Math.min(p.dpr,1.5);p.shadow=Math.min(p.shadow,this.quality==='low'?512:1024);p.dust=Math.min(p.dust,this.quality==='low'?450:1000);p.lod=Math.min(p.lod,24);}
+    localStorage.setItem('dtt.quality',this.quality);
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio,p.dpr)*p.scale);this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.mode?.scene?.traverse(o=>{if(o.isLight&&o.castShadow&&o.shadow){const sh=o.shadow;if(sh.mapSize.x!==p.shadow){sh.map?.dispose();sh.map=null;sh.mapSize.set(p.shadow,p.shadow);sh.needsUpdate=true;}}if(o.isLOD&&o.levels[1])o.levels[1].distance=p.lod;});this.mode?.dust?.setBudget(p.dust);this.resize();
+  }
+  resize() {
+    const w = innerWidth, h = innerHeight;
+    this.renderer.setSize(w, h, false); this.composer.setSize(w, h);
+    this.bloom.resolution.set(w / 2, h / 2);
+    if (this.mode?.camera) { this.mode.camera.aspect = w / h; this.mode.camera.updateProjectionMatrix(); }
+    this.mode?.onResize?.(w, h);
+    this.mobile?.sync();
+  }
+  render() {
+    if (!this.mode) return;
+    if (this.quality === 'high') this.composer.render(); else this.renderer.render(this.mode.scene, this.mode.camera);
+  }
+  step(dt) { if (this.mode && !this.paused && !this.mobile?.portrait) this.mode.update(dt); this.pressed.clear(); }
+  frame(t) {
+    requestAnimationFrame(t2 => this.frame(t2));
+    const dt = Math.min(0.05, (t - this.last) / 1000); this.last = t;
+    this.mobile?.sync();
+    if (this.manual) return;
+    this.pollPad();
+    const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
+    if(!typing&&this.tap('KeyH'))this.openHelp();
+    if (!typing&&!document.getElementById('help')&&this.tap('KeyP') && !document.getElementById('settings') && ['race', 'load', 'highway'].includes(this.phase)) this.togglePause();
+    if (this.tap('Escape')) {
+      if(document.getElementById('help'))this.closeHelp();
+      else if (document.getElementById('settings')) this.closeSettings();
+      else if (['race', 'load', 'highway'].includes(this.phase)) this.togglePause();
+    }
+    if (this.tap('KeyG') && document.activeElement?.tagName !== 'INPUT') { this.quality = ['low','medium','high'][(['low','medium','high'].indexOf(this.quality)+1)%3];this.applyQuality();this.toast(qualityPreset(this.quality).label+' graphics'); }
+    if (!typing&&this.tap('KeyM')) this.audio.toggleMute();
+    this.step(dt); this.render();
+  }
+  money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
+}
+
+await loadCarFonts();   // livery number & sponsor fonts (OFL), capped at 2.5 s so a slow load never blocks the game
+const app = new App();
+window.DTT = app; // exposed for automated testing
+// deterministic test helper: advance the active mode by N seconds of game time
+app.advance = (sec, dt = 1 / 60) => { for (let t = 0; t < sec; t += dt) app.step(dt); app.render(); };
