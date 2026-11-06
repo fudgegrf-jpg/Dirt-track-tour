@@ -5,7 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { TRACKS, ROUTES, AI_DRIVERS, CREW_POOL } from './data.js';
+import { DEFAULT_DRIVER, TRACKS, ROUTES, AI_DRIVERS, CREW_POOL } from './data.js';
 import { RaceScene } from './race.js';
 import { LoadScene } from './load.js';
 import { HighwayScene } from './highway.js';
@@ -47,6 +47,8 @@ class App {
     this.mobile = new MobileControls(this);
     addEventListener('gamepadconnected', e => this.toast?.(`Controller connected: ${e.gamepad.id.slice(0, 32)}`));
     this.state = this.load();
+    try { this.profile = JSON.parse(localStorage.getItem('dtt.profile')) || {}; } catch { this.profile = {}; }
+    if (this.profile.driver === 'Dale Rhodes') { this.profile.driver = DEFAULT_DRIVER; localStorage.setItem('dtt.profile', JSON.stringify(this.profile)); }
     this.applyQuality();
     this.resize();
     document.getElementById('loading')?.remove();
@@ -85,6 +87,7 @@ class App {
   }
   saveSettings() { localStorage.setItem('dtt.settings', JSON.stringify(this.settings)); this.audio.applyVolume(); }
   toast(msg) {
+    document.querySelectorAll('.toast').forEach(t=>t.remove());
     const d = document.createElement('div'); d.className = 'toast'; d.textContent = msg; document.body.appendChild(d);
     setTimeout(() => d.classList.add('out'), 2200); setTimeout(() => d.remove(), 2800);
   }
@@ -97,10 +100,8 @@ class App {
     if (!on) return;
     this.audio.stop();
     const d = document.createElement('div'); d.id = 'pause';
-    d.innerHTML = `<div class="panel" style="width:420px"><h2>PAUSED</h2>
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:8px">
-        <button id="p-res">Resume</button><button id="p-set" class="alt">Settings</button><button id="p-quit" class="alt">Return to title</button></div>
-      <p class="muted" style="margin:10px 0 0">Esc / Start to resume • leaving restarts this stage; earlier stages stay saved</p></div>`;
+    d.setAttribute('role','dialog'); d.setAttribute('aria-modal','true'); d.setAttribute('aria-label','Pause menu');
+    d.innerHTML = `<div class="panel pause-card"><section><div class="kicker">SESSION PAUSED</div><h2>Take a breather.</h2><p class="pause-driver">${UI.esc(this.state?.driver || DEFAULT_DRIVER)}</p><p class="muted">${this.isMobile?'Tap Resume when you’re ready.':'Esc / Start to get back to it.'}<br>Earlier stages are autosaved.</p></section><nav class="pause-actions"><button id="p-res">Resume ${UI.icon('arrow')}</button><button id="p-set" class="alt">Settings ${UI.icon('settings')}</button><button id="p-quit" class="text-button">Return to title</button></nav></div>`;
     document.body.appendChild(d);
     d.querySelector('#p-res').onclick = () => this.togglePause(false);
     d.querySelector('#p-set').onclick = () => this.openSettings();
@@ -115,19 +116,16 @@ class App {
   openSettings() {
     this.mobile?.reset();document.getElementById('settings')?.remove();this.settingsWasPaused=this.paused;this.paused=true;this.audio.stop();
     const S = this.settings, d = document.createElement('div'); d.id = 'settings';
-    const sl = (id, label, v, min, max, step) => `<div class="row set-row"><label>${label}</label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${v}"><span id="${id}-v">${Math.round(v * 100)}%</span></div>`;
-    d.innerHTML = `<div class="panel" style="width:460px"><h2>SETTINGS</h2>
-      ${sl('s-vol', 'Master volume', S.volume, 0, 1, 0.05)}
-      ${sl('s-crowd', 'Crowd &amp; field', S.crowd, 0, 1, 0.05)}
-      ${sl('s-shake', 'Camera shake', S.shake, 0, 1.5, 0.05)}
-      <div class="row set-row"><label>Graphics</label><select id="s-q"><option value="low">Performance — faster / 85% resolution</option><option value="medium">Balanced — recommended</option><option value="high">Detail — higher resolution + subtle bloom</option></select></div>
-      <div class="row set-row"><label>Steering assist</label><select id="s-assist"><option value="off">Off (pro: all on you)</option><option value="low">Low</option><option value="med">Medium</option><option value="high">High (recommended)</option><option value="max">Max (extra forgiving)</option></select></div>
-      <div class="row set-row"><label>AI difficulty</label><select id="s-diff"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
-      <div class="row set-row"><label>Race camera</label><select id="s-cam"><option value="chase">Chase</option><option value="incar">In-car cockpit</option></select></div>
-      <div class="row set-row"><label>Sound</label><button id="s-mute" class="alt">${this.audio.muted ? 'Unmute' : 'Mute'}</button></div>
-      ${this.isMobile?'<p class="muted">Touch: slide the steering bar on the left; hold GAS / BRAKE on the right. Tap Tilt to enable and calibrate tilt steering (hold your phone comfortably first). Camera, pause and fullscreen are above the road. On iPhone, use Share → Add to Home Screen for fullscreen.</p>':''}
-      <p class="muted">Keyboard: arrows/WASD drive • C camera • P/Esc pause • M mute • G graphics.<br>Controller: left stick steer • RT gas • LT brake • Y camera • A/B/X actions • Start pause.</p>
-      <div class="row"><button id="s-help" class="alt">Driving guide</button><span style="flex:1"></span><button id="s-done">Done</button></div></div>`;
+    const sl = (id, label, v, min, max, step) => `<div class="row set-row slider-row"><label for="${id}">${label}</label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${v}"><span id="${id}-v">${Math.round(v*100)}%</span></div>`;
+    d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','Settings');
+    d.innerHTML = `<div class="panel settings-card"><header class="modal-head"><div><div class="kicker">PERSONALIZE</div><h2>Your drive.</h2></div><span class="pill">${this.isMobile?'TOUCH + TILT':'KEYBOARD / CONTROLLER'}</span></header><div class="settings-body"><section><h3>Audio & feel</h3>
+      ${sl('s-vol','Master volume',S.volume,0,1,.05)}${sl('s-crowd','Crowd & field',S.crowd,0,1,.05)}${sl('s-shake','Camera shake',S.shake,0,1.5,.05)}
+      <div class="row set-row"><label>Sound</label><button id="s-mute" class="alt">${this.audio.muted?'Unmute':'Mute'}</button></div></section><section><h3>Driving & display</h3>
+      <div class="row set-row"><label for="s-q">Graphics</label><select id="s-q"><option value="low">Performance</option><option value="medium">Balanced</option><option value="high">Detail</option></select></div>
+      <div class="row set-row"><label for="s-assist">Steering assist</label><select id="s-assist"><option value="off">Off · pro</option><option value="low">Low</option><option value="med">Medium</option><option value="high">High · recommended</option><option value="max">Max · relaxed</option></select></div>
+      <div class="row set-row"><label for="s-diff">AI difficulty</label><select id="s-diff"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
+      <div class="row set-row"><label for="s-cam">Race camera</label><select id="s-cam"><option value="chase">Chase</option><option value="incar">Cockpit</option></select></div></section></div>
+      <footer class="modal-footer"><button id="s-help" class="text-button">Driving guide ${UI.icon('arrow')}</button><button id="s-done">Done ${UI.icon('check')}</button></footer></div>`;
     document.body.appendChild(d);
     d.querySelector('#s-q').value = this.quality; d.querySelector('#s-cam').value = S.cam; d.querySelector('#s-assist').value = S.assist || 'high'; d.querySelector('#s-diff').value = S.diff || 'normal';
     const bind = (id, key) => { const e = d.querySelector('#' + id); e.oninput = () => { S[key] = +e.value; d.querySelector(`#${id}-v`).textContent = Math.round(S[key] * 100) + '%'; this.saveSettings(); }; };
@@ -148,12 +146,31 @@ class App {
   // ---------- state ----------
   newState(opts = {}) {
     const standings = {}; for (const d of AI_DRIVERS) standings[d.name] = 0;
-    const driver = opts.driver || 'You'; standings[driver] = 0;
+    const driver = opts.driver?.trim() || DEFAULT_DRIVER; standings[driver] = 0;
     return { v: 1, driver, team: opts.team || 'Red Clay Racing', num: opts.num || '21', color: opts.color ?? 0xc81d25, accent: opts.accent ?? 0xffffff, cageColor:opts.cageColor??0xc92127, scheme:opts.scheme??4,
       round: 0, money: 15000, carDmg: 0, haulerDmg: 0, fuel: 0.7, fatigue: 0, up: { engine: 0, tires: 0, shocks: 0 }, crew: ['m2'],
       standings, results: [], phase: 'shop', late: false, slackBonus: 0, arrival: null, earnings: 0, log: [] };
   }
-  load() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.v === 1) return s; } catch (e) { } return null; }
+  load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+      if (s && s.v === 1) {
+        if (!s.driver?.trim() || s.driver === 'Dale Rhodes') {
+          const old = s.driver ?? ''; s.driver = DEFAULT_DRIVER; s.standings ||= {};
+          if (old !== DEFAULT_DRIVER && Object.hasOwn(s.standings, old)) {
+            s.standings[DEFAULT_DRIVER] = (s.standings[DEFAULT_DRIVER] || 0) + (s.standings[old] || 0);
+            delete s.standings[old];
+          } else s.standings[DEFAULT_DRIVER] ??= 0;
+          // Historical result/player records may also contain the previous default.
+          const rename = o => { if (!o || typeof o !== 'object') return;
+            for (const k of Object.keys(o)) { if ((k === 'name' || k === 'driver') && o[k] === old) o[k] = DEFAULT_DRIVER; else rename(o[k]); }
+          }; rename(s.results); rename(s.log);
+          localStorage.setItem(SAVE_KEY, JSON.stringify(s));
+        }
+        return s;
+      }
+    } catch (e) {} return null;
+  }
   save() { if (this.state) localStorage.setItem(SAVE_KEY, JSON.stringify(this.state)); }
   clearSave() { localStorage.removeItem(SAVE_KEY); }
   get track() { return TRACKS[Math.min(this.state.round, TRACKS.length - 1)]; }
@@ -174,8 +191,8 @@ class App {
     document.getElementById('vignette').style.opacity = 0;
     if (this.state && !['title', 'schedule', 'season'].includes(phase)) { this.state.phase = phase; this.save(); }
     switch (phase) {
-      case 'title': this.mode = new RaceScene(this, { track: TRACKS[4], attract: true }); UI.title(this); break;
-      case 'schedule': this.mode = new RaceScene(this, { track: TRACKS[0], attract: true }); UI.schedule(this); break;
+      case 'title': this.mode = new ShowroomScene(this, { hero: true, profile: this.profileOverride || this.state || this.profile }); UI.title(this); break;
+      case 'schedule': this.mode = null; UI.schedule(this); break;
       case 'shop': this.mode = new ShowroomScene(this); UI.shop(this); break;
       case 'race': this.mode = new RaceScene(this, { track: this.track, startBack: this.state.late }); break;
       case 'results': this.mode = new ShowroomScene(this, { spin: true }); UI.results(this, params); break;
@@ -183,7 +200,7 @@ class App {
       case 'map': this.mode = null; UI.map(this); break;
       case 'highway': this.mode = new HighwayScene(this, { route: this.route }); break;
       case 'arrive': this.mode = new ShowroomScene(this); UI.arrive(this, params); break;
-      case 'season': this.mode = new RaceScene(this, { track: TRACKS[4], attract: true }); UI.season(this); break;
+      case 'season': this.mode = null; UI.season(this); break;
     }
     if (this.mode) { this.renderPass.scene = this.mode.scene; this.renderPass.camera = this.mode.camera; this.applyQuality(); }
     this.canvas.style.visibility = this.mode ? 'visible' : 'hidden';
