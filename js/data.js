@@ -1,3 +1,4 @@
+export const DEFAULT_DRIVER = 'Jayden Fudge';
 // Season data: real, well-known US dirt tracks (geometry is a stylized approximation).
 export const TRACKS = [
   { id:'volusia', name:'Volusia Speedway Park', short:'Volusia', city:'Barberville, FL', lat:29.18, lon:-81.42,

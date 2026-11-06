@@ -207,7 +207,7 @@ export class LoadScene {
     this.result = r;
     this.semi.userData.rampPivot.rotation.z = this.rampTarget;
     const el = document.createElement('div'); el.className = 'screen';
-    el.innerHTML = `<div class="panel" style="width:440px"><h2>CAR LOADED ${this.dmg ? '' : '— CLEAN!'}</h2><table>
+    el.innerHTML = `<div class="panel load-summary" style="width:440px"><div class="kicker">LOADING COMPLETE</div><h2>Ready to roll.</h2><p class="muted">${this.dmg ? 'Race car secured.' : 'A clean load. Nice work.'}</p><table>
       <tr><td>Load time</td><td>${t.toFixed(1)}s (par ${this.par}s)</td></tr><tr><td>Wall hits / ramp falls</td><td>${this.hits} / ${this.falls}</td></tr>
       <tr><td>Damage added</td><td>${this.dmg.toFixed(0)}%</td></tr><tr><td>Extra cost</td><td>$${cost}${this.winch ? ' (winch crew)' : ''}${over ? ' (crew overtime)' : ''}</td></tr>
       <tr><td>Head start on the road</td><td style="color:#5fd16a">+${bonus.toFixed(2)} h</td></tr></table>

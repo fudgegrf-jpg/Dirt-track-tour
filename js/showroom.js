@@ -1,3 +1,4 @@
+import { DEFAULT_DRIVER } from './data.js';
 import { ContactShadow } from './contact.js';
 // Background 3D scene behind the 2D shop / results / arrival overlays: your rig in the pits at dusk.
 import * as THREE from 'three';
@@ -7,6 +8,7 @@ export class ShowroomScene {
   constructor(app, opts = {}) {
     this.app = app; const st = app.state || {};
     const s = this.scene = new THREE.Scene();
+    if (opts.hero || app.phase === 'shop') { this.studio=true; this.setupStudio(opts.profile || app.state || app.profile || {}); return; }
     this.camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 5000);
     s.fog = new THREE.Fog(0xb2a08f, 65, 250);
     app.bloom.strength=0.035;app.bloom.threshold=4;app.renderer.toneMappingExposure=0.88;
@@ -47,8 +49,27 @@ export class ShowroomScene {
     }s.add(crowns,trunks);
     this.t = 0; this.spin = opts.spin;
   }
+  setupStudio(st) {
+    const app=this.app,s=this.scene;this.t=0;this.camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,.1,180);
+    s.background=new THREE.Color(0x111b20);s.fog=new THREE.Fog(0x111b20,22,65);
+    app.bloom.strength=0;app.bloom.threshold=4;app.renderer.toneMappingExposure=.9;
+    s.add(new THREE.HemisphereLight(0xe3edf5,0x39434a,1.8));s.add(new THREE.AmbientLight(0xc5d1d7,.65));
+    const key=new THREE.DirectionalLight(0xfff4e6,2.4);key.position.set(5,9,8);key.castShadow=true;key.shadow.mapSize.set(2048,2048);Object.assign(key.shadow.camera,{left:-8,right:8,top:8,bottom:-8,near:.1,far:35});key.shadow.bias=-.00003;key.shadow.normalBias=.004;s.add(key);
+    const rim=new THREE.DirectionalLight(0xc9dce6,1.7);rim.position.set(-7,6,-5);s.add(rim);
+    const floor=new THREE.Mesh(new THREE.PlaneGeometry(180,180),new THREE.MeshStandardMaterial({color:0x28343a,roughness:.94,metalness:.08}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;s.add(floor);
+    const ring=new THREE.Mesh(new THREE.RingGeometry(4.35,4.365,128),new THREE.MeshBasicMaterial({color:0x75888a,transparent:true,opacity:.22,depthWrite:false}));ring.rotation.x=-Math.PI/2;ring.position.y=.008;s.add(ring);
+    this.car=makeLateModel({color:st.color??0xc81d25,accent:st.accent??0xffffff,num:st.num||'21',name:st.driver||DEFAULT_DRIVER,sponsor:st.team||'RED CLAY RACING',livery:{scheme:st.scheme??4,cageColor:st.cageColor??0xc92127}});this.car.rotation.y=-.12;s.add(this.car);this.contact=new ContactShadow(s,this.car);this.contact.update(()=>0);
+    const dm=(st.carDmg||0)/100;this.car.userData.paint.color.multiplyScalar(1-dm*.4);this.update(0);
+  }
   update(dt) {
     this.t += dt;
+    if(this.studio){
+      const title=this.app.phase==='title',compact=innerWidth<1000||this.app.isMobile;
+      const a=.75+Math.sin(this.t*.07)*.035,r=compact?(title?9:11.8):11.4;
+      this.camera.position.set(Math.cos(a)*r,3.5,Math.sin(a)*r);this.camera.lookAt(0,.8,0);
+      const target=title?(compact?.70:.70):(compact?.16:.27);
+      this.camera.filmOffset=(.5-target)*2*this.camera.getFilmWidth()*this.camera.aspect*Math.tan(this.camera.fov*Math.PI/360);this.camera.updateProjectionMatrix();return;
+    }
     const a = -0.9 + Math.sin(this.t * 0.08) * 0.35;
     // car on the left of the screen so the UI panel can sit on the right
     if(this.app.phase==='shop'){this.camera.position.set(5,3.5,12);this.camera.lookAt(-6,1,.5);this.camera.filmOffset=14.5;this.camera.updateProjectionMatrix();return;}

@@ -1,3 +1,4 @@
+import { DEFAULT_DRIVER } from './data.js';
 import {qualityPreset} from './quality.js';
 import { ContactShadow } from './contact.js';
 import * as THREE from 'three';
@@ -296,7 +297,7 @@ export class RaceScene {
     const drivers = AI_DRIVERS.map(d => ({ ...d }));
     const entries = drivers.map(d => ({ name: d.name, num: d.num, color: d.color, accent: d.accent, sponsor: d.sponsor, livery: d.livery, ai: { lane: d.lane, skill: d.skill + round * 0.003 + DF.skill, aggr: Math.min(1, d.aggr * DF.aggr), cons: d.cons, adapt: d.adapt, style: d.style, kind: d.kind, mist: DF.mist, read: DF.read, curLane: d.lane }, power: 1 + 0.035 * round, grip: 1 + 0.012 * round, stab: 0.3 }));
     const pp = st ? app.carParams() : { power: 1, grip: 1, stab: 0.3, damage: 0 };
-    const me = { name: st ? st.driver : 'You', num: st?.num || '21', color: st?.color ?? 0xc81d25, accent: st?.accent ?? 0xffffff, player: !this.attract, power: pp.power, grip: pp.grip, stab: pp.stab, damage: Math.min(90, pp.damage) };  // junk car gets zip-tied together to start
+    const me = { name: st ? st.driver : DEFAULT_DRIVER, num: st?.num || '21', color: st?.color ?? 0xc81d25, accent: st?.accent ?? 0xffffff, player: !this.attract, power: pp.power, grip: pp.grip, stab: pp.stab, damage: Math.min(90, pp.damage) };  // junk car gets zip-tied together to start
     me.livery={scheme:st?.scheme??4,cageColor:st?.cageColor??0xc92127};
     me.sponsor = st?.sponsor || 'RED CLAY RACING';
     if (this.attract) me.ai = { lane: 0.3, skill: 0.95, aggr: 0.6, cons: 0.95, adapt: 0.5, curLane: 0.3 };
