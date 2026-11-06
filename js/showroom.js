@@ -1,4 +1,4 @@
-import { DEFAULT_DRIVER } from './data.js';
+import { DEFAULT_DRIVER, DEFAULT_PROFILE } from './data.js';
 import { ContactShadow } from './contact.js';
 // Background 3D scene behind the 2D shop / results / arrival overlays: your rig in the pits at dusk.
 import * as THREE from 'three';
@@ -24,13 +24,13 @@ export class ShowroomScene {
     const g = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshStandardMaterial({ map: dirt.map, bumpMap: dirt.bump, bumpScale: 0.12, roughness: 1, color: 0xb0a090 }));
     g.rotation.x = -Math.PI / 2; g.receiveShadow = true; s.add(g);
     // the rig, ramp down
-    const semi = makeSemi({ team: st.team || 'Red Clay Racing', num: st.num || '21', color: st.color ?? 0xc81d25, accent: st.accent ?? 0xffffff, cabColor: 0x1a1a1e });
+    const semi = makeSemi({ team: st.team || 'Red Clay Racing', num: st.num || DEFAULT_PROFILE.num, color: st.color ?? DEFAULT_PROFILE.color, accent: st.accent ?? DEFAULT_PROFILE.accent, cabColor: 0x1a1a1e });
     semi.position.set(6, 0, -6); semi.rotation.y = 0.15; s.add(semi);
     const u = semi.userData; u.rampPivot.rotation.z = Math.asin(u.floorY / u.rampLen); // ramp down to the ground
     // awning + work lights + tool boxes
-    const awn = new THREE.Mesh(new THREE.BoxGeometry(12, 0.08, 4), new THREE.MeshStandardMaterial({ color: st.color ?? 0xc81d25, roughness: 0.6, side: THREE.DoubleSide }));
+    const awn = new THREE.Mesh(new THREE.BoxGeometry(12, 0.08, 4), new THREE.MeshStandardMaterial({ color: st.color ?? DEFAULT_PROFILE.color, roughness: 0.6, side: THREE.DoubleSide }));
     awn.position.set(-4, 4.2, -3.6); s.add(awn);
-    this.car = makeLateModel({ color: st.color ?? 0xc81d25, accent: st.accent ?? 0xffffff, num: st.num || '21',name:st.driver,sponsor:st.sponsor||'RED CLAY RACING',livery:{scheme:st.scheme??4,cageColor:st.cageColor??0xc92127} });
+    this.car = makeLateModel({ color: st.color ?? DEFAULT_PROFILE.color, accent: st.accent ?? DEFAULT_PROFILE.accent, num: st.num || DEFAULT_PROFILE.num,name:st.driver,sponsor:st.sponsor||'RED CLAY RACING',livery:{scheme:st.scheme??DEFAULT_PROFILE.scheme,cageColor:st.cageColor??DEFAULT_PROFILE.cageColor} });
     this.car.position.set(-6, 0, 0.5); this.car.rotation.y = 0.5; s.add(this.car);
     this.contact=new ContactShadow(s,this.car);this.contact.update(()=>0);
     this.rigContact=new ContactShadow(s,semi,true);this.rigContact.update(()=>0);
@@ -58,7 +58,7 @@ export class ShowroomScene {
     const rim=new THREE.DirectionalLight(0xc9dce6,1.7);rim.position.set(-7,6,-5);s.add(rim);
     const floor=new THREE.Mesh(new THREE.PlaneGeometry(180,180),new THREE.MeshStandardMaterial({color:0x28343a,roughness:.94,metalness:.08}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;s.add(floor);
     const ring=new THREE.Mesh(new THREE.RingGeometry(4.35,4.365,128),new THREE.MeshBasicMaterial({color:0x75888a,transparent:true,opacity:.22,depthWrite:false}));ring.rotation.x=-Math.PI/2;ring.position.y=.008;s.add(ring);
-    this.car=makeLateModel({color:st.color??0xc81d25,accent:st.accent??0xffffff,num:st.num||'21',name:st.driver||DEFAULT_DRIVER,sponsor:st.team||'RED CLAY RACING',livery:{scheme:st.scheme??4,cageColor:st.cageColor??0xc92127}});this.car.rotation.y=-.12;s.add(this.car);this.contact=new ContactShadow(s,this.car);this.contact.update(()=>0);
+    this.car=makeLateModel({color:st.color??DEFAULT_PROFILE.color,accent:st.accent??DEFAULT_PROFILE.accent,num:st.num||DEFAULT_PROFILE.num,name:st.driver||DEFAULT_DRIVER,sponsor:st.team||'RED CLAY RACING',livery:{scheme:st.scheme??DEFAULT_PROFILE.scheme,cageColor:st.cageColor??DEFAULT_PROFILE.cageColor}});this.car.rotation.y=-.12;s.add(this.car);this.contact=new ContactShadow(s,this.car);this.contact.update(()=>0);
     const dm=(st.carDmg||0)/100;this.car.userData.paint.color.multiplyScalar(1-dm*.4);this.update(0);
   }
   update(dt) {

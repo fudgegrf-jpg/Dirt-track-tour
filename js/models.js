@@ -6,7 +6,7 @@
 //  - sail panels level with the roof back to a big angled rear spoiler with opaque side boards, rear quarter kick-up
 //  - round-shouldered dirt tires (lettered outer sidewall) on satin 15 in deep-dish spun wheels with bead locks
 //  - visible chassis under the body: frame rails, A-arms, coilovers, rear axle tube + links, headers out the right side
-//  - 8 livery schemes painted on hi-res canvases (outlined door number, contingency decals, sponsors), clearcoat paint, mud, LOD
+//  - 9 livery schemes painted on hi-res canvases (outlined door number, contingency decals, sponsors), clearcoat paint, mud, LOD
 // All sponsor / tire / brand names here are invented. Fonts: Kanit + Archivo Black (SIL OFL 1.1, vendor/fonts).
 import * as THREE from 'three';
 
@@ -159,7 +159,7 @@ const NUMF = px => `${px}px "DTT Num", Impact, "Arial Black", sans-serif`;
 const SANS = px => `${px}px "DTT Sans", "Arial Black", Impact, sans-serif`;
 const WHITE = '#efeee8', INK = '#121316';
 const plum = c => { const k = new THREE.Color(c); return 0.2126 * k.r + 0.7152 * k.g + 0.0722 * k.b; };   // perceived (linear) luminance
-export const LIVERY_NAMES = ['Swoosh', 'Split', 'Stripes', 'Scallops', 'Fade', 'Shards', 'Blade', 'Retro'];
+export const LIVERY_NAMES = ['Swoosh', 'Split', 'Stripes', 'Scallops', 'Fade', 'Shards', 'Blade', 'Retro', 'Classic 42'];
 function palette(color, accent, seed, third) {
   const c = new THREE.Color(color), a = new THREE.Color(accent);
   let t = new THREE.Color(third ?? [0x111214, 0xf2c014, 0xc81d25, 0x1e5fd8, 0xefeee8][seed % 5]);
@@ -245,7 +245,35 @@ const SCHEMES = [
     g.fillStyle = P.third; for (const y of [0.9, 0.56]) g.fillRect(0, Y(y + 0.012), g.canvas.width, 0.024 * M);
   },
 ];
+// Classic 42: a paint-only tribute to the supplied blue/white stock-car reference.
+// These tiny businesses are fictional; no photographed sponsor logos are reproduced.
+const CLASSIC_CONT=[['#fff','#d21f35','CLAYVOLT',0],['#151b21','#f3f030','RUTLINE',0],['#fff','#135bc4','TORQFIN',1],['#e92535','#fff','FIREPIN',1],['#fff','#142124','LAPNOVA',0],['#f6e72b','#1450b6','DIRTFLUX',2],['#fff','#cb2034','SLIDEWORKS',0],['#135bc4','#fff','HOLLOWARC',0],['#fff','#232c35','GRIPSPAR',0],['#cf222b','#fff','MUDLINE',0],['#fff','#1553b4','NIGHTCLAY',1],['#1d252b','#e9f528','SILTSTRIKE',0]];
+function classicDecal(g,d,x,y,w,h){
+ g.save();g.translate(x,y);g.fillStyle=d[0];g.strokeStyle='#263d5860';g.lineWidth=Math.max(1,h*.04);g.beginPath();
+ if(d[3]===1)g.ellipse(0,0,w*.5,h*.5,0,0,Math.PI*2);else if(d[3]===2){g.moveTo(-w*.5,0);g.lineTo(-w*.25,-h*.5);g.lineTo(w*.5,-h*.5);g.lineTo(w*.25,h*.5);g.lineTo(-w*.5,h*.5);g.closePath();}else g.roundRect(-w*.5,-h*.5,w,h,h*.06);
+ g.fill();g.stroke();g.font=SANS(h*.49);g.textAlign='center';g.textBaseline='middle';g.fillStyle=d[1];g.fillText(d[2],0,h*.04,w*.94);g.restore();
+}
+function classicNumber(g,num,x,y,h,maxW,blue,skew=0){
+ g.save();g.translate(x,y);if(skew)g.transform(1,0,skew,1,0,0);g.font=NUMF(h);g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';const sx=Math.min(1,maxW/g.measureText(num).width);g.scale(sx,1);
+ g.strokeStyle='#0b224b70';g.lineWidth=h*.12;g.strokeText(num,h*.035,h*.04);
+ g.strokeStyle=blue;g.lineWidth=h*.10;g.strokeText(num,0,0);g.fillStyle='#f7ef23';g.fillText(num,0,0);g.restore();
+}
+function classicSide(L){
+ const c=cv(SK.W,SK.H),g=c.getContext('2d'),right=L.side>0,M=SK.W/SK.len;
+ const X=x=>(right?(x-SK.x0)/SK.len:1-(x-SK.x0)/SK.len)*SK.W,Y=y=>(1-(y-SK.y0)/SK.ht)*SK.H;
+ const P=palette(L.color,L.accent,L.seed,L.third);g.fillStyle=P.base;g.fillRect(0,0,c.width,c.height);
+ mpath(g,X,Y,[[2.12,0],[2.12,1.6],[2.9,1.6],[2.9,0]]);g.closePath();g.fillStyle=P.acc;g.fill();
+ // Neon rocker follows the lower sheet metal, but never circles the wheel openings.
+ for(const[a,b]of[[-2.52,-1.81],[-.91,.88],[1.77,2.12]]){const path=[];for(let j=0;j<=22;j++){const x=a+(b-a)*j/22;path.push([x,yBot(x)+.018]);}for(let j=22;j>=0;j--){const x=a+(b-a)*j/22;path.push([x,yBot(x)+.073]);}mpath(g,X,Y,path);g.closePath();g.fillStyle='#c5f12c';g.fill();}
+ classicNumber(g,L.num,X(-.19),Y(.67),.78*M,1.38*M,P.acc,right?0:.42);
+ // Door/fender contingencies: two dense columns beside the number, then a forward fender stack.
+ for(let r=0;r<6;r++)for(let col=0;col<2;col++)classicDecal(g,CLASSIC_CONT[(r*2+col)%CLASSIC_CONT.length],X(.60+col*.255),Y(.93-r*.09),.235*M,.071*M);
+ for(let r=0;r<6;r++)classicDecal(g,CLASSIC_CONT[(r*3+2)%CLASSIC_CONT.length],X(1.94),Y(.77-r*.084),.255*M,.067*M);
+ drawText(g,'FUDGE',X(-2.08),Y(1.10),.52*M,.12*M,P.acc,null);drawText(g,'RACING',X(-2.08),Y(.99),.52*M,.07*M,P.acc,null);
+ return c;
+}
 function liveryCanvas({ color, accent, num, sponsor, sponsor2, name, seed, side, scheme, third }) {
+  if(scheme===8)return classicSide({color,accent,num,name,seed,side,third});
   const c = cv(SK.W, SK.H), g = c.getContext('2d'), right = side > 0;
   const X = x => { const f = (x - SK.x0) / SK.len; return (right ? f : 1 - f) * SK.W; };
   const Y = y => (1 - (y - SK.y0) / SK.ht) * SK.H;
@@ -273,6 +301,7 @@ function liveryCanvas({ color, accent, num, sponsor, sponsor2, name, seed, side,
 function deckCanvas({ color, accent, num, sponsor, seed, scheme, third }) {   // hood: canvas x 0 = nose tip .. 1 = cowl, canvas top = right side
   const W = 1024, H = 640, c = cv(W, H), g = c.getContext('2d'), P = palette(color, accent, seed, third);
   g.fillStyle = P.base; g.fillRect(0, 0, W, H);
+  if(scheme===8){g.fillStyle=P.acc;g.fillRect(0,0,W,H);return c;}
   if (scheme === 1 || scheme === 4 || scheme === 6) { g.fillStyle = P.acc; g.fillRect(0, 0, W * 0.32, H); }
   // twin hood stripes running back to the windshield
   g.fillStyle = P.acc; for (const y of [H * 0.2, H * 0.74]) g.fillRect(0, y, W, H * 0.06); g.fillStyle = P.third; for (const y of [H * 0.27, H * 0.71]) g.fillRect(0, y, W, H * 0.02);
@@ -283,9 +312,10 @@ function deckCanvas({ color, accent, num, sponsor, seed, scheme, third }) {   //
   for (const hv of [H * 0.18, H * 0.82]) { g.fillStyle = '#e8e8e4'; g.beginPath(); g.ellipse(70, hv, 30, 60, 0, 0, 7); g.fill(); g.fillStyle = '#7f98b0'; g.beginPath(); g.ellipse(70, hv, 18, 40, 0, 0, 7); g.fill(); }   // headlight stickers
   return c;
 }
-function tailCanvas({ color, accent, num, sponsor, seed, third }) {
+function tailCanvas({ color, accent, num, sponsor, seed, third, scheme }) {
   const c = cv(512, 256), g = c.getContext('2d'), P = palette(color, accent, seed, third);
   g.fillStyle = P.base; g.fillRect(0, 0, 512, 256); g.fillStyle = INK; g.fillRect(0, 214, 512, 42);
+  if(scheme===8){g.fillStyle='#c5f12c';g.fillRect(0,226,512,20);classicNumber(g,num,256,118,140,330,P.acc);return c;}
   for (const tx of [60, 452]) { g.fillStyle = '#3a0000'; g.beginPath(); g.roundRect(tx - 44, 26, 88, 34, 8); g.fill(); g.fillStyle = '#e21c1c'; g.beginPath(); g.roundRect(tx - 38, 31, 76, 24, 6); g.fill(); }
   drawNumber(g, num, 256, 120, 130, 300, P);
   drawText(g, sponsor, 256, 232, 440, 30, WHITE, null);
@@ -299,16 +329,18 @@ function spoilerCanvas({ color, accent, sponsor, seed, third }, back) {
   if (!back) { let k = seed + 2; for (let j = 0; j < 5; j++) contDecal(g, CONT[(k += 7) % CONT.length], 130 + j * 190, 224, 170, 38); }
   return c;
 }
-function roofCanvas({ color, accent, num, name, seed, third }) {   // canvas x 0 = front (visor) .. 1 = rear, top = right side
+function roofCanvas({ color, accent, num, name, seed, third, scheme }) {   // canvas x 0 = front (visor) .. 1 = rear, top = right side
   const c = cv(512, 512), g = c.getContext('2d'), P = palette(color, accent, seed, third);
   g.fillStyle = P.base; g.fillRect(0, 0, 512, 512); g.fillStyle = INK; g.fillRect(0, 0, 44, 512);   // dark visor lip
   g.fillStyle = P.acc; g.fillRect(44, 0, 18, 512);
+  if(scheme===8){g.fillStyle=P.acc;g.fillRect(0,0,512,512);classicNumber(g,num,280,256,300,400,'#093579');return c;}
   drawNumber(g, num, 290, 256, 300, 400, P);
   return c;
 }
-function windshieldCanvas({ sponsor }) {   // canvas x across (as seen from the front), top = roof edge
+function windshieldCanvas({ sponsor, name, scheme, accent }) {   // canvas x across (as seen from the front), top = roof edge
   const c = cv(512, 256), g = c.getContext('2d');
   g.fillStyle = 'rgba(200,215,232,0.12)'; g.fillRect(0, 0, 512, 256);
+  if(scheme===8){g.fillStyle=hex(accent);g.fillRect(0,0,512,64);drawText(g,(name||'Jayden Fudge').toUpperCase(),256,33,478,39,'#f6f6ee',null);return c;}
   g.fillStyle = 'rgba(10,10,12,0.96)'; g.fillRect(0, 0, 512, 27);
   drawText(g, sponsor, 256, 14, 470, 20, WHITE, null);
   return c;
@@ -476,9 +508,10 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
   const paint = new THREE.MeshPhysicalMaterial({ color, ...PAINT });
   const skinR = new THREE.MeshPhysicalMaterial({ map: ctex(liveryCanvas({ ...L, side: 1 })), ...PAINT });
   const skinL = new THREE.MeshPhysicalMaterial({ map: ctex(liveryCanvas({ ...L, side: -1 })), ...PAINT });
-  const deckM = new THREE.MeshPhysicalMaterial({ map: ctex(deckCanvas(L)), ...PAINT });
+  const bluePaint=L.scheme===8?{...PAINT,roughness:.38,clearcoat:.42,clearcoatRoughness:.36,envMapIntensity:.16}:PAINT;
+  const deckM = new THREE.MeshPhysicalMaterial({ map: ctex(deckCanvas(L)), ...bluePaint });
   const tailM = new THREE.MeshPhysicalMaterial({ map: ctex(tailCanvas(L)), ...PAINT });
-  const roofM = new THREE.MeshPhysicalMaterial({ map: ctex(roofCanvas(L)), ...PAINT });
+  const roofM = new THREE.MeshPhysicalMaterial({ map: ctex(roofCanvas(L)), ...bluePaint });
   const spF = new THREE.MeshPhysicalMaterial({ map: ctex(spoilerCanvas(L, false)), ...PAINT });
   const spB = new THREE.MeshPhysicalMaterial({ map: ctex(spoilerCanvas(L, true)), ...PAINT });
   const skins = [skinR, skinL, deckM, tailM, roofM, spF, spB];
@@ -521,11 +554,12 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
   const loBody = [[BL.sideR, skinR], [BL.sideL, skinL], [BL.hood, deckM], [BL.front, deckM], [BL.deck, paint], [BL.tail, tailM], [BL.roof, roofM], [BL.splitter, splitM]].map(([g, m]) => mk(g, m));
   lo.add(...loBody, spFront.clone(), spBack.clone(), ...braces.map(b=>b.clone()));
   // Molded base, short cylindrical filter and softly rolled lid, offset left.
+  const scoopPaint=L.scheme===8?new THREE.MeshPhysicalMaterial({color:0x252b30,...PAINT,roughness:.62}):paint;
   const scoop=new THREE.Group(),sx=1.38,sz=-.34,sy=hoodY(sx,(sz-edgeZ(sx,-1))/(edgeZ(sx,1)-edgeZ(sx,-1)));
-  const scoopBase=new THREE.Mesh(new THREE.SphereGeometry(1,40,20),paint);scoopBase.scale.set(.36,.065,.265);scoopBase.position.set(sx,sy+.018,sz);scoop.add(scoopBase);
+  const scoopBase=new THREE.Mesh(new THREE.SphereGeometry(1,40,20),scoopPaint);scoopBase.scale.set(.36,.065,.265);scoopBase.position.set(sx,sy+.018,sz);scoop.add(scoopBase);
   const filter=new THREE.Mesh(new THREE.CylinderGeometry(.176,.184,.10,48),black);filter.position.set(sx,sy+.10,sz);scoop.add(filter);
-  const lid=new THREE.Mesh(new THREE.CylinderGeometry(.205,.205,.027,64),paint);lid.position.set(sx,sy+.162,sz);scoop.add(lid);
-  const rim=new THREE.Mesh(new THREE.TorusGeometry(.193,.013,10,64),paint);rim.rotation.x=Math.PI/2;rim.position.set(sx,sy+.176,sz);scoop.add(rim);
+  const lid=new THREE.Mesh(new THREE.CylinderGeometry(.205,.205,.027,64),scoopPaint);lid.position.set(sx,sy+.162,sz);scoop.add(lid);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(.193,.013,10,64),scoopPaint);rim.rotation.x=Math.PI/2;rim.position.set(sx,sy+.176,sz);scoop.add(rim);
   hi.add(scoop);lo.add(scoop.clone());
 
   // ---- mud layers (fade in with ud.mud)
@@ -628,7 +662,7 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
   const swMat = new THREE.MeshStandardMaterial({ map: sidewallTex(), color: 0xffffff, roughness: 0.8 });
   const swBlack = new THREE.MeshStandardMaterial({ color: 0x1d1d1d, roughness: 0.85 });
   const loTire = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.9 });
-  const wheelM = new THREE.MeshStandardMaterial({ color: 0xa1a7ad, metalness: 0.38, roughness: 0.64, envMap: env, envMapIntensity: 0.08, side: THREE.DoubleSide });
+  const wheelM = new THREE.MeshStandardMaterial({ color: L.scheme===8?0x323a43:0xa1a7ad, metalness: 0.38, roughness: 0.64, envMap: env, envMapIntensity: 0.08, side: THREE.DoubleSide });
   for (const [W_, wz, sz, front] of wheelsDef) {
     const R = W_.r, w = W_.w, rr = W_.rim, hw = w / 2;
     const wg = new THREE.Group(); wg.position.set(W_.x, R, wz);

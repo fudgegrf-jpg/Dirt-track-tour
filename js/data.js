@@ -1,4 +1,17 @@
 export const DEFAULT_DRIVER = 'Jayden Fudge';
+export const DEFAULT_PROFILE = Object.freeze({driver:DEFAULT_DRIVER,team:'Red Clay Racing',num:'42',color:0xf1f0e7,accent:0x135bc4,cageColor:0x135bc4,scheme:8});
+// Only the complete legacy identity/paint tuple qualifies, never a customized team/car.
+export function migrateDefaultLivery(s) {
+ if(!s || s.liveryDefaultsVersion>=2)return false;
+ const name=typeof s.driver==='string'&&s.driver.trim()?s.driver:DEFAULT_DRIVER;
+ const untouched=(name===DEFAULT_DRIVER||name==='Dale Rhodes')&&String(s.num??'21')==='21'
+  &&(s.team??'Red Clay Racing')==='Red Clay Racing'&&(s.color??0xc81d25)===0xc81d25
+  &&(s.accent??0xffffff)===0xffffff&&(s.cageColor??0xc92127)===0xc92127&&(s.scheme??4)===4
+  &&(s.sponsor==null||s.sponsor==='RED CLAY RACING')&&s.third==null;
+ if(!untouched)return false;
+ for(const key of ['num','color','accent','cageColor','scheme'])s[key]=DEFAULT_PROFILE[key];
+ s.liveryDefaultsVersion=2;return true;
+}
 // Season data: real, well-known US dirt tracks (geometry is a stylized approximation).
 export const TRACKS = [
   { id:'volusia', name:'Volusia Speedway Park', short:'Volusia', city:'Barberville, FL', lat:29.18, lon:-81.42,
