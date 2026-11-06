@@ -5,7 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { DEFAULT_DRIVER, TRACKS, ROUTES, AI_DRIVERS, CREW_POOL } from './data.js';
+import { DEFAULT_DRIVER, DEFAULT_PROFILE, migrateDefaultLivery, TRACKS, ROUTES, AI_DRIVERS, CREW_POOL } from './data.js';
 import { RaceScene } from './race.js';
 import { LoadScene } from './load.js';
 import { HighwayScene } from './highway.js';
@@ -48,7 +48,9 @@ class App {
     addEventListener('gamepadconnected', e => this.toast?.(`Controller connected: ${e.gamepad.id.slice(0, 32)}`));
     this.state = this.load();
     try { this.profile = JSON.parse(localStorage.getItem('dtt.profile')) || {}; } catch { this.profile = {}; }
-    if (this.profile.driver === 'Dale Rhodes') { this.profile.driver = DEFAULT_DRIVER; localStorage.setItem('dtt.profile', JSON.stringify(this.profile)); }
+    const paintMigrated=migrateDefaultLivery(this.profile);
+    const profileRenamed=this.profile.driver==='Dale Rhodes'&&paintMigrated;if(profileRenamed)this.profile.driver=DEFAULT_DRIVER;
+    if(paintMigrated||profileRenamed)localStorage.setItem('dtt.profile',JSON.stringify(this.profile));
     this.applyQuality();
     this.resize();
     document.getElementById('loading')?.remove();
@@ -147,7 +149,7 @@ class App {
   newState(opts = {}) {
     const standings = {}; for (const d of AI_DRIVERS) standings[d.name] = 0;
     const driver = opts.driver?.trim() || DEFAULT_DRIVER; standings[driver] = 0;
-    return { v: 1, driver, team: opts.team || 'Red Clay Racing', num: opts.num || '21', color: opts.color ?? 0xc81d25, accent: opts.accent ?? 0xffffff, cageColor:opts.cageColor??0xc92127, scheme:opts.scheme??4,
+    return { v: 1, driver, team: opts.team || 'Red Clay Racing', num: opts.num || DEFAULT_PROFILE.num, color: opts.color ?? DEFAULT_PROFILE.color, accent: opts.accent ?? DEFAULT_PROFILE.accent, cageColor:opts.cageColor??DEFAULT_PROFILE.cageColor, scheme:opts.scheme??DEFAULT_PROFILE.scheme, liveryDefaultsVersion:2,
       round: 0, money: 15000, carDmg: 0, haulerDmg: 0, fuel: 0.7, fatigue: 0, up: { engine: 0, tires: 0, shocks: 0 }, crew: ['m2'],
       standings, results: [], phase: 'shop', late: false, slackBonus: 0, arrival: null, earnings: 0, log: [] };
   }
@@ -155,7 +157,8 @@ class App {
     try {
       const s = JSON.parse(localStorage.getItem(SAVE_KEY));
       if (s && s.v === 1) {
-        if (!s.driver?.trim() || s.driver === 'Dale Rhodes') {
+        const paintMigrated=migrateDefaultLivery(s);
+        if (!s.driver?.trim() || (s.driver === 'Dale Rhodes' && paintMigrated)) {
           const old = s.driver ?? ''; s.driver = DEFAULT_DRIVER; s.standings ||= {};
           if (old !== DEFAULT_DRIVER && Object.hasOwn(s.standings, old)) {
             s.standings[DEFAULT_DRIVER] = (s.standings[DEFAULT_DRIVER] || 0) + (s.standings[old] || 0);
@@ -167,6 +170,7 @@ class App {
           }; rename(s.results); rename(s.log);
           localStorage.setItem(SAVE_KEY, JSON.stringify(s));
         }
+        if(paintMigrated)localStorage.setItem(SAVE_KEY,JSON.stringify(s));
         return s;
       }
     } catch (e) {} return null;
