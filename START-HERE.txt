@@ -156,8 +156,13 @@ For local development screenshot harnesses under test/, use a separate local-onl
 development server instead (for example python3 -m http.server 8092 --bind 127.0.0.1).
 Do not expose the development server through a public tunnel.
 
-STATIC GITHUB RELEASE NOTE
-The public GitHub/static-hosting copy embeds fonts in css/fonts.css and icons in
-HTML/manifest data URLs. Unused development WAV previews are omitted. The local
-Quick Tunnel instructions above concern box-based development only; a published
-GitHub/static-hosting copy does not need that box or tunnel to stay running.
+MODERN FRONT END / 02
+Start career uses Jayden Fudge by default. Edit opens the driver, team and livery
+profile; Save profile updates the 3D preview without replacing a season.
+Continue season resumes your autosave. Old Dale Rhodes defaults are migrated to
+Jayden Fudge, preserving championship points, money, results and crew. Custom
+driver names are kept. The garage has Setup, Crew and Standings tabs.
+The tour map and road planner have persistent primary actions. Results show
+your finish and net payout first; expand the breakdown for payroll, bonuses
+and standings. Scroll the classification on short phone screens.
+All overlays use the same dark/lime design and respect landscape safe areas.

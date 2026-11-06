@@ -26,5 +26,5 @@ THIRD-PARTY FONTS (car numbers and sponsor lettering)
   SIL Open Font License 1.1 (vendor/fonts/OFL-archivoblack.txt).
 
 STATIC GITHUB RELEASE
-  Font bytes are embedded in css/fonts.css; the OFL license texts remain in vendor/fonts/.
-  Unused offline WAV previews are not included in this static release.
+  OFL fonts are embedded as CSS data URLs; licenses remain in vendor/fonts.
+  App icons are embedded. Unused preview WAVs are omitted; audio is synthesized.
