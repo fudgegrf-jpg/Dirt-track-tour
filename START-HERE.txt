@@ -96,7 +96,7 @@ WHOLE-TOUR POLISH
   the developed track. Materials/exposure are consistent; only Detail adds bloom.
 - Cached surface waves and a one-pass normal update reduce periodic CPU hitches.
 - New race shop: setup, crew and championship tabs; clear costs, benefits and
-  per-race salaries. Choose body/accent/cage colors and any of 8 liveries on title.
+  per-race salaries. Choose body/accent/cage colors and any of 9 liveries on title.
 - H opens the driving guide and pauses. First-race hints teach steering taps,
   cameras, drying clay and tear-offs. Completed saves resume the season recap.
 - Gentler chase camera/FOV, more restrained dust and mud, softer field audio and
@@ -157,11 +157,15 @@ development server instead (for example python3 -m http.server 8092 --bind 127.0
 Do not expose the development server through a public tunnel.
 
 MODERN FRONT END / 02
-Start career uses Jayden Fudge by default. Edit opens the driver, team and livery
+Start career uses Jayden Fudge #42 with the Classic 42 paint by default.
+Edit opens the driver, team and livery
 profile; Save profile updates the 3D preview without replacing a season.
-Continue season resumes your autosave. Old Dale Rhodes defaults are migrated to
-Jayden Fudge, preserving championship points, money, results and crew. Custom
-driver names are kept. The garage has Setup, Crew and Standings tabs.
+Continue season resumes your autosave. Only untouched legacy Dale Rhodes/Jayden
+Fudge #21 red/white defaults migrate to Jayden Fudge #42 Classic 42, preserving
+championship points, money, results and crew. Customized profiles stay yours.
+Classic 42 is also selectable in the livery menu: off-white, blue, yellow numbers,
+lime rocker trim and fictional contingency decals. Body and physics are unchanged.
+The garage has Setup, Crew and Standings tabs.
 The tour map and road planner have persistent primary actions. Results show
 your finish and net payout first; expand the breakdown for payroll, bonuses
 and standings. Scroll the classification on short phone screens.
