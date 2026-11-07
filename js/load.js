@@ -11,7 +11,8 @@ export class LoadScene {
     this.app=app;this.race=race;race.pausedRace=true;this.scene=race.scene;this.camera=race.camera;this.pits=race.pits;this.offset=this.pits.origin;this.semi=this.pits.semi;
     this.rampTarget=Math.asin(FLOOR/RAMP_LEN);this.semi.userData.rampPivot.rotation.z=this.rampTarget;
     const st=app.state,p=race.player;this.car=p.mesh;this.car.userData.setInCar?.(false);
-    this.c={x:p.x-this.offset.x,z:p.z-this.offset.z,th:p.th,v:Math.min(6.7,p.speed||0),steer:0};
+    this.c={x:p.x-this.offset.x,z:p.z-this.offset.z,th:p.th,v:Math.min(11.18,p.speed||0),steer:0};
+    if(st.pitPose?.round===st.round&&st.pitPose.layout!==2){const old=st.pitPose.c;if(!old||Math.abs(old.x)>72||old.z< -43||old.z>39)st.pitPose.c={...this.c};if(st.pitPose.session){st.pitPose.session.pathIndex=0;st.pitPose.session.exitStarted=false;}st.pitPose.layout=2;}
     if(st.pitPose?.round===st.round)Object.assign(this.c,st.pitPose.c);
     this.contact=p.contactShadow;this.rigContact=new ContactShadow(this.scene,this.semi,true);this.rigContact.update(()=>0);
     race.cars.filter(c=>!c.player).forEach((c,i)=>{const b=this.pits.bays[i%this.pits.bays.length];c.mesh.position.set(this.offset.x+b.x,0,this.offset.z+b.z+Math.floor(i/this.pits.bays.length)*4);c.mesh.rotation.set(0,Math.PI,0);c.mesh.traverse(o=>{if(o.isLOD){o.autoUpdate=false;o.levels[0].object.visible=false;o.levels[1].object.visible=true;}});c.contactShadow.update(()=>0);});
@@ -22,7 +23,7 @@ export class LoadScene {
   }
   buildHud() {
     const h = document.createElement('div'); h.id = 'hud';
-    h.className='pit-hud';h.innerHTML=`<section class="pit-status"><div class="kicker">${UI.esc(this.app.track.short)} / POST RACE</div><h3 id="pit-stage">Return to your hauler</h3><p id="l-st">Take the marked backstretch pit exit · 15 mph limit</p><div class="pit-metrics"><span><b id="pit-speed">0</b> MPH</span><span>LOAD <b id="l-t">0.0</b>s / ${this.par}s</span><span>DAMAGE +<b id="l-d">0%</b></span></div><canvas id="l-al" width="200" height="60"></canvas></section><section class="pit-nav"><canvas id="pit-map" width="220" height="150"></canvas><span id="pit-dist"></span></section><div id="center-msg"></div><div id="sub-msg"></div><div class="hint">15 mph in the pits · WASD / arrows · C camera · X crew assist / winch ($300)</div>`;
+    h.className='pit-hud';h.innerHTML=`<section class="pit-status"><div class="kicker">${UI.esc(this.app.track.short)} / POST RACE</div><h3 id="pit-stage">Return to your hauler</h3><p id="l-st">Take the marked corner pit entrance · 25 mph limit</p><div class="pit-metrics"><span><b id="pit-speed">0</b> MPH</span><span>LOAD <b id="l-t">0.0</b>s / ${this.par}s</span><span>DAMAGE +<b id="l-d">0%</b></span></div><canvas id="l-al" width="200" height="60"></canvas></section><section class="pit-nav"><canvas id="pit-map" width="220" height="150"></canvas><span id="pit-dist"></span></section><div id="center-msg"></div><div id="sub-msg"></div><div class="hint">25 mph in the pits · WASD / arrows · C camera · X crew assist / winch ($300)</div>`;
     this.app.ui.appendChild(h);
     this.hud = { t: h.querySelector('#l-t'), d: h.querySelector('#l-d'), al: h.querySelector('#l-al').getContext('2d'), st: h.querySelector('#l-st'), msg: h.querySelector('#center-msg'), sub: h.querySelector('#sub-msg') };
     this.hud.msg.textContent='';this.hud.sub.textContent='';
@@ -31,7 +32,7 @@ export class LoadScene {
     if (x < 0 && x > -16.2 && Math.abs(z) < IN_HALF + 0.05) return FLOOR;
     const rx = RAMP_LEN * Math.cos(this.rampTarget);
     if (x >= 0 && x <= rx && Math.abs(z) <= RAMP_HALF) return FLOOR * (1 - x / rx);
-    if(z>32){const wx=x+this.offset.x,wz=z+this.offset.z,q=this.race.trk.project(wx,wz);if(z>=65)return this.race.trk.height(q.s,q.d);return this.pits.height*clamp((z-32)/33,0,1);}
+    const wx=x+this.offset.x,wz=z+this.offset.z,near=this.pits.road.nearest(wx,wz),q=this.race.trk.project(wx,wz);if(q.d<this.race.trk.outer-1&&q.d>this.race.trk.inner-2)return this.race.trk.height(q.s,q.d);if(near.distance<9)return near.y;
     return 0;
   }
   wheelPts(c) {
@@ -44,9 +45,7 @@ export class LoadScene {
   }
   blocked(c) {
     const wx=c.x+this.offset.x,wz=c.z+this.offset.z,q=this.race.trk.project(wx,wz);
-    if(c.z>61){if(q.d>this.race.trk.outer-1&&Math.abs(c.x)>13)return 'wall';if(q.d<this.race.trk.inner+2)return 'wall';}
-    if(c.z>38&&c.z<61&&Math.abs(c.x)>14+(65-c.z)*.45)return 'wall';
-    if(c.z<34){if(c.x>72||c.x< -72||c.z< -43)return 'wall';for(const o of this.pits.obstacles)if(Math.abs(c.x-o.x)<o.w+2.8&&Math.abs(c.z-o.z)<o.d+1.1)return 'wall';}
+    const lot=Math.abs(c.x)<72&&c.z>-43&&c.z<39,road=this.pits.road.nearest(wx,wz),track=q.d>this.race.trk.inner+2&&q.d<this.race.trk.outer-1;if(!lot&&road.distance>6.3&&!track)return 'wall';if(lot)for(const o of this.pits.obstacles)if(Math.abs(c.x-o.x)<o.w+2.8&&Math.abs(c.z-o.z)<o.d+1.1)return 'wall';
     const centerOut = Math.abs(c.z) > IN_HALF + 0.25;
     for (const p of this.corners(c)) {
       if (p.x < 0.02 && p.x > -22) {
@@ -71,7 +70,7 @@ export class LoadScene {
       if(c.x<17&&c.x> -17&&Math.abs(c.z)<4)this.loading=true;
       if(this.loading)this.timer += dt*(this.winch?1.6:1);
       // kinematic drive
-      const maxV = this.loading ? (this.winch?1.3:2.35) : 6.7;
+      const maxV = this.loading ? (this.winch?1.3:2.35) : 11.18;
       c.steer += clamp(inp.steer - c.steer, -2.2 * dt, 2.2 * dt);
       if (inp.throttle) c.v = Math.min(maxV, c.v + 2.0 * dt);
       else if (inp.brake) c.v = c.v > 0.05 ? Math.max(0, c.v - 5 * dt) : Math.max(-2.0, c.v - 1.6 * dt);
@@ -124,14 +123,14 @@ export class LoadScene {
     this.updateCamera(dt);
     this.updateHud();
     if(this.done){this.secureT=(this.secureT||0)+dt;this.hud.msg.textContent=this.secureT<1.6?'TYING DOWN':'READY TO ROLL';rp.rotation.z=lerp(this.rampTarget,-Math.PI/2,clamp((this.secureT-1.6)/2,0,1));if(this.secureT>4){delete app.state.pitPose;UI.afterLoad(app,this.result);return;}}
-    else if((this.saveT=(this.saveT||0)+dt)>2){this.saveT=0;app.state.pitPose={round:app.state.round,c:{...c},session:{timer:this.timer,dmg:this.dmg,hits:this.hits,falls:this.falls,winch:this.winch,loading:this.loading,pathIndex:this.pathIndex,exitStarted:this.exitStarted}};app.save();}
+    else if((this.saveT=(this.saveT||0)+dt)>2){this.saveT=0;app.state.pitPose={layout:2,round:app.state.round,c:{...c},session:{timer:this.timer,dmg:this.dmg,hits:this.hits,falls:this.falls,winch:this.winch,loading:this.loading,pathIndex:this.pathIndex,exitStarted:this.exitStarted}};app.save();}
     this.app.audio.set(0.12 + Math.abs(c.v) * 0.06, Math.abs(c.v) > 0.1 ? 0.5 : 0.2, 0.08);
   }
   autopilot() {
-    const c=this.c,trk=this.race.trk;let tx,tz;
-    if(!this.exitStarted&&c.z>59){const q=trk.project(c.x+this.offset.x,c.z+this.offset.z),ds=(this.pits.gateS-q.s+trk.P)%trk.P;if(ds<20)this.exitStarted=true;else{const p=trk.point(q.s+12,0);tx=p.x-this.offset.x;tz=p.z-this.offset.z;}}
-    if(tx===undefined&&!this.loading){this.exitStarted=true;const path=[[0,44],[22,29],[37,13],[32,0],[15,0]];let p=path[Math.min(this.pathIndex,path.length-1)];if(Math.hypot(c.x-p[0],c.z-p[1])<5.5){this.pathIndex++;p=path[Math.min(this.pathIndex,path.length-1)];}if(c.z<30&&this.pathIndex===0)this.pathIndex=1;[tx,tz]=p;}
-    if(this.loading||this.pathIndex>=5){tx=c.x-4;tz=0;}
+    const c=this.c,trk=this.race.trk;let tx,tz;const lot=Math.abs(c.x)<72&&c.z>-43&&c.z<39,path=this.pits.road.drive,localStart=lot&&!this.exitStarted;
+    if(!this.exitStarted&&!lot){const q=trk.project(c.x+this.offset.x,c.z+this.offset.z),ds=(this.pits.gateS-q.s+trk.P)%trk.P;if(ds<38||this.pits.road.nearest(c.x+this.offset.x,c.z+this.offset.z).distance<6){this.exitStarted=true;this.pathIndex=0;}else{const p=trk.point(q.s+16,0);tx=p.x-this.offset.x;tz=p.z-this.offset.z;}}
+    if(tx===undefined&&!this.loading){this.exitStarted=true;if(localStart)this.pathIndex=path.length-2;let p=path[Math.min(this.pathIndex,path.length-1)];while(this.pathIndex<path.length-1&&Math.hypot(c.x-p.x,c.z-p.z)<6){p=path[++this.pathIndex];}[tx,tz]=[p.x,p.z];}
+    if(this.loading){tx=c.x-4;tz=0;}
     const want=Math.atan2(tz-c.z,tx-c.x),steer=clamp(wrapAngle(want-c.th)*2.2,-1,1),stop=c.x< -11.4&&Math.abs(c.z)<.4;
     return {steer,throttle:stop?0:1,brake:stop?1:0};
   }
@@ -153,7 +152,7 @@ export class LoadScene {
     document.querySelector('#pit-speed').textContent=Math.round(Math.abs(c.v)*2.237);
     document.querySelector('#pit-stage').textContent=this.done?'Securing your car':this.loading?'Straight. Slow. Centered.':'Return to your hauler';
     document.querySelector('#pit-dist').textContent=`BAY ${this.app.state.num} · ${Math.round(Math.hypot(c.x,c.z))} m`;
-    const mg=document.querySelector('#pit-map').getContext('2d');mg.fillStyle='#142027';mg.fillRect(0,0,220,150);mg.strokeStyle='#73838a';mg.lineWidth=2;const trk=this.race.trk;const project=(x,z)=>[110+(x-this.offset.x)*.45,92-(z-this.offset.z)*.45];mg.beginPath();for(let i=0;i<=80;i++){const p=trk.point(i/80*trk.P,0),a=project(p.x,p.z);i?mg.lineTo(...a):mg.moveTo(...a);}mg.stroke();mg.strokeStyle='#d2f77f';mg.strokeRect(76,72,68,40);mg.fillStyle='#d2f77f';mg.fillRect(105,90,9,4);mg.fillStyle='#fff';mg.beginPath();mg.arc(110+c.x*.45,92-c.z*.45,3,0,7);mg.fill();
+    const mg=document.querySelector('#pit-map').getContext('2d'),trk=this.race.trk,pts=this.pits.road.samples,all=[...pts,{x:this.offset.x-75,z:-46},{x:this.offset.x+75,z:42}];for(let i=0;i<60;i++)all.push(trk.point(i/60*trk.P,0));const minX=Math.min(...all.map(p=>p.x)),maxX=Math.max(...all.map(p=>p.x)),minZ=Math.min(...all.map(p=>p.z)),maxZ=Math.max(...all.map(p=>p.z)),scale=Math.min(200/(maxX-minX),130/(maxZ-minZ)),project=(x,z)=>[10+(x-minX)*scale,10+(z-minZ)*scale];mg.fillStyle='#142027';mg.fillRect(0,0,220,150);mg.strokeStyle='#73838a';mg.lineWidth=2;mg.beginPath();for(let i=0;i<=80;i++){const p=trk.point(i/80*trk.P,0),a=project(p.x,p.z);i?mg.lineTo(...a):mg.moveTo(...a);}mg.stroke();mg.strokeStyle='#d2f77f';mg.beginPath();pts.forEach((p,i)=>{const a=project(p.x,p.z);i?mg.lineTo(...a):mg.moveTo(...a);});mg.stroke();const bay=project(this.offset.x,this.offset.z),player=project(c.x+this.offset.x,c.z+this.offset.z);mg.fillStyle='#d2f77f';mg.fillRect(bay[0]-3,bay[1]-2,6,4);mg.fillStyle='#fff';mg.beginPath();mg.arc(...player,3,0,7);mg.fill();
 
     h.t.textContent = this.timer.toFixed(1); h.t.style.color = this.timer > this.par ? '#ff5a4a' : '#fff';
     h.d.textContent = this.dmg.toFixed(0) + '%';
@@ -161,7 +160,7 @@ export class LoadScene {
     g.fillStyle = '#5fd16a'; g.fillRect(100 - 0.35 * 60, 22, 0.7 * 60, 16);
     const off = clamp(c.z, -1.5, 1.5), ang = wrapAngle(c.th - Math.PI);
     g.save(); g.translate(100 + off * 60, 30); g.rotate(ang); g.fillStyle = '#ffc83d'; g.fillRect(-14, -6, 28, 12); g.fillStyle = '#000'; g.fillRect(-14, -2, 6, 4); g.restore();
-    if(c.z>34){h.st.textContent='Follow the backstretch PIT EXIT. Keep below 15 mph.';return;}
+    if(Math.abs(c.x)>72||c.z< -43||c.z>39){h.st.textContent='Corner entry → follow the loop road. 25 mph limit.';return;}
     if(!this.loading){h.st.textContent='Your blue / white hauler is in Bay '+this.app.state.num+'. Approach the striped ramp.';return;}
     if (this.hold <= 0 && !this.done) h.st.textContent = c.x > 0.5 ? (Math.abs(c.z) < 0.4 && Math.abs(ang) < 0.1 ? 'lined up — go!' : Math.abs(c.z)>.4?`ramp to your ${c.z>0?'RIGHT':'LEFT'} — ease over`:'straighten the car before climbing') : 'ease forward to the green box';
   }

@@ -140,7 +140,7 @@ export class RaceScene {
     const postN = Math.floor(trk.P / 5);
     const posts = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.06, 5.4, 6), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: .15, roughness: .8 }), postN);
     const mtx = new THREE.Matrix4();
-    for (let i = 0; i < postN; i++) { const s = i * 5, p = trk.point(s, trk.outer + 0.2), h = trk.height(s, trk.outer) + 1.15 + 2.7; mtx.makeTranslation(p.x, Math.abs(s-trk.P/2)<16?-100:h, p.z); posts.setMatrixAt(i, mtx); }
+    for (let i = 0; i < postN; i++) { const s = i * 5, p = trk.point(s, trk.outer + 0.2), h = trk.height(s, trk.outer) + 1.15 + 2.7; mtx.makeTranslation(p.x, Math.abs(s-(trk.s2-Math.min(25,trk.R*.35)))<18?-100:h, p.z); posts.setMatrixAt(i, mtx); }
     scene.add(posts);
     // outer embankment down to ground
     const emb = ribbon(trk, N, s => { const h = trk.height(s, trk.outer); return [[trk.outer + 0.35, h - 0.1], [trk.outer + 4 + h * 1.6, trk.smooth ? -0.3 : -0.18]]; }, [0, 1], 10);
@@ -223,7 +223,7 @@ export class RaceScene {
     const lampMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2d0, emissiveIntensity: 1.4 });
     const nPoles = Math.max(10, Math.round(trk.P / 55));
     for (let i = 0; i < nPoles; i++) {
-      const s = (i + 0.5) / nPoles * trk.P, p = trk.point(s, trk.outer + 9), h = trk.smooth ? outsideHeight(trk, s, 9) : trk.height(s, trk.outer) * 0.4;
+      const s = (i + 0.5) / nPoles * trk.P;if(Math.abs(s-(trk.s2-Math.min(25,trk.R*.35)))<42)continue;const p = trk.point(s, trk.outer + 9), h = trk.smooth ? outsideHeight(trk, s, 9) : trk.height(s, trk.outer) * 0.4;
       const H = 26;
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, H, 8), poleMat); pole.position.set(p.x, h + H / 2, p.z); pole.castShadow = true; scene.add(pole);
       const head = new THREE.Group(); head.position.set(p.x, h + H, p.z); head.rotation.y = -p.th; scene.add(head);
@@ -265,7 +265,7 @@ export class RaceScene {
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.4, 4, 5), new THREE.MeshStandardMaterial({ color: 0x3a2a1a }), treeN);
     const crowns = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.6, 1), new THREE.MeshStandardMaterial({ color: 0x405335, roughness: 1 }), treeN);
     for (let i = 0; i < treeN; i++) {
-      const a = rnd() * Math.PI * 2, r = 230 + rnd() * 260, x = Math.cos(a) * r * 1.3, sc = 0.8 + rnd() * 1.1; let z = Math.sin(a) * r; if(Math.abs(x)<T.L/2+85&&z<this.pits.gate.z&&z>this.pits.gate.z-135)z-=145;
+      const a = rnd() * Math.PI * 2, r = 230 + rnd() * 260, x = Math.cos(a) * r * 1.3, sc = 0.8 + rnd() * 1.1; let z = Math.sin(a) * r; if((Math.abs(x-this.pits.origin.x)<85&&Math.abs(z)<60)||this.pits.road.nearest(x,z).distance<15)z-=100;
       mtx.compose(new THREE.Vector3(x, -.3+2*sc, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc)); trunks.setMatrixAt(i, mtx);
       mtx.compose(new THREE.Vector3(x, -.3+5.1*sc, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(), rnd(), 0)), new THREE.Vector3(sc, sc * 1.2, sc)); crowns.setMatrixAt(i, mtx);
     }
@@ -388,6 +388,7 @@ export class RaceScene {
     const leader = this.paceLeader;
     if(pace&&this.app.settings.autoPace!==false&&!this.attract){this.autoFormation(h);return;}
     if(this.handover>0)this.handover=Math.max(0,this.handover-h);
+    for(const c of this.cars){c._contactBudget=2*h;c.contactHold=Math.max(0,(c.contactHold||0)-h);}
     computeDraft(this.cars, trk);
     for (const c of this.cars) {
       let inp;
@@ -415,14 +416,15 @@ export class RaceScene {
       stepCar(c, inp, trk, h);
       if ((this.phase === 'race' || this.phase === 'pace') && (!c.player || this.app.autopilot) && !c.finished && !c.dnf) {
         c.stuckT = Math.hypot(c.vx, c.vz) < 2 ? (c.stuckT || 0) + h : 0;
+        if (c.contactHold>0)c.stuckT=0;
         if (c.stuckT > 2.5) { const pr = trk.project(c.x, c.z), pt = trk.point(pr.s, 0); Object.assign(c, { x: pt.x, z: pt.z, th: pt.th, vx: Math.cos(pt.th) * 6, vz: Math.sin(pt.th) * 6, w: 0, stuckT: 0 }); }
       }
-      const im = wallCollide(c, trk);
+      const im = wallCollide(c, trk,h);
       if (im > 2.6) this.hit(c, (im - 2.2) * 2.2, 'wall');
-      if (!c.player || this.attract) { if (checkStuck(c, trk, h)) {} }
+      if ((!c.player || this.attract)&&!c.contactHold) { if (checkStuck(c, trk, h)) {} }
     }
     for (let i = 0; i < this.cars.length; i++) for (let j = i + 1; j < this.cars.length; j++) {
-      const im = carCollide(this.cars[i], this.cars[j]);
+      const im = carCollide(this.cars[i], this.cars[j],h);
       if (im > 3) { this.hit(this.cars[i], (im - 2.6) * 1.1, 'car'); this.hit(this.cars[j], (im - 2.6) * 1.1, 'car'); }
     }
     // lap counting
@@ -752,7 +754,7 @@ function ribbon(trk, N, profile, vCoords, uLen) {
     const s = i / N * trk.P, prof = profile(s);
     prof.forEach(([d, y], j) => { const p = trk.point(s, d); pos.push(p.x, y, p.z); uv.push(s / uLen, vCoords[j]); });
   }
-  for (let i = 0; i < N; i++) for (let j = 0; j < n0 - 1; j++) { if(Math.abs((i+.5)/N*trk.P-trk.P/2)<16)continue; const a = i * n0 + j, b = a + n0; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+  for (let i = 0; i < N; i++) for (let j = 0; j < n0 - 1; j++) { if(Math.abs((i+.5)/N*trk.P-(trk.s2-Math.min(25,trk.R*.35)))<18)continue; const a = i * n0 + j, b = a + n0; idx.push(a, b, a + 1, a + 1, b, b + 1); }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); closeRibbonNormals(g, N, n0); return g;
 }
 
