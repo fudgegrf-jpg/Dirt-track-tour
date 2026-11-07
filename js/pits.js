@@ -1,3 +1,4 @@
+import {groundObject,groundFoot} from './grounding.js';
 import {pitLayout,createPitRoad} from './pit-road.js';
 import {canvasTexture,enrichPaddock,pitchedRoof,beveledBox} from './details.js';
 import * as THREE from 'three';
@@ -9,11 +10,14 @@ export function createPitWorld(race){
  const {gate,origin,gateS}=pitLayout(trk),root=new THREE.Group();root.position.copy(origin);scene.add(root);
  const low=app.quality==='low', obstacles=[],bays=[];const mat=c=>new THREE.MeshStandardMaterial({color:c,roughness:.88});
  const steel=mat(0x48535b),black=mat(0x22272a),lime=mat(0xd2f77f);
- function box(x,y,z,w,h,d,m,solid=false){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.castShadow=!low;o.receiveShadow=true;root.add(o);if(solid)obstacles.push({x,z,w:w/2,d:d/2});return o;}
+ function box(x,y,z,w,h,d,m,solid=false){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.castShadow=!low;o.receiveShadow=true;root.add(o);if(Math.abs(y-h/2)<.011){groundObject(race.groundSupports,o,()=>0,{kind:'paddock ground support'});}if(solid)obstacles.push({x,z,w:w/2,d:d/2});return o;}
  const surface=canvasTexture('clay',low?512:1024);surface.repeat.set(7,5);const tex={map:surface,bump:surface};
- const ground=new THREE.Mesh(new THREE.PlaneGeometry(150,92),new THREE.MeshStandardMaterial({map:tex.map,bumpMap:tex.bump,bumpScale:.12,color:0xc4b8a9,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.set(0,.005,-5);ground.receiveShadow=true;root.add(ground);
- const road=createPitRoad(race,root,origin,ground.material),h=road.height;
- function sign(text,x,z,y=3,w=8){const c=document.createElement('canvas');c.width=512;c.height=128;const g=c.getContext('2d');g.fillStyle='#142027';g.fillRect(0,0,512,128);g.strokeStyle='#d2f77f';g.lineWidth=6;g.strokeRect(4,4,504,120);g.fillStyle='#e9f0ed';g.font='600 40px Arial';g.textAlign='center';g.fillText(text,256,80,480);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;const m=new THREE.Mesh(new THREE.PlaneGeometry(w,w/4),new THREE.MeshBasicMaterial({map:t,side:THREE.DoubleSide}));m.position.set(x,y,z);root.add(m);return m;}
+ const ground=new THREE.Mesh(new THREE.PlaneGeometry(150,92),new THREE.MeshStandardMaterial({map:tex.map,bumpMap:tex.bump,bumpScale:.12,color:0xc4b8a9,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.set(0,0,-5);ground.receiveShadow=true;root.add(ground);
+ const road=createPitRoad(race,root,origin,new THREE.MeshStandardMaterial({map:race.dirt.map,normalMap:race.dirt.normal,normalScale:new THREE.Vector2(.25,.25),roughnessMap:race.dirt.roughness,roughness:.96})),h=road.height;
+ function sign(text,x,z,y=3,w=8){const c=document.createElement('canvas');c.width=512;c.height=128;const g=c.getContext('2d');g.fillStyle='#142027';g.fillRect(0,0,512,128);g.strokeStyle='#d2f77f';g.lineWidth=6;g.strokeRect(4,4,504,120);g.fillStyle='#e9f0ed';g.font='600 40px Arial';g.textAlign='center';g.fillText(text,256,80,480);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;const m=new THREE.Mesh(new THREE.PlaneGeometry(w,w/4),new THREE.MeshBasicMaterial({map:t,side:THREE.FrontSide}));m.position.set(x,y,z);root.add(m);const back=new THREE.Mesh(m.geometry,m.material);back.rotation.y=Math.PI;m.add(back);
+ const posts=[];for(const dx of[-w*.38,w*.38]){const post=new THREE.Mesh(new THREE.BoxGeometry(.10,y,.10),steel);post.position.set(dx,-y/2,-.08);m.add(post);posts.push(post);}
+ m.userData.groundSign=()=>{for(const post of posts)groundFoot(race.groundSupports,post,(wx,wz)=>Math.abs(wx-origin.x)<=75&&wz>=-51&&wz<=41?0:(road.heightAt(wx,wz)??race.terrainHeight(wx,wz)),{kind:'pit sign post'});};
+ return m;}
  const entrySign=sign('PITS / 25 MPH',gate.x-origin.x+7,gate.z-origin.z, h+3.7,10);entrySign.rotation.y=-gate.th+Math.PI/2;sign('PADDOCK / 25 MPH',52,-45,3.5,9);
  const semi=makeSemi({team:st.team||'Red Clay Racing',num:st.num||'42',color:st.color??0xf1f0e7,accent:st.accent??0x135bc4,cabColor:st.accent??0x135bc4,scheme:st.scheme,detail:app.quality});semi.rotation.y=Math.PI;semi.position.x=-17.8;root.add(semi);semi.userData.rampPivot.scale.x=4.6/semi.userData.rampLen;semi.userData.rampPivot.rotation.z=Math.asin(1.25/4.6);
  obstacles.push({x:-31,z:0,w:5,d:1.8});
@@ -29,12 +33,13 @@ export function createPitWorld(race){
   box(x-6,.6,z+5,1.8,1.2,.8,fabric,true);box(x-10,.45,z+5,1.4,.9,1,black,true);
  }
  // Instanced spares and perimeter posts keep mobile draw calls down.
- const n=low?24:64,tires=new THREE.InstancedMesh(new THREE.TorusGeometry(.32,.115,low?6:10,low?16:28).rotateX(Math.PI/2),black,n),mx=new THREE.Matrix4();for(let i=0;i<n;i++){const b=bays[Math.floor(i/4)%bays.length];mx.makeTranslation(b.x-10,.16+(i%4)*.32,b.z+3);tires.setMatrixAt(i,mx);}root.add(tires);
+ const n=low?24:64,tires=new THREE.InstancedMesh(new THREE.TorusGeometry(.32,.115,low?6:10,low?16:28).rotateX(Math.PI/2),black,n),mx=new THREE.Matrix4();for(let i=0;i<n;i++){const b=bays[Math.floor(i/4)%bays.length];mx.makeTranslation(b.x-10,.115+(i%4)*.23,b.z+3);tires.setMatrixAt(i,mx);}root.add(tires);for(let i=0;i<n;i+=4)groundObject(race.groundSupports,tires,()=>0,{kind:'spare tire stack foot',instance:i});
  for(const z of[-44,40]){if(z===-44){box(-11.5,2,z,127,.06,.1,steel);box(73.5,2,z,3,.06,.1,steel);}else box(0,2,z,150,.06,.1,steel);for(let x=-72;x<=72;x+=8){if(z===-44&&x>52&&x<72)continue;box(x,1,z,.08,2,.08,steel);}}
  for(const [x,z]of[[-40,-30],[26,-26],[-35,27],[26,28]]){box(x,5,z,.18,10,.18,steel);box(x,10,z,2,.22,.65,new THREE.MeshStandardMaterial({color:0xe2ded1,emissive:0xffdfb0,emissiveIntensity:.6}));if((x>0)||!low){const light=new THREE.PointLight(0xffe9cf,95,65,1.5);light.position.set(x,9,z);root.add(light);}}
  // Low-poly crew silhouettes beside, never on, the ramp.
  for(const z of[-3.5,3.5]){const g=new THREE.Group(),body=new THREE.Mesh(new THREE.CapsuleGeometry(.22,.55,low?4:7,low?8:14),mat(0x135bc4));body.position.y=1.1;g.add(body);for(const a of[-.13,.13]){const leg=new THREE.Mesh(new THREE.BoxGeometry(.15,.8,.19),black);leg.position.set(a,.4,0);g.add(leg);}const head=new THREE.Mesh(new THREE.SphereGeometry(.18,low?12:20,low?8:12),mat(0xcb9874));head.position.y=1.7;g.add(head);g.position.set(5,0,z);root.add(g);}
  const strip=box(-8,4.1,0,14,.035,.10,new THREE.MeshStandardMaterial({color:0xcfe3ef,emissive:0xdfefff,emissiveIntensity:.5}));const l=new THREE.PointLight(0xdcecff,8,16,1.5);l.position.set(-7,3,0);root.add(l);
  enrichPaddock(race,{root,bays,origin});
+ for(const o of root.children)o.userData.groundSign?.();
  return {root,origin,gate,gateS,road,semi,obstacles,bays,marker,height:h};
 }

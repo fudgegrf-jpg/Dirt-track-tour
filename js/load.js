@@ -19,7 +19,9 @@ export class LoadScene {
     this.goal=new THREE.Mesh(new THREE.PlaneGeometry(2.3,2.2),new THREE.MeshStandardMaterial({color:0xd2f77f,emissive:0x799f33,emissiveIntensity:.25,transparent:true,opacity:.65}));this.goal.rotation.x=-Math.PI/2;this.goal.position.set(-11.65,FLOOR+.02,0);this.pits.root.add(this.goal);
     this.t=0;this.timer=0;this.dmg=0;this.hits=0;this.falls=0;this.hold=0;this.cool=0;this.camMode=0;this.intro=0;this.done=false;this.winch=false;this.crew=[];this.pathIndex=0;this.loading=false;
     if(st.pitPose?.round===st.round&&st.pitPose.session)Object.assign(this,st.pitPose.session);
-    const mech=app.crew('Mechanic');this.par=35+(mech?mech.skill*2:0);app.ui.innerHTML='';this.buildHud();this.updateCamera(1);this.updateHud();
+    this.towed=!!st.results?.[st.round]?.dnf;
+    if(this.towed&&!st.pitPose?.session){Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0});this.exitStarted=true;this.pathIndex=this.pits.road.drive.length-1;this.intro=.65;this.towMessage=5;st.pitPose={layout:2,round:st.round,c:{...this.c},session:{exitStarted:true,pathIndex:this.pathIndex}};app.save();}
+    const mech=app.crew('Mechanic');this.par=35+(mech?mech.skill*2:0);app.ui.innerHTML='';this.buildHud();this.wheelH=this.wheelPts(this.c).map(w=>this.height(w.x,w.z));this.car.position.set(this.c.x+this.offset.x,this.height(this.c.x,this.c.z),this.c.z+this.offset.z);this.car.rotation.set(0,-this.c.th,0);this.updateCamera(1);this.updateHud();
   }
   buildHud() {
     const h = document.createElement('div'); h.id = 'hud';
@@ -32,8 +34,9 @@ export class LoadScene {
     if (x < 0 && x > -16.2 && Math.abs(z) < IN_HALF + 0.05) return FLOOR;
     const rx = RAMP_LEN * Math.cos(this.rampTarget);
     if (x >= 0 && x <= rx && Math.abs(z) <= RAMP_HALF) return FLOOR * (1 - x / rx);
-    const wx=x+this.offset.x,wz=z+this.offset.z,near=this.pits.road.nearest(wx,wz),q=this.race.trk.project(wx,wz);if(q.d<this.race.trk.outer-1&&q.d>this.race.trk.inner-2)return this.race.trk.height(q.s,q.d);if(near.distance<9)return near.y;
-    return 0;
+    const wx=x+this.offset.x,wz=z+this.offset.z,q=this.race.trk.project(wx,wz);if(q.d<=this.race.trk.outer+1&&q.d>this.race.trk.inner-2){const h=this.race.trackHeightAt(wx,wz);if(h!==null)return h;}
+    if(Math.abs(x)<=75&&z>=-51&&z<=41)return 0;
+    return this.pits.road.heightAt(wx,wz)??this.race.terrainHeight(wx,wz);
   }
   wheelPts(c) {
     const cs = Math.cos(c.th), sn = Math.sin(c.th);
@@ -45,7 +48,7 @@ export class LoadScene {
   }
   blocked(c) {
     const wx=c.x+this.offset.x,wz=c.z+this.offset.z,q=this.race.trk.project(wx,wz);
-    const lot=Math.abs(c.x)<72&&c.z>-43&&c.z<39,road=this.pits.road.nearest(wx,wz),track=q.d>this.race.trk.inner+2&&q.d<this.race.trk.outer-1;if(!lot&&road.distance>6.3&&!track)return 'wall';if(lot)for(const o of this.pits.obstacles)if(Math.abs(c.x-o.x)<o.w+2.8&&Math.abs(c.z-o.z)<o.d+1.1)return 'wall';
+    const lot=Math.abs(c.x)<72&&c.z>-51&&c.z<39,road=this.pits.road.nearest(wx,wz),track=q.d>this.race.trk.inner+2&&q.d<this.race.trk.outer-1;if(!lot&&road.distance>6.3&&!track)return 'wall';if(lot)for(const o of this.pits.obstacles)if(Math.abs(c.x-o.x)<o.w+2.8&&Math.abs(c.z-o.z)<o.d+1.1)return 'wall';
     const centerOut = Math.abs(c.z) > IN_HALF + 0.25;
     for (const p of this.corners(c)) {
       if (p.x < 0.02 && p.x > -22) {
@@ -59,6 +62,7 @@ export class LoadScene {
   update(dt) {
     const { app, c } = this; this.t += dt;
     if (app.tap('KeyC')) this.camMode = (this.camMode + 1) % 3;
+    if(this.towMessage>0)this.towMessage=Math.max(0,this.towMessage-dt);
     // ramp opens during intro
     const rp = this.semi.userData.rampPivot; rp.rotation.z = lerp(rp.rotation.z, this.rampTarget, 1 - Math.exp(-dt * 2.2));
     if (this.intro > 0) { this.intro -= dt; if (this.intro <= 0) { this.hud.msg.textContent = ''; this.hud.sub.textContent = ''; } }
@@ -127,8 +131,8 @@ export class LoadScene {
     this.app.audio.set(0.12 + Math.abs(c.v) * 0.06, Math.abs(c.v) > 0.1 ? 0.5 : 0.2, 0.08);
   }
   autopilot() {
-    const c=this.c,trk=this.race.trk;let tx,tz;const lot=Math.abs(c.x)<72&&c.z>-43&&c.z<39,path=this.pits.road.drive,localStart=lot&&!this.exitStarted;
-    if(!this.exitStarted&&!lot){const q=trk.project(c.x+this.offset.x,c.z+this.offset.z),ds=(this.pits.gateS-q.s+trk.P)%trk.P;if(ds<38||this.pits.road.nearest(c.x+this.offset.x,c.z+this.offset.z).distance<6){this.exitStarted=true;this.pathIndex=0;}else{const p=trk.point(q.s+16,0);tx=p.x-this.offset.x;tz=p.z-this.offset.z;}}
+    const c=this.c,trk=this.race.trk;let tx,tz;const lot=Math.abs(c.x)<72&&c.z>-51&&c.z<39,path=this.pits.road.drive,localStart=lot&&!this.exitStarted;
+    if(!this.exitStarted&&!lot){const q=trk.project(c.x+this.offset.x,c.z+this.offset.z),ds=(this.pits.gateS-q.s+trk.P)%trk.P;if(ds<38||this.pits.road.nearest(c.x+this.offset.x,c.z+this.offset.z).distance<6){this.exitStarted=true;this.pathIndex=path.reduce((best,p,i)=>Math.hypot(c.x-p.x,c.z-p.z)<Math.hypot(c.x-path[best].x,c.z-path[best].z)?i:best,0);this.pathIndex=Math.min(path.length-1,this.pathIndex+1);}else{const p=trk.point(q.s+16,0);tx=p.x-this.offset.x;tz=p.z-this.offset.z;}}
     if(tx===undefined&&!this.loading){this.exitStarted=true;if(localStart)this.pathIndex=path.length-2;let p=path[Math.min(this.pathIndex,path.length-1)];while(this.pathIndex<path.length-1&&Math.hypot(c.x-p.x,c.z-p.z)<6){p=path[++this.pathIndex];}[tx,tz]=[p.x,p.z];}
     if(this.loading){tx=c.x-4;tz=0;}
     const want=Math.atan2(tz-c.z,tx-c.x),steer=clamp(wrapAngle(want-c.th)*2.2,-1,1),stop=c.x< -11.4&&Math.abs(c.z)<.4;
@@ -139,7 +143,7 @@ export class LoadScene {
     const cam = this.camera, c = this.c, m = this.car;
     const sh = (this.shake || 0); this.shake = Math.max(0, sh - dt * 2);
     let want, look;
-    if (this.intro > 0) { const a = this.intro / 2.2; want = new THREE.Vector3(20 + a * 8, 5 + a * 4, 9 - a * 2); look = new THREE.Vector3(-2, 1.5, 0); }
+    if (this.intro > 0&&!this.towed) { const a = this.intro / 2.2; want = new THREE.Vector3(20 + a * 8, 5 + a * 4, 9 - a * 2); look = new THREE.Vector3(-2, 1.5, 0); }
     else if (this.camMode === 0) { want = new THREE.Vector3(c.x - Math.cos(c.th) * 7, m.position.y + 3.9, c.z - Math.sin(c.th) * 7); look = new THREE.Vector3(c.x + Math.cos(c.th) * 4, m.position.y + 0.8, c.z + Math.sin(c.th) * 4); }
     else if (this.camMode === 1) { want = new THREE.Vector3(-14.8, 3.6, 0); look = new THREE.Vector3(c.x, m.position.y + 0.6, c.z); }
     else { want = new THREE.Vector3(9, 2.2, 6.5); look = new THREE.Vector3(c.x, m.position.y + 0.8, c.z); }
@@ -154,13 +158,15 @@ export class LoadScene {
     document.querySelector('#pit-dist').textContent=`BAY ${this.app.state.num} · ${Math.round(Math.hypot(c.x,c.z))} m`;
     const mg=document.querySelector('#pit-map').getContext('2d'),trk=this.race.trk,pts=this.pits.road.samples,all=[...pts,{x:this.offset.x-75,z:-46},{x:this.offset.x+75,z:42}];for(let i=0;i<60;i++)all.push(trk.point(i/60*trk.P,0));const minX=Math.min(...all.map(p=>p.x)),maxX=Math.max(...all.map(p=>p.x)),minZ=Math.min(...all.map(p=>p.z)),maxZ=Math.max(...all.map(p=>p.z)),scale=Math.min(200/(maxX-minX),130/(maxZ-minZ)),project=(x,z)=>[10+(x-minX)*scale,10+(z-minZ)*scale];mg.fillStyle='#142027';mg.fillRect(0,0,220,150);mg.strokeStyle='#73838a';mg.lineWidth=2;mg.beginPath();for(let i=0;i<=80;i++){const p=trk.point(i/80*trk.P,0),a=project(p.x,p.z);i?mg.lineTo(...a):mg.moveTo(...a);}mg.stroke();mg.strokeStyle='#d2f77f';mg.beginPath();pts.forEach((p,i)=>{const a=project(p.x,p.z);i?mg.lineTo(...a):mg.moveTo(...a);});mg.stroke();const bay=project(this.offset.x,this.offset.z),player=project(c.x+this.offset.x,c.z+this.offset.z);mg.fillStyle='#d2f77f';mg.fillRect(bay[0]-3,bay[1]-2,6,4);mg.fillStyle='#fff';mg.beginPath();mg.arc(...player,3,0,7);mg.fill();
 
+    if(this.towMessage>0){document.querySelector('#pit-stage').textContent='Recovered to Bay '+this.app.state.num;h.st.textContent='DNF · Crew delivered your car. Line up with the ramp or call the winch.';h.st.setAttribute('role','status');}
     h.t.textContent = this.timer.toFixed(1); h.t.style.color = this.timer > this.par ? '#ff5a4a' : '#fff';
     h.d.textContent = this.dmg.toFixed(0) + '%';
     const g = h.al; g.clearRect(0, 0, 200, 60); g.fillStyle = '#2a1a10'; g.fillRect(10, 22, 180, 16);
     g.fillStyle = '#5fd16a'; g.fillRect(100 - 0.35 * 60, 22, 0.7 * 60, 16);
     const off = clamp(c.z, -1.5, 1.5), ang = wrapAngle(c.th - Math.PI);
     g.save(); g.translate(100 + off * 60, 30); g.rotate(ang); g.fillStyle = '#ffc83d'; g.fillRect(-14, -6, 28, 12); g.fillStyle = '#000'; g.fillRect(-14, -2, 6, 4); g.restore();
-    if(Math.abs(c.x)>72||c.z< -43||c.z>39){h.st.textContent='Corner entry → follow the loop road. 25 mph limit.';return;}
+    if(this.towMessage>0)return;
+    if(Math.abs(c.x)>72||c.z< -51||c.z>39){h.st.textContent='Corner entry → follow the loop road. 25 mph limit.';return;}
     if(!this.loading){h.st.textContent='Your blue / white hauler is in Bay '+this.app.state.num+'. Approach the striped ramp.';return;}
     if (this.hold <= 0 && !this.done) h.st.textContent = c.x > 0.5 ? (Math.abs(c.z) < 0.4 && Math.abs(ang) < 0.1 ? 'lined up — go!' : Math.abs(c.z)>.4?`ramp to your ${c.z>0?'RIGHT':'LEFT'} — ease over`:'straighten the car before climbing') : 'ease forward to the green box';
   }

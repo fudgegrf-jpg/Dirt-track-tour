@@ -1,3 +1,6 @@
+import {foliageMap,crownGeometry,pineGeometry} from './foliage.js';
+import {groundObject,groundFoot} from './grounding.js';
+import {polishInfield} from './world-polish.js';
 import { createPitWorld } from './pits.js';
 import { DEFAULT_DRIVER, DEFAULT_PROFILE } from './data.js';
 import {qualityPreset} from './quality.js';
@@ -24,7 +27,7 @@ export class RaceScene {
   constructor(app, { track, attract = false, startBack = false }) {
     this.app = app; this.T = track; this.attract = attract;
     this.trk = new OvalTrack({ ...track, surfaceQuality: app.quality || 'high' }); grooveTimes(this.trk);   // AI 'track reading' table (~0.1 s, once per track)
-    this.scene = new THREE.Scene();
+    this.scene = new THREE.Scene();this.groundSupports=[];
     // tamer bloom/exposure under the lights: glossy white/yellow liveries were blooming into blobs
     if (app.bloom) { app.bloom.strength = 0.08; app.bloom.radius = 0.25; app.bloom.threshold = 3; app.renderer.toneMappingExposure = 0.95; }
     this.camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 6000);
@@ -39,6 +42,15 @@ export class RaceScene {
     if (!attract) this.buildHud();
     this.orbit = 0;
   }
+  // One height query for ground-anchored props outside the racing ribbon.
+  terrainHeight(x,z){const t=this.trk,q=t.project(x,z);if(this.pits&&Math.abs(x-this.pits.origin.x)<=75&&z>=-51&&z<=41)return 0;const road=this.pits?.road.heightAt(x,z);if(road!==null&&road!==undefined)return road;
+    if(q.d<=t.outer+.2)return q.d< -t.W/2-5?-.25:t.height(q.s,q.d);
+    return outsideHeight(t,q.s,q.d-t.outer);
+  }
+  trackHeightAt(x,z){const q=this.trk.project(x,z),D=this.trackD,M=D.length,N=this.trackN,P=this.trackGeo.attributes.position,seed=Math.floor(q.s/this.trk.P*N);let lane=D.findIndex(d=>d>q.d)-1;if(lane<0)lane=q.d<D[0]?0:M-2;
+    for(let row=seed-1;row<=seed+1;row++){const i=(row%N+N)%N;for(let j=Math.max(0,lane-1);j<=Math.min(M-2,lane+1);j++){const a=i*M+j,b=a+M;for(const [u,v,w]of[[a,a+1,b],[b,a+1,b+1]]){const ax=P.getX(u),az=P.getZ(u),bx=P.getX(v),bz=P.getZ(v),cx=P.getX(w),cz=P.getZ(w),den=(bz-cz)*(ax-cx)+(cx-bx)*(az-cz);if(Math.abs(den)<1e-10)continue;const A=((bz-cz)*(x-cx)+(cx-bx)*(z-cz))/den,B=((cz-az)*(x-cx)+(ax-cx)*(z-cz))/den,C=1-A-B;if(A>=-1e-7&&B>=-1e-7&&C>=-1e-7)return A*P.getY(u)+B*P.getY(v)+C*P.getY(w);}}}return null;
+  }
+  retire(){if(this.ended||this.player.finished)return;this.player.dnf=true;this.player.vx=this.player.vz=this.player.w=0;this.phase='cooldown';this.cool=0;this.flash('DNF — recovery crew to Bay '+this.app.state.num,.3,'#ffb478');}
   // ------------------------------------------------------------------ world
   buildWorld() {
     const { scene, trk, T } = this;
@@ -94,7 +106,7 @@ export class RaceScene {
     trk.surface.upload();
     this.surfaceTex=new THREE.DataTexture(trk.surface.bytes,trk.surface.N,trk.surface.M,THREE.RGBAFormat);
     this.surfaceTex.wrapS=THREE.RepeatWrapping;this.surfaceTex.magFilter=THREE.LinearFilter;this.surfaceTex.minFilter=THREE.LinearFilter;this.surfaceTex.needsUpdate=true;
-    const trackMat = new THREE.MeshStandardMaterial({ map: dirt.map, bumpMap: dirt.bump, bumpScale: 0.16, roughness: 0.93, metalness: 0, vertexColors: true });
+    const trackMat = new THREE.MeshStandardMaterial({ map: dirt.map, bumpMap: dirt.bump, normalMap: dirt.normal, normalScale:new THREE.Vector2(.14,.14), roughnessMap:dirt.roughness, bumpScale: 0.022, roughness: 0.96, metalness: 0, vertexColors: true });
     // light pools under each pole bank + the bottom groove going black & glossy as the track dries/rubbers in
     this.pools = Array.from({ length: 24 }, () => new THREE.Vector3(1e5, 1e5, 1));
     const dryU = this.dryU, pools = this.pools, surfaceTex=this.surfaceTex, surfaceSize=this.surfaceSize=new THREE.Vector2(trk.surface.N,trk.surface.M);
@@ -143,7 +155,7 @@ export class RaceScene {
     for (let i = 0; i < postN; i++) { const s = i * 5, p = trk.point(s, trk.outer + 0.2), h = trk.height(s, trk.outer) + 1.15 + 2.7; mtx.makeTranslation(p.x, Math.abs(s-(trk.s2-Math.min(25,trk.R*.35)))<18?-100:h, p.z); posts.setMatrixAt(i, mtx); }
     scene.add(posts);
     // outer embankment down to ground
-    const emb = ribbon(trk, N, s => { const h = trk.height(s, trk.outer); return [[trk.outer + 0.35, h - 0.1], [trk.outer + 4 + h * 1.6, trk.smooth ? -0.3 : -0.18]]; }, [0, 1], 10);
+    const emb = ribbon(trk, N, s => { const h = trk.height(s, trk.outer); return [[trk.outer + 0.35, h], [trk.outer + 4 + h * 1.6, trk.smooth ? -0.3 : -0.18]]; }, [0, 1], 10);
     const embT = grassTexture('#2a3d1e'); embT.repeat.set(1, 1);
     scene.add(Object.assign(new THREE.Mesh(emb, new THREE.MeshStandardMaterial({ map: embT, roughness: 1 })), { receiveShadow: true }));
 
@@ -151,7 +163,7 @@ export class RaceScene {
     const tireN = Math.floor(trk.P / 1.4);
     const tires = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.42, 0.42, 0.85, 10), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }), tireN);
     const cA = new THREE.Color(0x151515), cB = new THREE.Color(0xe8e8e8);
-    for (let i = 0; i < tireN; i++) { const s = i * 1.4, p = trk.point(s, trk.inner - 0.2); mtx.makeTranslation(p.x, trk.smooth ? 0.225 : 0.3, p.z); tires.setMatrixAt(i, mtx); tires.setColorAt(i, (Math.floor(i / 3) % 2) ? cA : cB); }
+    for (let i = 0; i < tireN; i++) { const s = i * 1.4, p = trk.point(s, trk.inner - 0.2); mtx.makeTranslation(p.x, (trk.smooth ? -.25 : -.14)+.425, p.z); tires.setMatrixAt(i, mtx); tires.setColorAt(i, (Math.floor(i / 3) % 2) ? cA : cB); }
     tires.castShadow = true; scene.add(tires);
 
     // start/finish line + checkered flag stand
@@ -185,6 +197,7 @@ export class RaceScene {
     }
     scene.add(stand);
 
+    const standStart=scene.children.length;
     // ----- grandstands with crowd along the frontstretch -----
     const standZ = T.R + trk.outer + (trk.smooth ? 24 : 7);
     const gsMat = new THREE.MeshStandardMaterial({ color: 0x7d8288, metalness: 0.5, roughness: 0.6 });
@@ -209,7 +222,7 @@ export class RaceScene {
         people.setColorAt(pi, new THREE.Color(shirt[Math.floor(rnd() * shirt.length)]).multiplyScalar(0.6 + rnd() * 0.5)); pi++;
       }
     }
-    people.count = pi; scene.add(people);
+    people.count = pi;people.name='grandstand-crowd';scene.add(people);
     const roofM = new THREE.Mesh(new THREE.BoxGeometry(len, 0.4, rows * 0.95 + 4), steel); roofM.position.set(0, 0.5 + rows * 0.55 + 6, standZ + rows * 0.95 / 2 + 1); roofM.castShadow = true; scene.add(roofM);
     const press = new THREE.Mesh(new THREE.BoxGeometry(26, 4, 5), new THREE.MeshStandardMaterial({ color: 0x3b2a20, roughness: 0.5 })); press.position.set(0, 0.5 + rows * 0.55 + 2.8, standZ + rows * 0.95 + 1); scene.add(press);
     const pressWin = new THREE.Mesh(new THREE.PlaneGeometry(24, 1.6), new THREE.MeshStandardMaterial({ color: 0xffd9a0, emissive: 0xffc070, emissiveIntensity: 1.2 })); pressWin.position.set(0, 0.5 + rows * 0.55 + 3.1, standZ + rows * 0.95 - 1.55); pressWin.rotation.y = Math.PI; scene.add(pressWin);
@@ -218,6 +231,8 @@ export class RaceScene {
     const nt = new THREE.CanvasTexture(nameC); nt.colorSpace = THREE.SRGBColorSpace;
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(36, 4.5), new THREE.MeshStandardMaterial({ map: nt, emissive: 0xffffff, emissiveMap: nt, emissiveIntensity: 0.5 })); sign.rotation.y = Math.PI; sign.position.set(0, 0.5 + rows * 0.55 + 7.5, standZ - 0.5); scene.add(sign);
 
+    const standGroup=new THREE.Group();standGroup.name='grounded-grandstands';for(const o of scene.children.slice(standStart))standGroup.add(o);standGroup.position.y=-.3;scene.add(standGroup);
+    for(const o of standGroup.children){if(o.geometry?.type==='BoxGeometry'&&o.geometry.parameters?.depth===.95)groundObject(this.groundSupports,o,()=>-.3,{kind:'grandstand footing'});}
     // ----- light poles with glowing heads (+ a few real point lights) -----
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x55595e, metalness: 0.6, roughness: 0.5 });
     const lampMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2d0, emissiveIntensity: 1.4 });
@@ -225,7 +240,7 @@ export class RaceScene {
     for (let i = 0; i < nPoles; i++) {
       const s = (i + 0.5) / nPoles * trk.P;if(Math.abs(s-(trk.s2-Math.min(25,trk.R*.35)))<42)continue;const p = trk.point(s, trk.outer + 9), h = trk.smooth ? outsideHeight(trk, s, 9) : trk.height(s, trk.outer) * 0.4;
       const H = 26;
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, H, 8), poleMat); pole.position.set(p.x, h + H / 2, p.z); pole.castShadow = true; scene.add(pole);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, H, 8), poleMat); pole.position.set(p.x, h + H / 2, p.z); pole.castShadow = true; scene.add(pole);groundObject(this.groundSupports,pole,(x,z)=>this.terrainHeight(x,z),{kind:"stadium pole"});
       const head = new THREE.Group(); head.position.set(p.x, h + H, p.z); head.rotation.y = -p.th; scene.add(head);
       const frame = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.2, 4.6), poleMat); frame.position.z = -0.6; head.add(frame);
       for (let a = 0; a < 3; a++) for (let b = 0; b < 2; b++) { const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.8, 1.2), lampMat); lamp.position.set(0, -0.5 + b * 1.0, -2 + a * 1.4 - 0.6); lamp.rotation.x = 0; head.add(lamp); }
@@ -240,9 +255,11 @@ export class RaceScene {
       const face = new THREE.Mesh(new THREE.PlaneGeometry(16, 10), new THREE.MeshStandardMaterial({ map: sbT, emissive: 0xffffff, emissiveMap: sbT, emissiveIntensity: 0.9, color: 0x222222 }));
       face.position.set(0, 15, 0.31); g.add(face);
       const back = new THREE.Mesh(new THREE.BoxGeometry(16.8, 10.8, 0.6), steel); back.position.y = 15; g.add(back);
-      for (const x of [-5, 5]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.6, 10, 0.6), steel); leg.position.set(x, 5, -0.2); leg.castShadow = true; g.add(leg); }
+      for (const x of [-5, 5]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.6, 10, 0.6), steel); leg.position.set(x, 5, -0.2); leg.castShadow = true; g.add(leg);groundFoot(this.groundSupports,leg,(x,z)=>this.terrainHeight(x,z),{kind:'scoreboard footing'}); }
       this.drawScoreboard(); }
     this.pits=createPitWorld(this);
+    for(let i=0;i<tireN;i++)groundObject(this.groundSupports,tires,()=>trk.smooth?-.25:-.14,{kind:'infield tire barrier',instance:i});
+    const infieldStart=scene.children.length;
     // ----- infield: support trucks, canopies, tool carts, light towers (the "infield pit" look)
     { const iz = -(T.R - T.W / 2 - 7) * 0.35, n = clamp(Math.floor(T.L / 26), 2, 6), cols = [0xdfe3e8, 0x2a3a5a, 0x7a1d10, 0x30302e, 0x1f5f3a, 0xc9a227];
       const canM = cols.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, side: THREE.DoubleSide }));
@@ -260,16 +277,20 @@ export class RaceScene {
         const lh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.8, 2), lampMat); lh.position.set(x, 9, iz + 7); scene.add(lh);
       }
     }
+    const infieldGroup=new THREE.Group();infieldGroup.name='grounded-infield-equipment';for(const o of scene.children.slice(infieldStart))infieldGroup.add(o);infieldGroup.position.y=-.25;scene.add(infieldGroup);
+    for(const o of infieldGroup.children){if(!o.geometry)continue;o.geometry.computeBoundingBox();if(Math.abs(o.position.y+o.geometry.boundingBox.min.y)<.001)groundObject(this.groundSupports,o,()=>-.25,{kind:'infield support'});}
+    polishInfield(this);
     // ----- treeline -----
     const treeN = Math.round(500*detail.trees);
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.4, 4, 5), new THREE.MeshStandardMaterial({ color: 0x3a2a1a }), treeN);
-    const crowns = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.6, 1), new THREE.MeshStandardMaterial({ color: 0x405335, roughness: 1 }), treeN);
+    const crowns = new THREE.InstancedMesh(crownGeometry(3.6,this.app.quality==='low'), new THREE.MeshStandardMaterial({ color: 0x60794b, map:foliageMap(), roughness: 1 }), treeN);
     for (let i = 0; i < treeN; i++) {
       const a = rnd() * Math.PI * 2, r = 230 + rnd() * 260, x = Math.cos(a) * r * 1.3, sc = 0.8 + rnd() * 1.1; let z = Math.sin(a) * r; if((Math.abs(x-this.pits.origin.x)<85&&Math.abs(z)<60)||this.pits.road.nearest(x,z).distance<15)z-=100;
       mtx.compose(new THREE.Vector3(x, -.3+2*sc, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc)); trunks.setMatrixAt(i, mtx);
       mtx.compose(new THREE.Vector3(x, -.3+5.1*sc, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(), rnd(), 0)), new THREE.Vector3(sc, sc * 1.2, sc)); crowns.setMatrixAt(i, mtx);
     }
     scene.add(trunks, crowns);
+    for(let i=0;i<treeN;i++)groundObject(this.groundSupports,trunks,()=>-.3,{kind:'tree trunk',instance:i});
     // dust
     const dc = new THREE.Color(T.clay[0], T.clay[1], T.clay[2]).lerp(new THREE.Color(0xe8c8a8), 0.35);
     this.dust = new Dust(scene, 3000, dc);this.dust.setBudget(detail.dust); this.dust.mat.uniforms.uLight.value = 0.9;
@@ -360,6 +381,7 @@ export class RaceScene {
       }
       if (app.tap('KeyR') && this.phase === 'race') { const p = this.player, pr = trk.project(p.x, p.z), pt = trk.point(pr.s, 0); Object.assign(p, { x: pt.x, z: pt.z, th: pt.th, vx: 0, vz: 0, w: 0,steer:0,reversing:false,reverseHold:0,yawCatch:0,recoverTime:0 }); this.flash('RESET', 1); }
     }
+    if(this.player?.dnf&&!this.ended&&this.phase!=='cooldown')this.retire();
     this.updateFlags(dt);
     // physics (fixed substeps)
     this.acc += dt; const h = 1 / 120; let steps = 0;
@@ -451,7 +473,7 @@ export class RaceScene {
     if (c.player && !this.attract) {
       if (dmg > 4) this.flash(kind === 'wall' ? 'INTO THE WALL!' : 'CONTACT!', 0.9, '#ff5a4a');
       this.shake = Math.min(1, (this.shake || 0) + dmg * 0.06);
-      if (c.damage >= 100 && was < 100) { this.flash('DNF — car is junk', 3, '#ff5a4a'); c.dnf = true; if (this.phase === 'race') { this.phase = 'cooldown'; this.cool = 3.5; this.hud.sub.textContent = 'Your night is over — towed to the pits'; } }
+      if(c.damage>=100&&was<100&&!c.finished)this.retire();
     }
     c.lookT = 0; // repaint damage/mud on next visual tick
   }
@@ -490,6 +512,7 @@ export class RaceScene {
   }
   flash(t, sec = 1.2, color = '#fff') { if (!this.hud) return; this.hud.msg.textContent = t; this.hud.msg.style.color = color; this.msgT = sec; }
   crossLine(c) {
+    if(c.dnf)return;
     c.lap++;
     if (this.attract) return;
     const T = this.T;
@@ -769,5 +792,5 @@ function closeRibbonNormals(g, N, M) {
 }
 function outsideHeight(trk, s, offset) {
   const h = trk.height(s, trk.outer);
-  return lerp(h - 0.1, trk.smooth ? -0.3 : -0.18, clamp((offset - 0.35) / (3.65 + h * 1.6), 0, 1));
+  return lerp(h, trk.smooth ? -0.3 : -0.18, clamp((offset - 0.35) / (3.65 + h * 1.6), 0, 1));
 }
