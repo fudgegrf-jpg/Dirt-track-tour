@@ -315,68 +315,11 @@ export function stepCar(car, input, trk, dt) {
   }
 }
 
-// walls: outer concrete wall + infield tire barrier. returns impact speed
-export function wallCollide(car, trk) {
-  let impact = 0;
-  const offs = [-1.7, 0, 1.7], rad = 1.0;
-  const c = Math.cos(car.th), s = Math.sin(car.th);
-  for (const o of offs) {
-    const px = car.x + c * o, pz = car.z + s * o;
-    const pr = trk.project(px, pz);
-    let pen = 0, nx = 0, nz = 0;
-    if (pr.d + rad > trk.outer) { pen = pr.d + rad - trk.outer; nx = pr.nx; nz = pr.nz; }
-    else if (pr.d - rad < trk.inner) { pen = trk.inner - (pr.d - rad); nx = -pr.nx; nz = -pr.nz; }
-    if (pen > 0) {
-      car.x -= nx * pen; car.z -= nz * pen;
-      // velocity at contact point (includes rotation)
-      const rx = c * o, rz = s * o;
-      const vpx = car.vx - car.w * rz, vpz = car.vz + car.w * rx;
-      const vn = vpx * nx + vpz * nz;
-      if (vn > 0) {
-        const e = ASSIST[car.assist]?.safe ? .06 : .25;
-        const rCrossN = rx * nz - rz * nx;
-        const invM = 1 / car.m + rCrossN * rCrossN / car.I;
-        const j = (1 + e) * vn / invM;
-        car.vx -= j * nx / car.m; car.vz -= j * nz / car.m;
-        car.w -= j * rCrossN / car.I * (ASSIST[car.assist]?.contactYaw ?? 1);
-        if(ASSIST[car.assist]?.safe && vn>1)car.recoverTime=.85;
-        // scrape friction
-        car.vx *= 0.985; car.vz *= 0.985;
-        impact = Math.max(impact, vn);
-      }
-    }
-  }
-  return impact;
-}
-
-export function carCollide(A, B) {
-  const dx0 = B.x - A.x, dz0 = B.z - A.z;
-  if (dx0 * dx0 + dz0 * dz0 > 49) return 0;
-  const offs = [-1.6, 0, 1.6], rad = 0.98; let impact = 0;
-  const ca = Math.cos(A.th), sa = Math.sin(A.th), cb = Math.cos(B.th), sb = Math.sin(B.th);
-  for (const oa of offs) for (const ob of offs) {
-    const ax = A.x + ca * oa, az = A.z + sa * oa, bx = B.x + cb * ob, bz = B.z + sb * ob;
-    const dx = bx - ax, dz = bz - az, d2 = dx * dx + dz * dz;
-    if (d2 < (2 * rad) ** 2 && d2 > 1e-6) {
-      const d = Math.sqrt(d2), nx = dx / d, nz = dz / d, pen = 2 * rad - d;
-      A.x -= nx * pen / 2; A.z -= nz * pen / 2; B.x += nx * pen / 2; B.z += nz * pen / 2;
-      const rax = ca * oa, raz = sa * oa, rbx = cb * ob, rbz = sb * ob;
-      const vax = A.vx - A.w * raz, vaz = A.vz + A.w * rax, vbx = B.vx - B.w * rbz, vbz = B.vz + B.w * rbx;
-      const vn = (vax - vbx) * nx + (vaz - vbz) * nz;
-      if (vn > 0) {
-        const ra = rax * nz - raz * nx, rb = rbx * nz - rbz * nx;
-        const inv = 1 / A.m + 1 / B.m + ra * ra / A.I + rb * rb / B.I;
-        const j = (1 + 0.3) * vn / inv;
-        A.vx -= j * nx / A.m; A.vz -= j * nz / A.m; A.w -= j * ra / A.I * 0.4 * (ASSIST[A.assist]?.contactYaw ?? 1);
-        if(ASSIST[A.assist]?.safe && vn>1)A.recoverTime=.75;
-        B.vx += j * nx / B.m; B.vz += j * nz / B.m; B.w += j * rb / B.I * 0.4 * (ASSIST[B.assist]?.contactYaw ?? 1);
-        if(ASSIST[B.assist]?.safe && vn>1)B.recoverTime=.75;
-        impact = Math.max(impact, vn);
-      }
-    }
-  }
-  return impact;
-}
+// Split position stabilization from the contact impulse: centimeters per substep,
+// not a whole penetration-depth teleport. One capsule contact per body pair.
+function contactShift(c,x,z,dt){const n=Math.hypot(x,z),budget=c._contactBudget??(2*dt),k=n?Math.min(1,budget/n):0;c.x+=x*k;c.z+=z*k;if(c._contactBudget!==undefined)c._contactBudget=Math.max(0,budget-n*k);}
+export function wallCollide(car,trk,dt=1/120){const cs=Math.cos(car.th),sn=Math.sin(car.th);let hit=null;for(const o of[-1.7,0,1.7]){const p=trk.project(car.x+cs*o,car.z+sn*o);let pen=0,nx=0,nz=0;if(p.d+1>trk.outer){pen=p.d+1-trk.outer;nx=p.nx;nz=p.nz;}else if(p.d-1<trk.inner){pen=trk.inner-(p.d-1);nx=-p.nx;nz=-p.nz;}if(pen>0&&(!hit||pen>hit.pen))hit={o,pen,nx,nz};}if(!hit)return 0;const{o,pen,nx,nz}=hit,rx=cs*o,rz=sn*o,vn=(car.vx-car.w*rz)*nx+(car.vz+car.w*rx)*nz,cross=rx*nz-rz*nx;contactShift(car,-nx*Math.max(0,pen-.01)*.22,-nz*Math.max(0,pen-.01)*.22,dt);const bias=Math.min(1.5,Math.max(0,pen-.01)*5),j=Math.max(0,(Math.max(0,vn)*1.035+bias)/(1/car.m+cross*cross/car.I));car.vx-=j*nx/car.m;car.vz-=j*nz/car.m;car.w-=clamp(j*cross/car.I*(ASSIST[car.assist]?.contactYaw??1),-dt*8,dt*8);car.w*=Math.exp(-dt*2);car.vx*=Math.exp(-dt*.25);car.vz*=Math.exp(-dt*.25);car.contactHold=.5;if(ASSIST[car.assist]?.safe&&vn>1)car.recoverTime=.85;return Math.max(0,vn);}
+export function carCollide(A,B,dt=1/120){if((B.x-A.x)**2+(B.z-A.z)**2>49)return 0;const ca=Math.cos(A.th),sa=Math.sin(A.th),cb=Math.cos(B.th),sb=Math.sin(B.th);let hit=null;for(const oa of[-1.6,0,1.6])for(const ob of[-1.6,0,1.6]){const dx=B.x+cb*ob-A.x-ca*oa,dz=B.z+sb*ob-A.z-sa*oa,d=Math.hypot(dx,dz),pen=1.96-d;if(pen>0&&(!hit||pen>hit.pen))hit={oa,ob,pen,nx:d>1e-5?dx/d:-sa,nz:d>1e-5?dz/d:ca};}if(!hit)return 0;const{oa,ob,pen,nx,nz}=hit,rax=ca*oa,raz=sa*oa,rbx=cb*ob,rbz=sb*ob,vn=(A.vx-A.w*raz-B.vx+B.w*rbz)*nx+(A.vz+A.w*rax-B.vz-B.w*rbx)*nz,ra=rax*nz-raz*nx,rb=rbx*nz-rbz*nx,inv=1/A.m+1/B.m+ra*ra/A.I+rb*rb/B.I,j=Math.max(0,(Math.max(0,vn)*1.025+Math.min(1.3,Math.max(0,pen-.015)*4))/inv),corr=Math.max(0,pen-.015)*.12;contactShift(A,-nx*corr,-nz*corr,dt);contactShift(B,nx*corr,nz*corr,dt);A.vx-=j*nx/A.m;A.vz-=j*nz/A.m;B.vx+=j*nx/B.m;B.vz+=j*nz/B.m;A.w-=clamp(j*ra/A.I*.3*(ASSIST[A.assist]?.contactYaw??1),-dt*6,dt*6);B.w+=clamp(j*rb/B.I*.3*(ASSIST[B.assist]?.contactYaw??1),-dt*6,dt*6);A.w*=Math.exp(-dt);B.w*=Math.exp(-dt);A.contactHold=B.contactHold=.5;if(ASSIST[A.assist]?.safe&&vn>1)A.recoverTime=.75;if(ASSIST[B.assist]?.safe&&vn>1)B.recoverTime=.75;return Math.max(0,vn);}
 
 // ---------------------------------------------------------------- AI driver
 // Personality (ai): skill (pace), aggr (how hard they push/pass and how close they follow), cons (consistency: fewer mistakes),

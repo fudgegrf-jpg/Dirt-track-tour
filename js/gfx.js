@@ -1,3 +1,4 @@
+import {beveledBox,canvasTexture,instances,batchStatic} from './details.js';
 import * as THREE from 'three';
 
 export const rand = (a = 0, b = 1) => a + Math.random() * (b - a);
@@ -216,33 +217,34 @@ export function makeSky({ top, horizon, bottom, sunDir, sunColor, sunSize = 0.03
 export { makeLateModel, WHEEL_R, DRIVER_EYE, loadCarFonts } from './models.js';
 
 // ---------- Semi tractor + enclosed race hauler ----------
-export function makeSemi({ team = 'Your Racing', num = '1', color = 0xc81d25, accent = 0xffffff, cabColor, scheme } = {}) {
+export function makeSemi({ team = 'Your Racing', num = '1', color = 0xc81d25, accent = 0xffffff, cabColor, scheme, detail='medium' } = {}) {
+  const low=detail==='low',segments=low?20:40,round=(w,h,d,r=.1)=>beveledBox(w,h,d,r,low?3:5);
   const root = new THREE.Group();
   const tractor = new THREE.Group(); root.add(tractor);
-  const paint = new THREE.MeshPhysicalMaterial({ color: cabColor ?? color, metalness: 0.35, roughness: 0.55, clearcoat: 0.25, clearcoatRoughness: 0.5 });
-  const chrome = new THREE.MeshStandardMaterial({ color: 0x92989e, metalness: .25, roughness: .82 });
+  const paint = new THREE.MeshPhysicalMaterial({ color: cabColor ?? color, metalness: 0.35, roughness: 0.34, clearcoat: 0.65, clearcoatRoughness: 0.22 });
+  const chrome = new THREE.MeshStandardMaterial({ color: 0xb1bac1, metalness: .72, roughness: .27 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x15161a, roughness: 0.7 });
   const glass = new THREE.MeshPhysicalMaterial({ color: 0x0a0e14, metalness: 0.05, roughness: 0.5, clearcoat: 0.15 });
   const tire = new THREE.MeshStandardMaterial({ color: 0x34312d, roughness: 0.95 });
   const add = (geo, mat, x, y, z, par = tractor, shadow = true) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (shadow) { m.castShadow = true; m.receiveShadow = true; } par.add(m); return m; };
   add(new THREE.BoxGeometry(7.6, 0.32, 1.0), dark, 0.2, 0.95, 0);                      // frame
   // long hood (slight taper via scaled box)
-  const hood = add(new THREE.BoxGeometry(2.5, 1.05, 1.75), paint, 2.75, 1.82, 0); hood.geometry.translate(0, 0, 0);
+  const hood = add(round(2.5,1.05,1.75,.14), paint, 2.75, 1.82, 0); hood.geometry.translate(0, 0, 0);
   add(new THREE.BoxGeometry(2.5, 0.1, 1.55), paint, 2.75, 2.38, 0);                    // hood crown
   add(new THREE.BoxGeometry(0.1, 1.25, 1.35), chrome, 4.05, 1.85, 0);                  // grille
   for (let i = 0; i < 9; i++) add(new THREE.BoxGeometry(0.02, 1.1, 0.03), dark, 4.11, 1.85, -0.6 + i * 0.15, tractor, false);
-  add(new THREE.BoxGeometry(0.32, 0.36, 2.55), chrome, 4.2, 0.85, 0);                  // bumper
+  add(round(.32,.36,2.55,.07), chrome, 4.2, 0.85, 0);                  // bumper
   for (const sz of [-1, 1]) {
-    add(new THREE.BoxGeometry(1.6, 0.18, 0.55), paint, 3.1, 1.22, sz * 1.0);            // fenders
+    add(round(1.6,.18,.55,.07), paint, 3.1, 1.22, sz * 1.0);            // fenders
     const hl = add(new THREE.CylinderGeometry(0.16, 0.16, 0.08, 16), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff3d0, emissiveIntensity: 1.0 }), 3.95, 1.45, sz * 1.02, tractor, false); hl.rotation.z = Math.PI / 2;
     add(new THREE.CylinderGeometry(0.11, 0.11, 3.4, 14), chrome, 0.05, 2.9, sz * 1.28);  // stacks
     add(new THREE.CylinderGeometry(0.32, 0.32, 1.5, 18), chrome, 1.0, 0.95, sz * 1.05).rotation.z = Math.PI / 2; // tanks
     add(new THREE.BoxGeometry(0.08, 0.45, 0.25), chrome, 1.55, 2.75, sz * 1.32);          // mirrors
   }
-  add(new THREE.BoxGeometry(1.5, 2.0, 2.35), paint, 0.75, 2.35, 0);                     // cab
+  add(round(1.5,2,2.35,.12), paint, 0.75, 2.35, 0);                     // cab
   const ws = add(new THREE.BoxGeometry(0.06, 0.8, 2.05), glass, 1.52, 2.85, 0); ws.rotation.z = -0.25;
   for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.8, 0.6, 0.04), glass, 0.85, 2.85, sz * 1.18, tractor, false);
-  add(new THREE.BoxGeometry(1.9, 2.55, 2.4), paint, -0.9, 2.6, 0);                      // sleeper
+  add(round(1.9,2.55,2.4,.18), paint, -0.9, 2.6, 0);                      // sleeper
   add(new THREE.BoxGeometry(1.7, 0.12, 2.42), chrome, -0.9, 1.4, 0);                    // sleeper trim
   const marker = new THREE.MeshStandardMaterial({ color: 0xffa500, emissive: 0xff8c00, emissiveIntensity: 0.8 });
   for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(0.06, 0.06, 0.12), marker, 1.48, 3.4, -0.6 + i * 0.3, tractor, false);
@@ -251,15 +253,20 @@ export function makeSemi({ team = 'Your Racing', num = '1', color = 0xc81d25, ac
   const hc=canvas(256,256),hg=hc.getContext('2d'),rad=hg.createRadialGradient(128,128,12,128,128,125);rad.addColorStop(0,'#69747e');rad.addColorStop(.55,'#515b65');rad.addColorStop(.82,'#89939c');rad.addColorStop(1,'#59636c');hg.fillStyle=rad;hg.fillRect(0,0,256,256);hg.strokeStyle='#a2a8ad';hg.lineWidth=6;hg.beginPath();hg.arc(128,128,120,0,Math.PI*2);hg.stroke();
   for(let i=0;i<8;i++){const a=i*Math.PI/4,x=128+Math.cos(a)*76,y=128+Math.sin(a)*76;hg.fillStyle='#252b30';hg.beginPath();hg.arc(x,y,11,0,Math.PI*2);hg.fill();}hg.fillStyle='#454f58';hg.beginPath();hg.arc(128,128,40,0,Math.PI*2);hg.fill();hg.strokeStyle='#7b858e';hg.lineWidth=3;hg.stroke();
   const hubM=new THREE.MeshStandardMaterial({map:tex(hc,false),metalness:.18,roughness:.86});
+  for(let i=0;i<10;i++){const a=i*Math.PI/5,x=128+Math.cos(a)*47,y=128+Math.sin(a)*47;hg.fillStyle='#20262a';hg.fillRect(x-6,y-5,12,12);hg.fillStyle='#d4dade';hg.fillRect(x-5,y-6,9,9);hg.fillStyle='#6f7e87';hg.fillRect(x-2,y-3,5,5);}hubM.map.needsUpdate=true;hubM.metalness=.42;hubM.roughness=.42;
+  const tread=canvasTexture('rubber',256);tire.bumpMap=tread;tire.bumpScale=.018;
   const wheels = [];
   const wheel = (x, z, r = 0.53, par = tractor, dual = false) => {
     const wg = new THREE.Group(); wg.position.set(x, r, z); par.add(wg);
-    const t = new THREE.Mesh(new THREE.CylinderGeometry(r, r, dual ? 0.6 : 0.32, 24), tire); t.rotation.x = Math.PI / 2; t.castShadow = true; wg.add(t);
-    const h = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.55, (dual ? 0.6 : 0.32) + 0.02, 24), hubM); h.rotation.x = Math.PI / 2; wg.add(h);
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(r, r, dual ? 0.6 : 0.32, segments), tire); t.rotation.x = Math.PI / 2; t.castShadow = true; wg.add(t);
+    const h = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.55, (dual ? 0.6 : 0.32) + 0.02, segments), hubM); h.rotation.x = Math.PI / 2; wg.add(h);
     wg.userData.radius=r;wheels.push(wg); return wg;
   };
   for (const sz of [-1, 1]) { wheel(3.1, sz * 1.02); wheel(-2.0, sz * 0.95, 0.53, tractor, true); wheel(-3.35, sz * 0.95, 0.53, tractor, true); }
   for (const x of [-2.0, -3.35]) for (const sz of [-1, 1]) add(new THREE.BoxGeometry(1.1, 0.1, 0.62), dark, x, 1.12, sz * 0.95); // mud flaps area
+  // Fifth-wheel bearing plate and visible kingpin; trailer is free to yaw here.
+  add(new THREE.CylinderGeometry(.58,.58,.10,low?12:24),dark,-2.6,1.14,0);
+  add(new THREE.CylinderGeometry(.16,.16,.23,low?8:16),chrome,-2.6,1.2,0);
   // ---- trailer (pivot at kingpin, x=-2.6 on tractor) ----
   const trailer = new THREE.Group(); trailer.position.set(-2.6, 0, 0); root.add(trailer);
   const TL = 16, TH = 2.95, TW = 2.6, floorY = 1.25;
@@ -312,7 +319,14 @@ export function makeSemi({ team = 'Your Racing', num = '1', color = 0xc81d25, ac
   for (const sz of [-1, 1]) { const sw = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 0.03), glass); sw.position.set(-0.6, 3.2, sz * 1.215); tractor.add(sw); }
   // landing gear
   for (const sz of [-1, 1]) { const lg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.9, 0.12), dark); lg.position.set(-1.5, 0.55, sz * 0.9); trailer.add(lg); }
-  root.userData = { tractor, trailer, rampPivot, roof, shell, wheels, floorY, rearX, TL, TW, rampLen };
+  // Detail is decorative only; articulation, loading dimensions and wheel pivots stay unchanged.
+  const plate=canvasTexture('metal',256),plateM=new THREE.MeshStandardMaterial({map:plate,bumpMap:plate,bumpScale:.025,metalness:.4,roughness:.55});floor.material=plateM;ramp.material=[rearM,rearM,plateM,rearM,rearM,rearM];cab.material=new THREE.MeshStandardMaterial({map:canvasTexture('cabinet',256),metalness:.22,roughness:.55});
+  const ribs=[],grips=[],rivets=[],hinges=[];for(let i=0;i<12;i++)grips.push({x:-.12-i*(rampLen-.24)/11,y:.05,z:0});instances(rampPivot,new THREE.BoxGeometry(.035,.02,TW-.25),dark,grips);
+  for(const sz of[-1,1]){for(let i=0;i<10;i++){ribs.push({x:rearX+.6+i*1.5,y:floorY+TH/2,z:sz*1.245});if(!low)for(const y of[floorY+.25,floorY+TH-.25])rivets.push({x:rearX+.35+i*1.65,y,z:sz*1.334});}for(let i=0;i<3;i++)hinges.push({x:rearX-.08,y:floorY+.5+i*.9,z:sz*1.23});const rail=add(new THREE.CylinderGeometry(.045,.045,TL,low?8:14),chrome,.8-TL/2,floorY+TH,sz*1.29,trailer,false);rail.rotation.z=Math.PI/2;
+  add(round(.25,.07,.12,.02),chrome,.9,2.3,sz*1.22);for(const x of[1.35,1.65])add(new THREE.BoxGeometry(.045,.3,.045),chrome,x,2.6,sz*1.28,tractor,false);add(round(.28,.08,.3,.03),chrome,-1.5,.12,sz*.9,trailer,false);}
+  instances(trailer,new THREE.BoxGeometry(.045,TH-.1,.035),innerM,ribs);if(rivets.length)instances(trailer,new THREE.SphereGeometry(.018,6,4),chrome,rivets);instances(trailer,new THREE.CylinderGeometry(.045,.045,.16,10),chrome,hinges);
+  root.userData = { tractor, trailer, rampPivot, roof, shell, wheels, floorY, rearX, TL, TW, rampLen,detail };
+  batchStatic(tractor);batchStatic(trailer,[roof]);batchStatic(shell,[roof]);
   return root;
 }
 
