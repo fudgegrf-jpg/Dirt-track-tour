@@ -24,7 +24,7 @@ instances(root,beveledBox(.4,.76,.34,.07,low?2:4),red,jug);instances(root,new TH
 const mesh=canvasTexture('mesh',256);for(const z of[-44,40])for(const seg of(z===-44?[[-75,52],[72,75]]:[[-75,75]])){const w=seg[1]-seg[0],t=mesh.clone();t.repeat.set(w/2,1);const m=add(new THREE.PlaneGeometry(w,1.8),new THREE.MeshStandardMaterial({map:t,alphaTest:.3,side:THREE.DoubleSide,roughness:.65}), (seg[0]+seg[1])/2,1,z);m.castShadow=false;}
 // Rear of the grandstand: aluminum bench backs and diagonal steel bracing.
 const benches=[],legs=[];for(const x of[-54,54])for(let i=0;i<4;i++){benches.push({x,y:.8+i*.55,z:35-i*.8});for(const dx of[-10,0,10])legs.push({x:x+dx,y:(.8+i*.55)/2,z:35-i*.8,sy:(.8+i*.55)});}instances(root,new THREE.BoxGeometry(22,.08,.65),metal,benches);instances(root,new THREE.BoxGeometry(.09,1,.09),dark,legs);
-for(const [x,z,r]of(low?[[52,26,3.5]]:[[52,26,3.5],[-47,-35,2.4],[-40,29,2]])){const m=add(new THREE.CircleGeometry(r,low?24:48),new THREE.MeshPhysicalMaterial({color:0x34372f,metalness:.25,roughness:.16,clearcoat:.8,transparent:true,opacity:.72}),x,.024,z);m.rotation.x=-Math.PI/2;m.scale.y=.45;}
+// Dry concrete paddocks use baked oil/tire stains in pit-lot.js, not raised wet puddles.
 }
 
 export function enrichTruckStop(group,low){const metal=new THREE.MeshStandardMaterial({color:0xb5bec3,metalness:.58,roughness:.32}),black=new THREE.MeshStandardMaterial({color:0x1a2227,roughness:.55}),concrete=pbrMaterial('concrete',{color:0xd8d7cd,roughness:.96},[4,1]);const add=(geo,mat,x,y,z,ry=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.y=ry;m.castShadow=!low;m.receiveShadow=true;group.add(m);return m;};

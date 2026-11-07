@@ -1,3 +1,5 @@
+import {raceGrass} from './grass-3d.js';
+import {matteClay,matteClayShader} from './clay-matte.js';
 import {buildSalina} from './salina.js';
 import {pbrMaps,pbrMaterial} from './gfx2-materials.js';
 import {foliageMap,crownGeometry,pineGeometry} from './foliage.js';
@@ -46,7 +48,7 @@ export class RaceScene {
     this.orbit = 0;
   }
   // One height query for ground-anchored props outside the racing ribbon.
-  terrainHeight(x,z){const t=this.trk,q=t.project(x,z);if(this.pits&&Math.abs(x-this.pits.origin.x)<=75&&z>=-51&&z<=41)return 0;const road=this.pits?.road.heightAt(x,z);if(road!==null&&road!==undefined)return road;
+  terrainHeight(x,z){const t=this.trk,q=t.project(x,z);if(this.pits&&Math.abs(x-this.pits.origin.x)<=75&&z>=-51&&z<=41)return 0;const road=this.pits?.road.heightAt(x,z);if(road!==null&&road!==undefined)return road;const apron=this.pits?.lot?.heightAt(x,z);if(apron!==null&&apron!==undefined)return apron;
     if(q.d<=t.outer+.2)return q.d< -t.W/2-5?-.25:t.height(q.s,q.d);
     return outsideHeight(t,q.s,q.d-t.outer);
   }
@@ -109,8 +111,8 @@ export class RaceScene {
     trk.surface.upload();
     this.surfaceTex=new THREE.DataTexture(trk.surface.bytes,trk.surface.N,trk.surface.M,THREE.RGBAFormat);
     this.surfaceTex.wrapS=THREE.RepeatWrapping;this.surfaceTex.magFilter=THREE.LinearFilter;this.surfaceTex.minFilter=THREE.LinearFilter;this.surfaceTex.needsUpdate=true;
-    const trackMat = new THREE.MeshStandardMaterial({ map: dirt.map, bumpMap: dirt.bump, normalMap: dirt.normal, normalScale:new THREE.Vector2(.28,.28), roughnessMap:dirt.roughness, bumpScale: 0.022, roughness: 0.96, metalness: 0, vertexColors: true });
-    // light pools under each pole bank + the bottom groove going black & glossy as the track dries/rubbers in
+    const trackMat = matteClay({ map: dirt.map, bumpMap: dirt.bump, normalMap: dirt.normal, normalScale:new THREE.Vector2(.28,.28), roughnessMap:dirt.roughness, bumpScale: 0.022, roughness: 0.96, metalness: 0, vertexColors: true });
+    // light pools under each pole bank + the bottom groove going black & darkens as the track dries/rubbers in; never polished/glossy
     this.pools = Array.from({ length: 24 }, () => new THREE.Vector3(1e5, 1e5, 1));
     const dryU = this.dryU, pools = this.pools, surfaceTex=this.surfaceTex, surfaceSize=this.surfaceSize=new THREE.Vector2(trk.surface.N,trk.surface.M);
     trackMat.onBeforeCompile = sh => {
@@ -128,7 +130,7 @@ export class RaceScene {
           diffuseColor.rgb *= (1.0 - uDry * 0.30 * grv)*(1.0-rubber*0.62);
           diffuseColor.rgb *= 1.0 + surface.g * sin(vWPos.x*18.0+vWPos.z*13.0)*0.14;
           diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.12, 1.04, 0.96), cush * uDry);`)
-        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n roughnessFactor = mix(roughnessFactor, 0.52, max(rubber, uDry * grv * 0.55));')
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n roughnessFactor = clamp(0.99 - 0.025 * (1.0-uDry) * grv, 0.965, 1.0);')
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
           float rutBump=surface.g*(surface.a*0.04 + sin(vWPos.x*22.0+vWPos.z*15.0)*0.003);
           normal = perturbNormalArb(-vViewPosition,normal,vec2(dFdx(rutBump),dFdy(rutBump)),faceDirection);`)
@@ -136,8 +138,10 @@ export class RaceScene {
           for (int i = 0; i < 24; i++) { vec2 dd = vWPos.xz - uPools[i].xy; pool += exp(-dot(dd, dd) / (uPools[i].z * uPools[i].z)); }
           outgoingLight += diffuseColor.rgb * vec3(1.0, 0.92, 0.78) * uPoolAmt * min(pool, 1.5);
           #include <opaque_fragment>`);
+      matteClayShader(sh);
     };
-    const tm = new THREE.Mesh(tg, trackMat); tm.receiveShadow = true; scene.add(tm);
+    trackMat.customProgramCacheKey=()=>'dusty-clay-dynamic-track-v1';this.trackMaterial=trackMat;
+    const tm = new THREE.Mesh(tg, trackMat);tm.name='matte-clay-track'; tm.receiveShadow = true; scene.add(tm);
 
     // infield (grass + dirt pit lane)
     const inf = new THREE.Mesh(new THREE.PlaneGeometry(T.L + 2 * (T.R - T.W / 2 - 5), 2 * (T.R - T.W / 2 - 5)), new THREE.MeshStandardMaterial({ map: (() => { const t = grassTexture('#2c4420'); t.repeat.set(120, 48); return t; })(), roughness: 1 }));
@@ -159,6 +163,9 @@ export class RaceScene {
     scene.add(posts);
     // outer embankment down to ground
     const emb = ribbon(trk, N, s => { const h = trk.height(s, trk.outer); return [[trk.outer + 0.35, h], [trk.outer + 4 + h * 1.6, trk.smooth ? -0.3 : -0.18]]; }, [0, 1], 10);
+    // This ribbon's profile runs from track edge outward: reverse its wall-oriented winding.
+    for(let i=0;i<emb.index.count;i+=3){const b=emb.index.getX(i+1);emb.index.setX(i+1,emb.index.getX(i+2));emb.index.setX(i+2,b);}emb.computeVertexNormals();closeRibbonNormals(emb,N,2);
+    this.embankmentGeo=emb;
     const embT = grassTexture('#2a3d1e'); embT.repeat.set(1, 1);
     scene.add(Object.assign(new THREE.Mesh(emb, new THREE.MeshStandardMaterial({ map: embT, roughness: 1 })), { receiveShadow: true }));
 
@@ -294,7 +301,7 @@ export class RaceScene {
     }
     scene.add(trunks, crowns);
     for(let i=0;i<treeN;i++)groundObject(this.groundSupports,trunks,()=>-.3,{kind:'tree trunk',instance:i});
-    buildSalina(this);
+    buildSalina(this);this.grass=raceGrass(this);
     // dust
     const dc = new THREE.Color(T.clay[0], T.clay[1], T.clay[2]).lerp(new THREE.Color(0xe8c8a8), 0.35);
     this.dust = new Dust(scene, 3000, dc);this.dust.setBudget(detail.dust); this.dust.mat.uniforms.uLight.value = 0.9;
