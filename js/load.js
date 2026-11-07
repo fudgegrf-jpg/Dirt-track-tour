@@ -7,80 +7,31 @@ import * as UI from './ui.js';
 
 const RAMP_LEN = 4.6, FLOOR = 1.25, RAMP_HALF = 1.22, IN_HALF = 1.25, FRONT_X = -15.4;
 export class LoadScene {
-  constructor(app) {
-    this.app = app; const st = app.state;
-    const s = this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 4000);
-    s.fog = new THREE.FogExp2(0x1c1a26, 0.012);
-    s.add(makeSky({ top: 0x020409, horizon: 0x1c1a26, bottom: 0x050506, sunDir: [0.3, 0.3, -1], sunColor: 0x223344, sunSize: 0.5, stars: true }));
-    s.add(new THREE.HemisphereLight(0x7080a8, 0x786c60, 1.0));
-    s.add(new THREE.AmbientLight(0xa8a096,0.32));
-    // tamer bloom/exposure: white trailer walls under floodlights were blowing out
-    app.bloom.strength = 0.08; app.bloom.threshold = 3.0; app.bloom.radius = 0.2; app.renderer.toneMappingExposure = 0.92;
-    const flood2 = new THREE.SpotLight(0xffe6c4, 480, 80, 0.7, 0.7, 1.6); flood2.position.set(26, 12, -10); flood2.target.position.set(12, 0, 0); s.add(flood2, flood2.target);
-    const flood = new THREE.SpotLight(0xfff0d8, 650, 90, 0.75, 0.65, 1.6); flood.position.set(14, 14, 12); flood.target.position.set(-2, 0, 0); flood.castShadow = true; flood.shadow.mapSize.set(2048, 2048); flood.shadow.bias = -0.00008; flood.shadow.normalBias=0.006; s.add(flood, flood.target);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 14, 8), new THREE.MeshStandardMaterial({ color: 0x555 })); pole.position.set(14.3, 7, 12.3); s.add(pole);
-    const dirt = dirtTextures(app.track.clay); dirt.map.repeat.set(40, 40); dirt.bump.repeat.set(40, 40);
-    const g = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ map: dirt.map, bumpMap: dirt.bump, bumpScale: 0.12, roughness: 1, color: 0xa09080 }));
-    g.rotation.x = -Math.PI / 2; g.receiveShadow = true; s.add(g);
-    // your rig: trailer rear at x=0, interior toward -x
-    const semi = this.semi = makeSemi({ team: st.team, num: st.num, color: st.color, accent: st.accent, cabColor: 0x1a1a1e });
-    semi.rotation.y = Math.PI; semi.position.x = -17.8; s.add(semi);
-    const u = semi.userData; u.rampPivot.scale.x = RAMP_LEN / u.rampLen; u.rampPivot.rotation.z = -Math.PI / 2; this.rampTarget = Math.asin(FLOOR / RAMP_LEN);
-    // interior strip lights
-    for (let i = 0; i < 3; i++) { const pl = new THREE.PointLight(0xdfe8ff, 3.5, 8, 1.6); pl.position.set(-3 - i * 5, 3.9, 0); s.add(pl); }
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(14, 0.04, 0.12), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xe8f0ff, emissiveIntensity: 1.2 })); strip.position.set(-8, 4.12, 0); s.add(strip);
-    // parking chocks / goal marks on the trailer floor
-    const goalMat = new THREE.MeshStandardMaterial({ color: 0x40ff70, emissive: 0x20ff50, emissiveIntensity: .35, transparent: true, opacity: 0.6 });
-    this.goal = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 2.2), goalMat); this.goal.rotation.x = -Math.PI / 2; this.goal.position.set(-11.65, FLOOR + 0.02, 0); s.add(this.goal);
-    // Physical, depth-occluded floodlight head; no billboard glow over the rig.
-    const lamp=new THREE.Mesh(new THREE.BoxGeometry(.65,.28,1.5),new THREE.MeshStandardMaterial({color:0xd9d4c9,emissive:0xffddb0,emissiveIntensity:.65,roughness:.9}));lamp.position.copy(flood.position);s.add(lamp);
-    const stripeMat=new THREE.MeshStandardMaterial({color:0xcba34c,roughness:.96});
-    for(const z of [-1.10,1.10]){const strip=new THREE.Mesh(new THREE.BoxGeometry(u.rampLen-.15,.015,.065),stripeMat);strip.position.set(-u.rampLen/2,.048,z);u.rampPivot.add(strip);}
-    for(let x=-.3;x>-u.rampLen+.2;x-=.28){const rib=new THREE.Mesh(new THREE.BoxGeometry(.035,.014,2.08),new THREE.MeshStandardMaterial({color:0x777b80,roughness:.95}));rib.position.set(x,.047,0);u.rampPivot.add(rib);}
-    for(const z of [-1.18,1.18]){const guide=new THREE.Mesh(new THREE.PlaneGeometry(10,.075),stripeMat);guide.rotation.x=-Math.PI/2;guide.position.set(9,.009,z);s.add(guide);}
-    // other haulers & scenery
-    const others = [['Strickland Motorsports', '7S', 0x1e5fd8, 0xffffff], ['McCrary Racing', '99', 0xf2c014, 0x111111], ['Tillman Bros', '18', 0x1f9e4a, 0xffffff]];
-    others.forEach((o, i) => { const sm = makeSemi({ team: o[0], num: o[1], color: o[2], accent: o[3] }); sm.rotation.y = Math.PI; sm.position.set(-17.8 + (i % 2) * 3, 0, (i + 1) * (i % 2 ? -9 : 9) * (i > 1 ? 1.6 : 1)); s.add(sm); });
-    // crew members waving by the ramp
-    const crewMat = new THREE.MeshStandardMaterial({ color: st.color, roughness: 0.7 });
-    this.crew = [];
-    for (const z of [-2.2, 2.2]) {
-      const p=new THREE.Group(),pants=new THREE.MeshStandardMaterial({color:0x343d4b,roughness:1}),boots=new THREE.MeshStandardMaterial({color:0x252622,roughness:1}),skin=new THREE.MeshStandardMaterial({color:0xc89070,roughness:.9});
-      const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.23,.46,4,10),crewMat);torso.position.y=1.15;p.add(torso);
-      for(const z of [-.13,.13]){const leg=new THREE.Mesh(new THREE.CapsuleGeometry(.10,.55,4,8),pants);leg.position.set(0,.48,z);p.add(leg);const boot=new THREE.Mesh(new THREE.BoxGeometry(.34,.15,.19),boots);boot.position.set(.055,.075,z);p.add(boot);}
-      const head=new THREE.Mesh(new THREE.SphereGeometry(.17,16,10),skin);head.position.y=1.66;p.add(head);
-      const cap=new THREE.Mesh(new THREE.SphereGeometry(.18,12,8,0,Math.PI*2,0,Math.PI/2),crewMat);cap.position.y=1.70;p.add(cap);const brim=new THREE.Mesh(new THREE.BoxGeometry(.15,.025,.25),crewMat);brim.position.set(.16,1.70,0);p.add(brim);
-      const arm=new THREE.Mesh(new THREE.CapsuleGeometry(.07,.47,4,8),crewMat);arm.position.set(0,1.37,.28*Math.sign(z));arm.geometry.translate(0,.25,0);p.add(arm);p.userData.arm=arm;
-      const hand=new THREE.Mesh(new THREE.SphereGeometry(.075,10,8),skin);hand.position.y=.55;arm.add(hand);
-      p.position.set(5.5, 0, z); p.traverse(o => o.castShadow = true); s.add(p); this.crew.push(p);
-    }
-    const trees=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.5,1),new THREE.MeshStandardMaterial({color:0x435142,roughness:1}),80),trunks=new THREE.InstancedMesh(new THREE.CylinderGeometry(.25,.35,4,6),new THREE.MeshStandardMaterial({color:0x594e42,roughness:1}),80),mt=new THREE.Matrix4();
-    for(let i=0;i<80;i++){const x=-150+i*4,z=-90-Math.sin(i*2.7)*12;mt.makeTranslation(x,2,z);trunks.setMatrixAt(i,mt);mt.makeScale(1,1.25,1);mt.setPosition(x,5.2,z);trees.setMatrixAt(i,mt);}s.add(trees,trunks);
-    // car
-    this.car = makeLateModel({ color: st.color, accent: st.accent, num: st.num,name:st.driver,sponsor:st.sponsor||'RED CLAY RACING',livery:{scheme:st.scheme??4,cageColor:st.cageColor??0xc92127} }); this.car.rotation.order = 'YXZ'; s.add(this.car);
-    this.contact=new ContactShadow(s,this.car);
-    this.rigContact=new ContactShadow(s,semi,true);this.rigContact.update(()=>0);
-    this.c = { x: 15, z: (Math.random() - 0.5) * 1.6, th: Math.PI + (Math.random() - 0.5) * 0.25, v: 0, steer: 0 };
-    this.t = 0; this.timer = 0; this.dmg = 0; this.hits = 0; this.falls = 0; this.hold = 0; this.cool = 0; this.camMode = 0; this.intro = 2.2; this.done = false; this.winch = false;
-    const mech = app.crew('Mechanic'); this.par = 35 + (mech ? mech.skill * 2 : 0);
-    this.buildHud();
+  constructor(app,{race}={}) {
+    this.app=app;this.race=race;race.pausedRace=true;this.scene=race.scene;this.camera=race.camera;this.pits=race.pits;this.offset=this.pits.origin;this.semi=this.pits.semi;
+    this.rampTarget=Math.asin(FLOOR/RAMP_LEN);this.semi.userData.rampPivot.rotation.z=this.rampTarget;
+    const st=app.state,p=race.player;this.car=p.mesh;this.car.userData.setInCar?.(false);
+    this.c={x:p.x-this.offset.x,z:p.z-this.offset.z,th:p.th,v:Math.min(6.7,p.speed||0),steer:0};
+    if(st.pitPose?.round===st.round)Object.assign(this.c,st.pitPose.c);
+    this.contact=p.contactShadow;this.rigContact=new ContactShadow(this.scene,this.semi,true);this.rigContact.update(()=>0);
+    race.cars.filter(c=>!c.player).forEach((c,i)=>{const b=this.pits.bays[i%this.pits.bays.length];c.mesh.position.set(this.offset.x+b.x,0,this.offset.z+b.z+Math.floor(i/this.pits.bays.length)*4);c.mesh.rotation.set(0,Math.PI,0);c.mesh.traverse(o=>{if(o.isLOD){o.autoUpdate=false;o.levels[0].object.visible=false;o.levels[1].object.visible=true;}});c.contactShadow.update(()=>0);});
+    this.goal=new THREE.Mesh(new THREE.PlaneGeometry(2.3,2.2),new THREE.MeshStandardMaterial({color:0xd2f77f,emissive:0x799f33,emissiveIntensity:.25,transparent:true,opacity:.65}));this.goal.rotation.x=-Math.PI/2;this.goal.position.set(-11.65,FLOOR+.02,0);this.pits.root.add(this.goal);
+    this.t=0;this.timer=0;this.dmg=0;this.hits=0;this.falls=0;this.hold=0;this.cool=0;this.camMode=0;this.intro=0;this.done=false;this.winch=false;this.crew=[];this.pathIndex=0;this.loading=false;
+    if(st.pitPose?.round===st.round&&st.pitPose.session)Object.assign(this,st.pitPose.session);
+    const mech=app.crew('Mechanic');this.par=35+(mech?mech.skill*2:0);app.ui.innerHTML='';this.buildHud();this.updateCamera(1);this.updateHud();
   }
   buildHud() {
     const h = document.createElement('div'); h.id = 'hud';
-    h.innerHTML = `<div class="hud-box" style="left:16px;top:16px"><div class="lbl">LOAD TIME</div><div class="big" id="l-t">0.0</div><div class="lbl">PAR ${this.par}s</div></div>
-      <div class="hud-box" style="left:150px;top:16px"><div class="lbl">CAR DAMAGE ADDED</div><div class="big" id="l-d">0%</div></div>
-      <div class="hud-box" style="right:16px;top:16px;width:230px"><div class="lbl">ALIGNMENT</div><canvas id="l-al" width="200" height="60"></canvas><div class="lbl" id="l-st">line it up with the ramp</div></div>
-      <div id="center-msg" style="font-size:64px"></div><div id="sub-msg"></div>
-      <div class="hint">W/↑ creep forward • S/↓ brake / reverse • A/D ←/→ steer • stop in the GREEN box • C camera • X let the crew winch it ($300, slow)</div>`;
+    h.className='pit-hud';h.innerHTML=`<section class="pit-status"><div class="kicker">${UI.esc(this.app.track.short)} / POST RACE</div><h3 id="pit-stage">Return to your hauler</h3><p id="l-st">Take the marked backstretch pit exit · 15 mph limit</p><div class="pit-metrics"><span><b id="pit-speed">0</b> MPH</span><span>LOAD <b id="l-t">0.0</b>s / ${this.par}s</span><span>DAMAGE +<b id="l-d">0%</b></span></div><canvas id="l-al" width="200" height="60"></canvas></section><section class="pit-nav"><canvas id="pit-map" width="220" height="150"></canvas><span id="pit-dist"></span></section><div id="center-msg"></div><div id="sub-msg"></div><div class="hint">15 mph in the pits · WASD / arrows · C camera · X crew assist / winch ($300)</div>`;
     this.app.ui.appendChild(h);
     this.hud = { t: h.querySelector('#l-t'), d: h.querySelector('#l-d'), al: h.querySelector('#l-al').getContext('2d'), st: h.querySelector('#l-st'), msg: h.querySelector('#center-msg'), sub: h.querySelector('#sub-msg') };
-    this.hud.msg.textContent = 'LOAD THE CAR'; this.hud.sub.textContent = 'Drive up the ramp — fall off the edge or hit the walls and you\'ll bend something';
+    this.hud.msg.textContent='';this.hud.sub.textContent='';
   }
   height(x, z) {
     if (x < 0 && x > -16.2 && Math.abs(z) < IN_HALF + 0.05) return FLOOR;
     const rx = RAMP_LEN * Math.cos(this.rampTarget);
     if (x >= 0 && x <= rx && Math.abs(z) <= RAMP_HALF) return FLOOR * (1 - x / rx);
+    if(z>32){const wx=x+this.offset.x,wz=z+this.offset.z,q=this.race.trk.project(wx,wz);if(z>=65)return this.race.trk.height(q.s,q.d);return this.pits.height*clamp((z-32)/33,0,1);}
     return 0;
   }
   wheelPts(c) {
@@ -92,13 +43,17 @@ export class LoadScene {
     return [[2.85, -1.10], [2.85, 1.10], [-2.65, -1.10], [-2.65, 1.10], [0, -1.10], [0, 1.10]].map(([lx, lz]) => ({ x: c.x + cs * lx - sn * lz, z: c.z + sn * lx + cs * lz, lx }));
   }
   blocked(c) {
+    const wx=c.x+this.offset.x,wz=c.z+this.offset.z,q=this.race.trk.project(wx,wz);
+    if(c.z>61){if(q.d>this.race.trk.outer-1&&Math.abs(c.x)>13)return 'wall';if(q.d<this.race.trk.inner+2)return 'wall';}
+    if(c.z>38&&c.z<61&&Math.abs(c.x)>14+(65-c.z)*.45)return 'wall';
+    if(c.z<34){if(c.x>72||c.x< -72||c.z< -43)return 'wall';for(const o of this.pits.obstacles)if(Math.abs(c.x-o.x)<o.w+2.8&&Math.abs(c.z-o.z)<o.d+1.1)return 'wall';}
     const centerOut = Math.abs(c.z) > IN_HALF + 0.25;
     for (const p of this.corners(c)) {
       if (p.x < 0.02 && p.x > -22) {
         if (!centerOut && Math.abs(p.z) > IN_HALF - 0.03) return 'wall';
         if (centerOut && Math.abs(p.z) < IN_HALF + 0.2) return 'wall';
       }
-      if (p.lx > 0 && p.x < FRONT_X) return 'front';
+      if (Math.abs(c.z)<2 && p.lx > 0 && p.x < FRONT_X) return 'front';
     }
     return null;
   }
@@ -113,9 +68,10 @@ export class LoadScene {
       let inp = app.input();
       if (this.intro > 0) {inp = { steer: 0, throttle: 0, brake: 0 };c.v=0;}
       if (this.winch) inp = this.autopilot();
-      if (this.intro <= 0) this.timer += dt * (this.winch ? 1.6 : 1);
+      if(c.x<17&&c.x> -17&&Math.abs(c.z)<4)this.loading=true;
+      if(this.loading)this.timer += dt*(this.winch?1.6:1);
       // kinematic drive
-      const maxV = this.winch ? 1.3 : 2.35;
+      const maxV = this.loading ? (this.winch?1.3:2.35) : 6.7;
       c.steer += clamp(inp.steer - c.steer, -2.2 * dt, 2.2 * dt);
       if (inp.throttle) c.v = Math.min(maxV, c.v + 2.0 * dt);
       else if (inp.brake) c.v = c.v > 0.05 ? Math.max(0, c.v - 5 * dt) : Math.max(-2.0, c.v - 1.6 * dt);
@@ -124,7 +80,7 @@ export class LoadScene {
       const prev = { ...c };
       c.th = wrapAngle(c.th + c.v / 2.8 * Math.tan(c.steer * 0.55) * dt);
       c.x += Math.cos(c.th) * c.v * dt; c.z += Math.sin(c.th) * c.v * dt;
-      c.x = clamp(c.x, -30, 40); c.z = clamp(c.z, -14, 14);
+      // The same coordinates cover the oval, graded exit and paddock; no teleport/clamp to a loading room.
       this.cool -= dt;
       const b = this.blocked(c);
       if (b) {
@@ -134,7 +90,7 @@ export class LoadScene {
       }
       // falling off the ramp edge
       const hs = this.wheelPts(c).map(w => this.height(w.x, w.z));
-      if (Math.max(Math.abs(hs[0] - hs[1]), Math.abs(hs[2] - hs[3])) > 0.4 && c.x > -1 && !this.falling) {
+      if (Math.max(Math.abs(hs[0] - hs[1]), Math.abs(hs[2] - hs[3])) > 0.4 && c.x > -1 && c.x<5&&Math.abs(c.z)<2 && !this.falling) {
         this.falling = 1.0; this.dmg += 6; this.falls++; this.flash('OFF THE RAMP! +6% damage', '#ff5a4a'); this.shake = 1;
       }
       // goal: parked in the green box
@@ -153,28 +109,31 @@ export class LoadScene {
     const hF = (hs[0] + hs[1]) / 2, hR = (hs[2] + hs[3]) / 2, hLft = (hs[0] + hs[2]) / 2, hRt = (hs[1] + hs[3]) / 2;
     const m = this.car;
     const y = (hF + hR) / 2 - (this.falling ? (1 - this.falling) * 0.6 : 0);
-    m.position.set(c.x, y, c.z);
+    m.position.set(c.x+this.offset.x, y, c.z+this.offset.z);
     m.rotation.y = -c.th;
     m.rotation.z = lerp(m.rotation.z, Math.atan2(hF - hR, 2.68), 1-Math.exp(-dt*26));
     m.rotation.x = lerp(m.rotation.x, -Math.atan2(hRt - hLft, 1.7) + (this.falling ? 0.25 * Math.sign(c.z || 1) * -1 : 0), 1-Math.exp(-dt*22));
     c.wr = (c.wr || 0) + c.v * dt / 0.42;
     m.userData.wheels.forEach((w, i) => { w.rotation.z = -c.wr; if (i < 2) w.rotation.y = -c.steer * 0.5; });
-    if(!this.falling)seatWheels(m,(x,z)=>this.height(x,z));
-    this.contact.update((x,z)=>this.height(x,z));
+    if(!this.falling)seatWheels(m,(x,z)=>this.height(x-this.offset.x,z-this.offset.z));
+    this.contact.update((x,z)=>this.height(x-this.offset.x,z-this.offset.z));
     // roof cutaway while inside so you can see
     const inside = c.x < 1.5; this.semi.userData.roof.visible = !inside || this.camMode === 2;
     this.crew.forEach((p, i) => { p.userData.arm.rotation.x = Math.sin(this.t * 4 + i) * 0.6 * (i ? 1 : -1) + (i ? -2.4 : 2.4); p.lookAt(c.x, 0, c.z); });
+    this.pits.marker.visible=!this.loading&&Math.hypot(c.x,c.z)>18;this.race.key.position.set(m.position.x+30,90,m.position.z+40);this.race.key.target.position.copy(m.position);
     this.updateCamera(dt);
     this.updateHud();
+    if(this.done){this.secureT=(this.secureT||0)+dt;this.hud.msg.textContent=this.secureT<1.6?'TYING DOWN':'READY TO ROLL';rp.rotation.z=lerp(this.rampTarget,-Math.PI/2,clamp((this.secureT-1.6)/2,0,1));if(this.secureT>4){delete app.state.pitPose;UI.afterLoad(app,this.result);return;}}
+    else if((this.saveT=(this.saveT||0)+dt)>2){this.saveT=0;app.state.pitPose={round:app.state.round,c:{...c},session:{timer:this.timer,dmg:this.dmg,hits:this.hits,falls:this.falls,winch:this.winch,loading:this.loading,pathIndex:this.pathIndex,exitStarted:this.exitStarted}};app.save();}
     this.app.audio.set(0.12 + Math.abs(c.v) * 0.06, Math.abs(c.v) > 0.1 ? 0.5 : 0.2, 0.08);
   }
   autopilot() {
-    const c = this.c; const look = 3.5;
-    const tx = c.x - look, tz = 0;
-    const want = Math.atan2(tz - c.z, tx - c.x);
-    const steer = clamp(wrapAngle(want - c.th) * 2.2, -1, 1);
-    const stop = c.x < -11.4;
-    return { steer, throttle: stop ? 0 : 1, brake: stop ? 1 : 0 };
+    const c=this.c,trk=this.race.trk;let tx,tz;
+    if(!this.exitStarted&&c.z>59){const q=trk.project(c.x+this.offset.x,c.z+this.offset.z),ds=(this.pits.gateS-q.s+trk.P)%trk.P;if(ds<20)this.exitStarted=true;else{const p=trk.point(q.s+12,0);tx=p.x-this.offset.x;tz=p.z-this.offset.z;}}
+    if(tx===undefined&&!this.loading){this.exitStarted=true;const path=[[0,44],[22,29],[37,13],[32,0],[15,0]];let p=path[Math.min(this.pathIndex,path.length-1)];if(Math.hypot(c.x-p[0],c.z-p[1])<5.5){this.pathIndex++;p=path[Math.min(this.pathIndex,path.length-1)];}if(c.z<30&&this.pathIndex===0)this.pathIndex=1;[tx,tz]=p;}
+    if(this.loading||this.pathIndex>=5){tx=c.x-4;tz=0;}
+    const want=Math.atan2(tz-c.z,tx-c.x),steer=clamp(wrapAngle(want-c.th)*2.2,-1,1),stop=c.x< -11.4&&Math.abs(c.z)<.4;
+    return {steer,throttle:stop?0:1,brake:stop?1:0};
   }
   flash(t, col) { this.hud.msg.textContent = t; this.hud.msg.style.color = col; clearTimeout(this.ft); this.ft = setTimeout(() => { if (this.hud) this.hud.msg.textContent = ''; }, 1400); }
   updateCamera(dt) {
@@ -185,17 +144,25 @@ export class LoadScene {
     else if (this.camMode === 0) { want = new THREE.Vector3(c.x - Math.cos(c.th) * 7, m.position.y + 3.9, c.z - Math.sin(c.th) * 7); look = new THREE.Vector3(c.x + Math.cos(c.th) * 4, m.position.y + 0.8, c.z + Math.sin(c.th) * 4); }
     else if (this.camMode === 1) { want = new THREE.Vector3(-14.8, 3.6, 0); look = new THREE.Vector3(c.x, m.position.y + 0.6, c.z); }
     else { want = new THREE.Vector3(9, 2.2, 6.5); look = new THREE.Vector3(c.x, m.position.y + 0.8, c.z); }
+    want.add(this.offset);look.add(this.offset);
     cam.position.lerp(want, 1 - Math.exp(-dt * (this.intro > 0 ? 3 : 5))); cam.position.x += (Math.random() - 0.5) * sh * 0.3; cam.position.y += (Math.random() - 0.5) * sh * 0.3;
     cam.lookAt(look);
   }
   updateHud() {
-    const h = this.hud, c = this.c; if (!h) return;
+    const h=this.hud,c=this.c;if(!h)return;
+    document.querySelector('#pit-speed').textContent=Math.round(Math.abs(c.v)*2.237);
+    document.querySelector('#pit-stage').textContent=this.done?'Securing your car':this.loading?'Straight. Slow. Centered.':'Return to your hauler';
+    document.querySelector('#pit-dist').textContent=`BAY ${this.app.state.num} · ${Math.round(Math.hypot(c.x,c.z))} m`;
+    const mg=document.querySelector('#pit-map').getContext('2d');mg.fillStyle='#142027';mg.fillRect(0,0,220,150);mg.strokeStyle='#73838a';mg.lineWidth=2;const trk=this.race.trk;const project=(x,z)=>[110+(x-this.offset.x)*.45,92-(z-this.offset.z)*.45];mg.beginPath();for(let i=0;i<=80;i++){const p=trk.point(i/80*trk.P,0),a=project(p.x,p.z);i?mg.lineTo(...a):mg.moveTo(...a);}mg.stroke();mg.strokeStyle='#d2f77f';mg.strokeRect(76,72,68,40);mg.fillStyle='#d2f77f';mg.fillRect(105,90,9,4);mg.fillStyle='#fff';mg.beginPath();mg.arc(110+c.x*.45,92-c.z*.45,3,0,7);mg.fill();
+
     h.t.textContent = this.timer.toFixed(1); h.t.style.color = this.timer > this.par ? '#ff5a4a' : '#fff';
     h.d.textContent = this.dmg.toFixed(0) + '%';
     const g = h.al; g.clearRect(0, 0, 200, 60); g.fillStyle = '#2a1a10'; g.fillRect(10, 22, 180, 16);
     g.fillStyle = '#5fd16a'; g.fillRect(100 - 0.35 * 60, 22, 0.7 * 60, 16);
     const off = clamp(c.z, -1.5, 1.5), ang = wrapAngle(c.th - Math.PI);
     g.save(); g.translate(100 + off * 60, 30); g.rotate(ang); g.fillStyle = '#ffc83d'; g.fillRect(-14, -6, 28, 12); g.fillStyle = '#000'; g.fillRect(-14, -2, 6, 4); g.restore();
+    if(c.z>34){h.st.textContent='Follow the backstretch PIT EXIT. Keep below 15 mph.';return;}
+    if(!this.loading){h.st.textContent='Your blue / white hauler is in Bay '+this.app.state.num+'. Approach the striped ramp.';return;}
     if (this.hold <= 0 && !this.done) h.st.textContent = c.x > 0.5 ? (Math.abs(c.z) < 0.4 && Math.abs(ang) < 0.1 ? 'lined up — go!' : Math.abs(c.z)>.4?`ramp to your ${c.z>0?'RIGHT':'LEFT'} — ease over`:'straighten the car before climbing') : 'ease forward to the green box';
   }
   finish() {
@@ -203,17 +170,10 @@ export class LoadScene {
     const t = this.timer, over = Math.max(0, t - this.par);
     const cost = Math.round(over * 15) + (this.winch ? 300 : 0);
     const bonus = this.winch ? 0 : clamp((this.par - t) / this.par, 0, 1) * (this.dmg ? 0.5 : 1.2);
-    const r = { time: t, dmg: this.dmg, cost, bonusHours: +bonus.toFixed(2), hits: this.hits, falls: this.falls, winch: this.winch };
+    const r = { round:this.app.state.round,time: t, dmg: this.dmg, cost, bonusHours: +bonus.toFixed(2), hits: this.hits, falls: this.falls, winch: this.winch };
     this.result = r;
     this.semi.userData.rampPivot.rotation.z = this.rampTarget;
-    const el = document.createElement('div'); el.className = 'screen';
-    el.innerHTML = `<div class="panel load-summary" style="width:440px"><div class="kicker">LOADING COMPLETE</div><h2>Ready to roll.</h2><p class="muted">${this.dmg ? 'Race car secured.' : 'A clean load. Nice work.'}</p><table>
-      <tr><td>Load time</td><td>${t.toFixed(1)}s (par ${this.par}s)</td></tr><tr><td>Wall hits / ramp falls</td><td>${this.hits} / ${this.falls}</td></tr>
-      <tr><td>Damage added</td><td>${this.dmg.toFixed(0)}%</td></tr><tr><td>Extra cost</td><td>$${cost}${this.winch ? ' (winch crew)' : ''}${over ? ' (crew overtime)' : ''}</td></tr>
-      <tr><td>Head start on the road</td><td style="color:#5fd16a">+${bonus.toFixed(2)} h</td></tr></table>
-      <div class="row" style="margin-top:12px"><span style="flex:1"></span><button id="go">Route planner →</button></div></div>`;
-    this.app.ui.appendChild(el);
-    el.querySelector('#go').onclick = () => UI.afterLoad(this.app, r);
+    this.hud.msg.textContent='TYING DOWN';this.hud.sub.textContent='Crew securing the car. Ramp closing…';
   }
-  dispose() { clearTimeout(this.ft); this.hud = null; disposeScene(this.scene); }
+  dispose() { clearTimeout(this.ft); this.hud = null; this.race.dispose(); }
 }

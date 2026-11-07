@@ -38,7 +38,7 @@ class App {
     addEventListener('blur', () => this.keys.clear());
     addEventListener('resize', () => this.resize());
     this.mode = null; this.last = performance.now(); this.paused = false; this.manual = false;
-    this.settings = Object.assign({ shake: 1, volume: 0.8, crowd: 1, cam: 'chase', assist: 'high', diff: 'normal' }, (() => { try { return JSON.parse(localStorage.getItem('dtt.settings')) || {}; } catch (e) { return {}; } })());
+    this.settings = Object.assign({ shake: 1, volume: 0.8, crowd: 1, cam: 'chase', assist: 'high', diff: 'normal', autoPace: true }, (() => { try { return JSON.parse(localStorage.getItem('dtt.settings')) || {}; } catch (e) { return {}; } })());
     // One-time migration: existing saves receive the safer new default too.
     // Subsequent explicit Off/Low/Medium/High/Max choices are respected.
     if(this.settings.assistVersion!==2){this.settings.assist='high';this.settings.assistVersion=2;localStorage.setItem('dtt.settings',JSON.stringify(this.settings));}
@@ -78,7 +78,7 @@ class App {
     if (!gp) { this.pad = null; return; }
     const b = i => gp.buttons[i] ? (gp.buttons[i].value ?? (gp.buttons[i].pressed ? 1 : 0)) : 0;
     this.pad = { steer: gp.axes[0] || 0, gas: b(7), brake: b(6) };
-    const map = { 0: 'Space', 1: 'KeyX', 2: 'KeyE', 3: 'KeyC', 4: 'KeyQ', 5: 'KeyT', 8: 'KeyR', 9: 'Escape', 12: 'ArrowUp', 13: 'ArrowDown' };
+    const map = { 0: 'Space', 1: 'KeyX', 2: 'KeyE', 3: 'KeyC', 4: 'KeyQ', 5: this.phase==='highway'?'KeyJ':'KeyT', 8: 'KeyR', 9: 'Escape', 12: 'ArrowUp', 13: 'ArrowDown' };
     this.padPrev = this.padPrev || {};
     for (const [i, code] of Object.entries(map)) {
       const down = b(+i) > 0.5;
@@ -126,10 +126,11 @@ class App {
       <div class="row set-row"><label for="s-q">Graphics</label><select id="s-q"><option value="low">Performance</option><option value="medium">Balanced</option><option value="high">Detail</option></select></div>
       <div class="row set-row"><label for="s-assist">Steering assist</label><select id="s-assist"><option value="off">Off · pro</option><option value="low">Low</option><option value="med">Medium</option><option value="high">High · recommended</option><option value="max">Max · relaxed</option></select></div>
       <div class="row set-row"><label for="s-diff">AI difficulty</label><select id="s-diff"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
-      <div class="row set-row"><label for="s-cam">Race camera</label><select id="s-cam"><option value="chase">Chase</option><option value="incar">Cockpit</option></select></div></section></div>
+      <div class="row set-row"><label for="s-auto">Auto-drive pace laps & cautions</label><select id="s-auto"><option value="on">On · recommended</option><option value="off">Off · manual</option></select></div><div class="row set-row"><label for="s-cam">Race camera</label><select id="s-cam"><option value="chase">Chase</option><option value="incar">Cockpit</option></select></div></section></div>
       <footer class="modal-footer"><button id="s-help" class="text-button">Driving guide ${UI.icon('arrow')}</button><button id="s-done">Done ${UI.icon('check')}</button></footer></div>`;
     document.body.appendChild(d);
     d.querySelector('#s-q').value = this.quality; d.querySelector('#s-cam').value = S.cam; d.querySelector('#s-assist').value = S.assist || 'high'; d.querySelector('#s-diff').value = S.diff || 'normal';
+    d.querySelector('#s-auto').value=S.autoPace===false?'off':'on';d.querySelector('#s-auto').onchange=e=>{S.autoPace=e.target.value==='on';this.saveSettings();};
     const bind = (id, key) => { const e = d.querySelector('#' + id); e.oninput = () => { S[key] = +e.value; d.querySelector(`#${id}-v`).textContent = Math.round(S[key] * 100) + '%'; this.saveSettings(); }; };
     bind('s-vol', 'volume'); bind('s-crowd', 'crowd'); bind('s-shake', 'shake');
     d.querySelector('#s-q').onchange = e => { this.quality = e.target.value; this.applyQuality(); };
@@ -188,7 +189,9 @@ class App {
   goto(phase, params = {}) {
     this.mobile?.reset();
     document.body.dataset.phase=phase;
-    if (this.mode) { this.mode.dispose?.(); this.mode = null; }
+    const retained=(phase==='results'&&this.mode instanceof RaceScene)||(phase==='load'&&this.mode instanceof RaceScene);
+    const race=retained?this.mode:null;if(race)race.pausedRace=true;
+    if (this.mode&&!retained) { this.mode.dispose?.(); this.mode = null; }
     this.ui.innerHTML = ''; this.phase = phase; this.audio.stop();
     this.helpWasPaused=false;document.getElementById('help')?.remove();this.togglePause(false); document.getElementById('settings')?.remove(); this.fade();
     this.bloom.strength = 0.1; this.bloom.radius = 0.25; this.bloom.threshold = 3.0; this.renderer.toneMappingExposure = 1; // scenes may override
@@ -199,8 +202,8 @@ class App {
       case 'schedule': this.mode = null; UI.schedule(this); break;
       case 'shop': this.mode = new ShowroomScene(this); UI.shop(this); break;
       case 'race': this.mode = new RaceScene(this, { track: this.track, startBack: this.state.late }); break;
-      case 'results': this.mode = new ShowroomScene(this, { spin: true }); UI.results(this, params); break;
-      case 'load': this.mode = new LoadScene(this); break;
+      case 'results': this.mode = race||new ShowroomScene(this, { spin: true }); UI.results(this, params); break;
+      case 'load': this.mode = new LoadScene(this, {race:race||new RaceScene(this,{track:this.track})}); break;
       case 'map': this.mode = null; UI.map(this); break;
       case 'highway': this.mode = new HighwayScene(this, { route: this.route }); break;
       case 'arrive': this.mode = new ShowroomScene(this); UI.arrive(this, params); break;

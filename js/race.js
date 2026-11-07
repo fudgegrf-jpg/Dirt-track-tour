@@ -1,3 +1,4 @@
+import { createPitWorld } from './pits.js';
 import { DEFAULT_DRIVER, DEFAULT_PROFILE } from './data.js';
 import {qualityPreset} from './quality.js';
 import { ContactShadow } from './contact.js';
@@ -139,7 +140,7 @@ export class RaceScene {
     const postN = Math.floor(trk.P / 5);
     const posts = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.06, 5.4, 6), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: .15, roughness: .8 }), postN);
     const mtx = new THREE.Matrix4();
-    for (let i = 0; i < postN; i++) { const s = i * 5, p = trk.point(s, trk.outer + 0.2), h = trk.height(s, trk.outer) + 1.15 + 2.7; mtx.makeTranslation(p.x, h, p.z); posts.setMatrixAt(i, mtx); }
+    for (let i = 0; i < postN; i++) { const s = i * 5, p = trk.point(s, trk.outer + 0.2), h = trk.height(s, trk.outer) + 1.15 + 2.7; mtx.makeTranslation(p.x, Math.abs(s-trk.P/2)<16?-100:h, p.z); posts.setMatrixAt(i, mtx); }
     scene.add(posts);
     // outer embankment down to ground
     const emb = ribbon(trk, N, s => { const h = trk.height(s, trk.outer); return [[trk.outer + 0.35, h - 0.1], [trk.outer + 4 + h * 1.6, trk.smooth ? -0.3 : -0.18]]; }, [0, 1], 10);
@@ -241,22 +242,7 @@ export class RaceScene {
       const back = new THREE.Mesh(new THREE.BoxGeometry(16.8, 10.8, 0.6), steel); back.position.y = 15; g.add(back);
       for (const x of [-5, 5]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.6, 10, 0.6), steel); leg.position.set(x, 5, -0.2); leg.castShadow = true; g.add(leg); }
       this.drawScoreboard(); }
-    // ----- pit area outside the backstretch: parked haulers -----
-    const pitZ = -(T.R + trk.outer + 18);
-    const pitMat = new THREE.MeshStandardMaterial({ map: dirt.map, color: 0x8a7a70, roughness: 1 });
-    const pit = new THREE.Mesh(new THREE.PlaneGeometry(T.L + 120, 50), pitMat); pit.rotation.x = -Math.PI / 2; pit.position.set(0, -0.17, pitZ - 16); pit.receiveShadow = true; scene.add(pit);
-    const teams = AI_DRIVERS.map(d => [d.name.split(' ')[1] + ' Racing', d.num, d.color, d.accent]);
-    teams.push([this.app.state?.team || 'Red Clay Racing', this.app.state?.num || '21', this.app.state?.color ?? 0xc81d25, this.app.state?.accent ?? 0xffffff]);
-    teams.forEach((t, i) => {
-      const tt = trailerTexture(...t);
-      const box = new THREE.Mesh(new THREE.BoxGeometry(16, 3.0, 2.6), [new THREE.MeshStandardMaterial({ color: t[2] }), new THREE.MeshStandardMaterial({ color: 0xeeeeee }), new THREE.MeshStandardMaterial({ color: 0xeeeeee }), new THREE.MeshStandardMaterial({ color: 0x222222 }), new THREE.MeshPhysicalMaterial({ map: tt, clearcoat: 0, roughness: .88, metalness:.02 }), new THREE.MeshPhysicalMaterial({ map: tt, clearcoat: 0, roughness: .88, metalness:.02 })]);
-      box.position.set(-T.L / 2 - 20 + i * ((T.L + 40) / (teams.length - 1)), 2.7, pitZ - 10 - (i % 2) * 14); box.rotation.y = Math.PI / 2 + (rnd() - 0.5) * 0.3; box.castShadow = true; scene.add(box);
-      // Parked trailers sit on actual tandem tires and landing legs, not in mid-air.
-      const tireMat=new THREE.MeshStandardMaterial({color:0x343330,roughness:1});
-      for(const x of [-5.9,-4.6])for(const z of [-1.22,1.22]){const w=new THREE.Mesh(new THREE.CylinderGeometry(.52,.52,.30,16),tireMat);w.rotation.x=Math.PI/2;w.position.set(x,-2.35,z);box.add(w);}
-      for(const z of [-.8,.8]){const leg=new THREE.Mesh(new THREE.CylinderGeometry(.065,.08,1.5,6),steel);leg.position.set(5.2,-2.12,z);box.add(leg);const foot=new THREE.Mesh(new THREE.BoxGeometry(.35,.08,.28),steel);foot.position.set(5.2,-2.83,z);box.add(foot);}
-      const awn = new THREE.Mesh(new THREE.BoxGeometry(14, 0.1, 4), new THREE.MeshStandardMaterial({ color: t[2], roughness: 0.6 })); awn.position.copy(box.position).add(new THREE.Vector3(0, 1.2, 0)); awn.rotation.y = box.rotation.y; awn.translateZ(3.2); scene.add(awn);
-    });
+    this.pits=createPitWorld(this);
     // ----- infield: support trucks, canopies, tool carts, light towers (the "infield pit" look)
     { const iz = -(T.R - T.W / 2 - 7) * 0.35, n = clamp(Math.floor(T.L / 26), 2, 6), cols = [0xdfe3e8, 0x2a3a5a, 0x7a1d10, 0x30302e, 0x1f5f3a, 0xc9a227];
       const canM = cols.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, side: THREE.DoubleSide }));
@@ -279,7 +265,7 @@ export class RaceScene {
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.4, 4, 5), new THREE.MeshStandardMaterial({ color: 0x3a2a1a }), treeN);
     const crowns = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.6, 1), new THREE.MeshStandardMaterial({ color: 0x405335, roughness: 1 }), treeN);
     for (let i = 0; i < treeN; i++) {
-      const a = rnd() * Math.PI * 2, r = 230 + rnd() * 260, x = Math.cos(a) * r * 1.3, z = Math.sin(a) * r, sc = 0.8 + rnd() * 1.1;
+      const a = rnd() * Math.PI * 2, r = 230 + rnd() * 260, x = Math.cos(a) * r * 1.3, sc = 0.8 + rnd() * 1.1; let z = Math.sin(a) * r; if(Math.abs(x)<T.L/2+85&&z<this.pits.gate.z&&z>this.pits.gate.z-135)z-=145;
       mtx.compose(new THREE.Vector3(x, -.3+2*sc, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc)); trunks.setMatrixAt(i, mtx);
       mtx.compose(new THREE.Vector3(x, -.3+5.1*sc, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(), rnd(), 0)), new THREE.Vector3(sc, sc * 1.2, sc)); crowns.setMatrixAt(i, mtx);
     }
@@ -320,7 +306,7 @@ export class RaceScene {
       this.cars.push(car);
     });
     this.player = this.cars.find(c => c.player) || this.cars[slot];
-    this.tearOffs = 5;
+    this.tearOffs = 5;this.formationOrder=[...this.cars];this.formationS=this.cars[0].s;this.formationV=this.paceSpeed();
   }
   paceSpeed() { return 14 + this.T.R * 0.035; }
   drawScoreboard() {
@@ -356,6 +342,7 @@ export class RaceScene {
       <canvas id="h-map" width="220" height="130" class="hud-box" style="left:16px;bottom:40px;padding:0"></canvas>
       <div class="coach" id="race-coach"></div><div id="center-msg"></div><div id="sub-msg"></div>
       <div class="hint">W/↑ throttle • S/↓ brake (hold when stopped = reverse) • A/D ←/→ steer • C camera • T tear-off • R reset to track • P/Esc pause • H guide</div>`;
+    const auto=document.createElement('div');auto.className='auto-pace';auto.id='auto-pace';auto.hidden=true;h.append(auto);
     this.app.ui.appendChild(h);this.coach=h.querySelector('#race-coach');this.showCoach=!this.app.settings?.tutorialSeen;
     this.hud = { pos: h.querySelector('#h-pos'), lap: h.querySelector('#h-lap'), spd: h.querySelector('#h-spd'), dmg: h.querySelector('#h-dmg'), order: h.querySelector('#h-order'), map: h.querySelector('#h-map').getContext('2d'), msg: h.querySelector('#center-msg'), sub: h.querySelector('#sub-msg'), groove: h.querySelector('#h-groove'), laps: h.querySelector('#h-laps'), flag: h.querySelector('#h-flag'), track: h.querySelector('#h-track'), tire: h.querySelector('#h-tire'), tear: h.querySelector('#h-tear') };
   }
@@ -392,13 +379,15 @@ export class RaceScene {
     this.updateVisuals(dt);
     this.updateCamera(dt);
     this.updateAudio(dt);
-    if (!this.attract) this.updateHud();
+    if (!this.attract){this.updateHud();const a=document.querySelector('#auto-pace');if(a){const on=(this.flag==='pace'||this.flag==='yellow')&&this.app.settings.autoPace!==false;a.hidden=!on;a.textContent=this.flag==='yellow'?'AUTO CAUTION — holding P'+((this.formationOrder||[]).indexOf(this.player)+1):'AUTO PACE — get ready for green';}}
     if (this.msgT > 0) { this.msgT -= dt; if (this.msgT <= 0 && this.phase === 'race') this.hud.msg.textContent = ''; }
   }
   physics(h, pin) {
     const { trk } = this; const racing = this.phase === 'race' || this.phase === 'attract' || this.phase === 'cooldown' || this.phase === 'pace';
     const pace = this.flag === 'pace' || this.flag === 'yellow', green = !pace && (this.phase === 'race' || this.phase === 'attract');
     const leader = this.paceLeader;
+    if(pace&&this.app.settings.autoPace!==false&&!this.attract){this.autoFormation(h);return;}
+    if(this.handover>0)this.handover=Math.max(0,this.handover-h);
     computeDraft(this.cars, trk);
     for (const c of this.cars) {
       let inp;
@@ -407,6 +396,7 @@ export class RaceScene {
       c.human = c.player && !!pin && !this.app.autopilot; c.assist = c.human ? (this.app.settings.assist || 'high') : null;
       if (c.player && pin) {
         inp = this.app.autopilot ? aiInput(c, trk, (c.ai ||= { lane: 0.3, skill: 0.9, aggr: 0.6, cons: 0.97, adapt: 0.5, curLane: 0.3 }), this.cars, ctx) : { ...pin };
+        if(this.handover>0&&!this.app.autopilot){const a=1-this.handover/.3,prev=this.releaseInput||{steer:0,throttle:.25,brake:0};for(const k of ['steer','throttle','brake'])inp[k]=lerp(prev[k],inp[k],a);}
         if (pace && !this.app.autopilot && c.speed > ctx.paceSpeed + 2) { inp.throttle *= 0.15; }
         if (c.finished) inp = { steer: aiInput(c, trk, { lane: 0.2, skill: 0.7 }, [], { dt: h }).steer, throttle: 0.25, brake: 0 };
         if (c.damage >= 100) inp = { steer: 0, throttle: 0, brake: 0.3 };
@@ -443,6 +433,16 @@ export class RaceScene {
       c.prevS = s;
     }
   }
+  autoFormation(h){
+    const trk=this.trk,yellow=this.flag==='yellow',targetV=this.paceSpeed()*(yellow?.88:1);
+    this.formationV+=(targetV-this.formationV)*Math.min(1,h*1.5);this.formationS+=this.formationV*h;
+    (this.formationOrder||this.cars).forEach((c,i)=>{
+      const ds=yellow?i*9:Math.floor(i/2)*9,d=yellow?-1:(i%2?1:-1)*Math.min(3.2,this.T.W*.18),s=this.formationS-ds,pt=trk.point(s,d),oldS=c.s;
+      const recover=c.player&&(Math.hypot(c.x-pt.x,c.z-pt.z)>65||c.speed<.5);
+      const a=(this.phase==='pace'||recover)?1:1-Math.exp(-h*2);c.x=lerp(c.x+Math.cos(pt.th)*this.formationV*h,pt.x,a);c.z=lerp(c.z+Math.sin(pt.th)*this.formationV*h,pt.z,a);c.th-=this.formationV*trk.curvature(s)*h;c.th+=wrapAngle(pt.th-c.th)*a;c.vx=Math.cos(c.th)*this.formationV;c.vz=Math.sin(c.th)*this.formationV;c.w=-this.formationV*trk.curvature(s);c.speed=this.formationV;c.steer=-Math.atan(2.8*trk.curvature(s));c.throttle=.25;c.brake=0;c.human=false;c.reverseHold=0;c.reversing=false;c.s=trk.project(c.x,c.z).s;c.d=d;
+      if(oldS>trk.P*.75&&c.s<trk.P*.25){c.lap++;c.lapStart=this.time;}c.prevS=c.s;
+    });
+  }
   hit(c, dmg, kind) {
     if (dmg <= 0) return;
     const was = c.damage; c.damage = Math.min(100, c.damage + dmg);
@@ -476,11 +476,13 @@ export class RaceScene {
   }
   goGreen() {
     const restart = this.flag === 'yellow';
+    if(this.app.settings.autoPace!==false){this.handover=.3;this.releaseInput={steer:this.player.steer||0,throttle:.25,brake:0};this.player.reverseHold=0;this.player.reversing=false;}
     this.phase = 'race'; this.flag = (this.paceLeader?.lap ?? 0) >= this.T.laps ? 'white' : 'green'; this.greenT = 0; this.excite = 1;
     this.flash(restart ? 'GREEN — RESTART!' : 'GREEN GREEN GREEN', 1.8, '#5fd16a'); this.hud.sub.textContent = '';
     this.app.audio.crowdCheer?.();
   }
   throwCaution(c) {
+    this.formationOrder=[...(this.order||this.cars)].filter(o=>!o.dnf&&!o.finished);if(!this.formationOrder.includes(this.player)&&!this.player.dnf)this.formationOrder.push(this.player);this.formationS=this.formationOrder[0]?.s||0;this.formationV=this.formationOrder[0]?.speed||this.paceSpeed();
     this.flag = 'yellow'; this.cautions++; this.cautionT = 0; this.excite = 0.8; for (const o of this.cars) o.slowT = 0;
     this.flash('CAUTION', 2.2, '#ffd400'); this.hud.sub.textContent = `#${String(c.num).replace(/[&<>]/g,"")} ${String(c.name).replace(/[&<>]/g,"")} is stopped — slow down, single file, no passing`;
   }
@@ -750,7 +752,7 @@ function ribbon(trk, N, profile, vCoords, uLen) {
     const s = i / N * trk.P, prof = profile(s);
     prof.forEach(([d, y], j) => { const p = trk.point(s, d); pos.push(p.x, y, p.z); uv.push(s / uLen, vCoords[j]); });
   }
-  for (let i = 0; i < N; i++) for (let j = 0; j < n0 - 1; j++) { const a = i * n0 + j, b = a + n0; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+  for (let i = 0; i < N; i++) for (let j = 0; j < n0 - 1; j++) { if(Math.abs((i+.5)/N*trk.P-trk.P/2)<16)continue; const a = i * n0 + j, b = a + n0; idx.push(a, b, a + 1, a + 1, b, b + 1); }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); closeRibbonNormals(g, N, n0); return g;
 }
 
