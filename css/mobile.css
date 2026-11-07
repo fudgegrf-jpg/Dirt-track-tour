@@ -28,3 +28,6 @@ body{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}input,
 .mobile summary{min-height:44px;display:flex;align-items:center;font-size:12px}
 
 .mobile[data-phase=highway] #hud>.hud-box:nth-child(2){font-size:10px;line-height:1}
+
+/* Keep the reverse hint inside its pedal despite the shared inline-flex button style. */
+.touch-pedals button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}.touch-pedals br{display:none}

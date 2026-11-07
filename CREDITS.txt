@@ -29,6 +29,23 @@ MENU MUSIC
   "Nitro Riffs" by Jayden (made with Suno). Owner-supplied original song.
   The complete recording is re-encoded as a compact MP3 and embedded in text chunks.
 
+GRAPHICS 2 TEXTURES (CC0 1.0 / public domain)
+Poly Haven asset license: https://polyhaven.com/license
+Brown Mud Dry — Rob Tuytel — https://polyhaven.com/a/brown_mud_dry
+Grass Ground — Charlotte Baglioni — https://polyhaven.com/a/grass_ground
+Asphalt 02 — Rob Tuytel — https://polyhaven.com/a/asphalt_02
+Concrete — Rob Tuytel — https://polyhaven.com/a/concrete
+Metal Plate — Rob Tuytel — https://polyhaven.com/a/metal_plate
+Rosewood Veneer 1 — Jenelle van Heerden — https://polyhaven.com/a/rosewood_veneer1
+Maps resized to 512px (clay albedo 1024px), JPEG compressed; clay/grass albedos
+color-adjusted. Full URLs and output hashes: assets/textures/LICENSES.json.
+
+The late model remains an original procedural model: no third-party car/glTF
+mesh is redistributed. New tread, fasteners and spoiler hardware are procedural.
+Salina buildings/property are a stylized approximation guided by owner-provided
+reference images, not a survey. Reference photographs are not game textures and
+are excluded from the release. Fictional car sponsors are unchanged.
+
 STATIC GITHUB RELEASE
   OFL fonts are embedded as CSS data URLs; licenses remain in vendor/fonts.
   App icons are embedded. Unused preview WAVs are omitted; engine/effect audio is synthesized. Nitro Riffs is embedded as MP3 text chunks.

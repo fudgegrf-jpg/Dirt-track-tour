@@ -53,9 +53,9 @@ Progress saves automatically between stages in your browser (localStorage).
 Returning to title restarts the current race, loading attempt or highway leg.
 If it runs slowly, press G in a race to lower graphics quality.
 
-VOLUSIA BANKING & LIGHTING UPDATE
+SALINA HIGHBANKS BANKING & LIGHTING UPDATE
 - Round 1 now has smooth curve easements and progressive banking: 6 degrees
-  on the straights; 18 degrees low / about 22 middle / 25 high in the turns.
+  on the straights; 18 degrees low / about 22 middle / 26 high in the turns.
 - Four-wheel surface following and individual wheel travel keep the car planted.
 - AI groove pace is calibrated to the new banks. The latest High assist adds a gentler keyboard catch; lower assist levels
   retain the earlier dirt-slide feel.
@@ -68,7 +68,7 @@ RUTS, RIDE HEIGHT & PIT LIGHTING UPDATE
 - The mesh, bump shading, tires and car physics all use that same surface.
   Ruts work the suspension and gently deflect steering; rubber gains dry grip.
   AI drivers read accumulated rubber and roughness when choosing their groove.
-- Detail uses a 512 x 96 surface field; Balanced 384 x 72; Performance 256 x 48. Switching
+- High uses a 512 x 96 surface field; Medium 384 x 72; Low 256 x 48. Switching
   with G preserves the developed surface.
 - Additive light flare overlays are removed from pits, loading and race scenes.
   Wheels are now satin metal, not blown-out chrome. Ambient fill lifts shadows.
@@ -89,11 +89,11 @@ REFERENCE-2 CAR AND FORGIVING KEYBOARD UPDATE
 
 WHOLE-TOUR POLISH
 - All five ovals have smooth easements and progressive turn banking suited to
-  their character. Volusia remains 6 degrees straight / 18-25 degrees in turns.
-- Three graphics presets: Performance / Balanced (new-player default) / Detail.
-  G cycles them. Detail geometry/scenery updates at the next stage; pixel ratio,
+  their character. Salina Highbanks remains 6 degrees straight / 18-26 degrees in turns.
+- Graphics: Auto / Low / Medium / High. Auto selects Low on phones and Medium on desktop.
+  G cycles them. Geometry/scenery updates at the next stage; pixel ratio,
   shadow maps, LOD, dust budget and rut-field quality switch live without losing
-  the developed track. Materials/exposure are consistent; only Detail adds bloom.
+  the developed track. All tiers use the real PBR maps and ACES; High adds bloom, depth-aware AO, a vignette and grading.
 - Cached surface waves and a one-pass normal update reduce periodic CPU hitches.
 - New race shop: setup, crew and championship tabs; clear costs, benefits and
   per-race salaries. Choose body/accent/cage colors and any of 9 liveries on title.
@@ -111,7 +111,7 @@ PHONE / TABLET PLAY
 -------------------
 Open the public HTTPS link in your phone's browser and rotate sideways. The game
 waits while the rotate prompt is showing. First touch wakes the audio engine.
-Touch devices start on Performance graphics (512-pixel shadows, 450 dust particles,
+Touch devices default to Auto / Low graphics (512-pixel shadows, 450 dust particles,
 0.85 render pixel ratio at normal phone DPR); a later graphics choice is retained.
 
 Left: slide the steering bar. Right: hold GAS or BRAKE (reverse when stopped).
@@ -220,3 +220,28 @@ POLISH UPDATE
   Bay 42. Normally finished races still use the corner pit road.
   The rebuilt cab camera has live instruments, wood trim, mirrors and a red hood.
   Visual materials, foliage and lighting scale with the existing quality presets.
+
+GRAPHICS 2 / SALINA HIGHBANKS
+First stop: Salina Highbanks Speedway, Pryor Creek, Oklahoma, a narrow 3/8-mile
+high-banked clay oval. The reference-guided property has white edge markings,
+front aluminum grandstands and press box, blue backstretch bleachers, infield
+light towers/center pad, perimeter gravel access, sheds and parking. The original
+corner-entry pit road and hauler loading sequence remain intact.
+
+Six CC0 Poly Haven scans provide JPEG albedo / OpenGL normal / roughness maps:
+clay, grass, asphalt, concrete, metal and wood. Exact sources, authors and SHA-256
+hashes are in assets/textures/LICENSES.json. Runtime images are embedded in
+js/gfx2-assets-*.js, so the text-only release needs no external image host.
+Every car has additional mounted panel fasteners, spoiler supports and physical
+tread lugs; distant LODs and lower-tier livery resolution preserve phone budgets.
+
+Graphics selection is saved locally. Pixel ratio, shadows, dust, LOD and post
+processing change immediately; scenery/mesh build budgets update at the next stage.
+Auto chooses Low on touch devices, Medium on desktop. High is the expensive tier.
+
+SEMI REVERSE
+Hold S / down-arrow / the touch BRAKE control to stop; keep holding at rest to
+select reverse after a short pause. Reverse is limited to 2.5 m/s (about 5.6 mph),
+with signed steering and independent trailer motion. Throttle brakes reverse
+motion before driving forward. Fuel use never becomes negative while backing.
+The race car and pit car also support brake-to-reverse.
