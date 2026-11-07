@@ -1,0 +1,225 @@
+[
+  {
+    "kind": "clay",
+    "asset": "brown_mud_dry",
+    "page": "https://polyhaven.com/a/brown_mud_dry",
+    "license": "CC0 1.0",
+    "license_url": "https://polyhaven.com/license",
+    "authors": {
+      "Rob Tuytel": "All"
+    },
+    "maps": [
+      {
+        "file": "clay-map.jpg",
+        "map": "map",
+        "size": 1024,
+        "bytes": 406375,
+        "sha256": "2991d8ce07a64174631f8b0ead549379b38caf13e220873bbba1fc46ecb34c2e",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brown_mud_dry/brown_mud_dry_diff_1k.jpg"
+      },
+      {
+        "file": "clay-normalMap.jpg",
+        "map": "normalMap",
+        "size": 512,
+        "bytes": 123835,
+        "sha256": "24345e00542cbccf070e1d18088807f6cf07a9476c116f306906a2ca0ee0829d",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brown_mud_dry/brown_mud_dry_nor_gl_1k.jpg"
+      },
+      {
+        "file": "clay-roughnessMap.jpg",
+        "map": "roughnessMap",
+        "size": 512,
+        "bytes": 55734,
+        "sha256": "0c654ef35bbb7c25890ac337e188027cb8f63af86c87197b04089eb40864cbc0",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brown_mud_dry/brown_mud_dry_rough_1k.jpg"
+      }
+    ],
+    "chunk_bytes": 781478
+  },
+  {
+    "kind": "grass",
+    "asset": "grass_ground",
+    "page": "https://polyhaven.com/a/grass_ground",
+    "license": "CC0 1.0",
+    "license_url": "https://polyhaven.com/license",
+    "authors": {
+      "Charlotte Baglioni": "All"
+    },
+    "maps": [
+      {
+        "file": "grass-map.jpg",
+        "map": "map",
+        "size": 512,
+        "bytes": 41093,
+        "sha256": "30a887de1c02f75c2a6a8cfcd93b0080968a475e59f969d8c1c6f6f64c9bd647",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/grass_ground/grass_ground_diff_1k.jpg"
+      },
+      {
+        "file": "grass-normalMap.jpg",
+        "map": "normalMap",
+        "size": 512,
+        "bytes": 69952,
+        "sha256": "e5ec7caf0cf320f770439e7ccdd7f71ba426300421afc5ea494ff0d639c146db",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/grass_ground/grass_ground_nor_gl_1k.jpg"
+      },
+      {
+        "file": "grass-roughnessMap.jpg",
+        "map": "roughnessMap",
+        "size": 512,
+        "bytes": 9633,
+        "sha256": "85618637a6475599031223ced740434953729617aad7bc976d1b2e0622214892",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/grass_ground/grass_ground_rough_1k.jpg"
+      }
+    ],
+    "chunk_bytes": 161121,
+    "modifications": "512px JPEG compression; albedo tinted greener to match maintained infield grass"
+  },
+  {
+    "kind": "asphalt",
+    "asset": "asphalt_02",
+    "page": "https://polyhaven.com/a/asphalt_02",
+    "license": "CC0 1.0",
+    "license_url": "https://polyhaven.com/license",
+    "authors": {
+      "Rob Tuytel": "All"
+    },
+    "maps": [
+      {
+        "file": "asphalt-map.jpg",
+        "map": "map",
+        "size": 512,
+        "bytes": 75948,
+        "sha256": "cd4034833f84d55fa0e35a28dba536da34dc3484dd18b9d6db13aa957f9ac08d",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_02/asphalt_02_diff_1k.jpg"
+      },
+      {
+        "file": "asphalt-normalMap.jpg",
+        "map": "normalMap",
+        "size": 512,
+        "bytes": 61171,
+        "sha256": "8d92238989e750e0f8e4ffc064fba48bd35ec017572edb91c76d57609f9411ed",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_02/asphalt_02_nor_gl_1k.jpg"
+      },
+      {
+        "file": "asphalt-roughnessMap.jpg",
+        "map": "roughnessMap",
+        "size": 512,
+        "bytes": 78391,
+        "sha256": "af3e0c8cde86fd240f9fe0885840d692c781ef28bcbcf812ae85bd827563d9f8",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_02/asphalt_02_rough_1k.jpg"
+      }
+    ],
+    "chunk_bytes": 287563
+  },
+  {
+    "kind": "concrete",
+    "asset": "concrete",
+    "page": "https://polyhaven.com/a/concrete",
+    "license": "CC0 1.0",
+    "license_url": "https://polyhaven.com/license",
+    "authors": {
+      "Rob Tuytel": "All"
+    },
+    "maps": [
+      {
+        "file": "concrete-map.jpg",
+        "map": "map",
+        "size": 512,
+        "bytes": 51079,
+        "sha256": "23db526cd6783939222116f837f83d8b9924e7ed5fa327f656b9e86f2f73eb82",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete/concrete_diff_1k.jpg"
+      },
+      {
+        "file": "concrete-normalMap.jpg",
+        "map": "normalMap",
+        "size": 512,
+        "bytes": 20461,
+        "sha256": "60720986559c17d991d3376a379aa5b9a0109b1e06d5a23998e4779cbf22ed04",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete/concrete_nor_gl_1k.jpg"
+      },
+      {
+        "file": "concrete-roughnessMap.jpg",
+        "map": "roughnessMap",
+        "size": 512,
+        "bytes": 27861,
+        "sha256": "cf7221cc39521e9a51259cb1738f03a4410d7c343cebacb65be776d274910344",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete/concrete_rough_1k.jpg"
+      }
+    ],
+    "chunk_bytes": 132749
+  },
+  {
+    "kind": "metal",
+    "asset": "metal_plate",
+    "page": "https://polyhaven.com/a/metal_plate",
+    "license": "CC0 1.0",
+    "license_url": "https://polyhaven.com/license",
+    "authors": {
+      "Rob Tuytel": "All"
+    },
+    "maps": [
+      {
+        "file": "metal-map.jpg",
+        "map": "map",
+        "size": 512,
+        "bytes": 42824,
+        "sha256": "f0eae93d50b3ad096ef014ee38065eb4cc1194fa72841f5660583fd4c39ad911",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate/metal_plate_diff_1k.jpg"
+      },
+      {
+        "file": "metal-normalMap.jpg",
+        "map": "normalMap",
+        "size": 512,
+        "bytes": 50631,
+        "sha256": "0242c625ab1e91be21231084e22c8b88f6163dc4d756012c413dec2c77ce1c57",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate/metal_plate_nor_gl_1k.jpg"
+      },
+      {
+        "file": "metal-roughnessMap.jpg",
+        "map": "roughnessMap",
+        "size": 512,
+        "bytes": 75976,
+        "sha256": "36eaa99b03ad802cb0e2af7f9127f896ffc989c3ff48df755605528203cab467",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/metal_plate/metal_plate_rough_1k.jpg"
+      }
+    ],
+    "chunk_bytes": 226124
+  },
+  {
+    "kind": "wood",
+    "asset": "rosewood_veneer1",
+    "page": "https://polyhaven.com/a/rosewood_veneer1",
+    "license": "CC0 1.0",
+    "license_url": "https://polyhaven.com/license",
+    "authors": {
+      "Jenelle van Heerden": "All"
+    },
+    "maps": [
+      {
+        "file": "wood-map.jpg",
+        "map": "map",
+        "size": 512,
+        "bytes": 45733,
+        "sha256": "029341787f88486088e1084dfe35c9a2ef5f6201e07b4a27ec5d7bd87db1279e",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rosewood_veneer1/rosewood_veneer1_diff_1k.jpg"
+      },
+      {
+        "file": "wood-normalMap.jpg",
+        "map": "normalMap",
+        "size": 512,
+        "bytes": 4369,
+        "sha256": "3e28fd1f1e59d971e5e976c1c58e6e6b7ace2571268ad9af1d3f66ae2f44ffbd",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rosewood_veneer1/rosewood_veneer1_nor_gl_1k.jpg"
+      },
+      {
+        "file": "wood-roughnessMap.jpg",
+        "map": "roughnessMap",
+        "size": 512,
+        "bytes": 6713,
+        "sha256": "3547198c4218016e762400da122708be968071c8aa2fbd468c58c46ef5d73725",
+        "source_url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rosewood_veneer1/rosewood_veneer1_rough_1k.jpg"
+      }
+    ],
+    "chunk_bytes": 75977
+  }
+]
