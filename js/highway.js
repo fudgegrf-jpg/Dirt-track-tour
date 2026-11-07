@@ -1,3 +1,4 @@
+import {highwayGrass} from './grass-3d.js';
 import {foliageMap,crownGeometry,pineGeometry} from './foliage.js';
 import {buildCab} from './cab-interior.js';
 import {groundObject,groundFoot,projectHighway} from './grounding.js';
@@ -39,7 +40,7 @@ export class HighwayScene {
     this.buildHud();
     this.t = { S: 30, lat: LANES[1], yaw: 0, v: 0, steer: 0, trailer: 0, cruise: 0 };
     this.camMode = 0; this.time = 0; this.menu = null; this.ended = false; this.hitCool = 0; this.drowsy = 0;
-    this.applyTimeOfDay(true);
+    this.applyTimeOfDay(true);this.grass=highwayGrass(this);
   }
   // ---------------------------------------------------------------- road centerline
   buildRoad() {
@@ -125,7 +126,7 @@ export class HighwayScene {
       const theirs = new THREE.Mesh(this.ribbon(S0, S1, [-MEDIAN - 12.4, -MEDIAN - 7.4, -MEDIAN - 3.7, -MEDIAN + 1], (S) => this.at(S).y, (S, lat) => [(-MEDIAN - lat + 1) / 12.4, -S / 12]), roadMat); theirs.receiveShadow = true; s.add(theirs);
       s.add(Object.assign(new THREE.Mesh(this.ribbon(S0, S1, medL, tY, (S, lat) => [lat / 8, S / 8], field), terrMat), { receiveShadow: true }));
       const roadside=new THREE.Mesh(this.ribbon(S0,S1,terrR,tY,(S,lat)=>[lat/8,S/8],field),terrMat);roadside.receiveShadow=true;roadside.userData.roadside={S0,lats:terrR};s.add(roadside);
-      s.add(Object.assign(new THREE.Mesh(this.ribbon(S0, S1, terrL, tY, (S, lat) => [lat / 8, S / 8], field), terrMat), { receiveShadow: true }));
+      const leftside=new THREE.Mesh(this.ribbon(S0,S1,terrL,tY,(S,lat)=>[lat/8,S/8],field),terrMat);leftside.receiveShadow=true;leftside.userData.grassTerrain={S0,lats:terrL};s.add(leftside);
     }
     // guardrail (right) + median cable barrier
     const steel = new THREE.MeshStandardMaterial({ color: 0xb8bcc0, metalness: .2, roughness: .8, side: THREE.DoubleSide });

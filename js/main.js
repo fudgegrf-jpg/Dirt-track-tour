@@ -225,7 +225,7 @@ class App {
     const p={...qualityPreset(this.quality)};if(this.isMobile){p.dpr=Math.min(p.dpr,this.quality==='low'?1:this.quality==='medium'?1:1.25);p.shadow=Math.min(p.shadow,this.quality==='low'?512:1024);p.dust=Math.min(p.dust,this.quality==='low'?450:1000);p.lod=Math.min(p.lod,24);}
     localStorage.setItem('dtt.quality',this.qualityChoice||this.quality);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio,p.dpr)*p.scale);this.composer.setPixelRatio(this.renderer.getPixelRatio());
-    this.mode?.scene?.traverse(o=>{if(o.isLight&&o.castShadow&&o.shadow){const sh=o.shadow;sh.radius=this.quality==='low'?1:1.6;if(sh.mapSize.x!==p.shadow){sh.map?.dispose();sh.map=null;sh.mapSize.set(p.shadow,p.shadow);sh.needsUpdate=true;}}if(o.isLOD&&o.levels[1])o.levels[1].distance=p.lod;});this.mode?.dust?.setBudget(p.dust);this.resize();
+    this.mode?.scene?.traverse(o=>{if(o.isLight&&o.castShadow&&o.shadow){const sh=o.shadow;sh.radius=this.quality==='low'?1:1.6;if(sh.mapSize.x!==p.shadow){sh.map?.dispose();sh.map=null;sh.mapSize.set(p.shadow,p.shadow);sh.needsUpdate=true;}}if(o.isLOD&&!o.userData.grass3d&&o.levels[1])o.levels[1].distance=p.lod;});this.mode?.dust?.setBudget(p.dust);this.resize();
   }
   resize() {
     const w = innerWidth, h = innerHeight;
@@ -237,6 +237,7 @@ class App {
   }
   render() {
     if (!this.mode) return;
+    (this.mode.grass||this.mode.race?.grass)?.update(this.mode.camera,this.mode.time??(typeof this.mode.t==='number'?this.mode.t:this.mode.race?.time)??0);
     if (this.quality === 'high'){this.graphicsFinish.uniforms.nearFar.value.set(this.mode.camera.near,this.mode.camera.far);this.composer.render();} else this.renderer.render(this.mode.scene, this.mode.camera);
   }
   step(dt) { if (this.mode && (!this.paused || (this.mode instanceof ShowroomScene && this.mode.studio)) && !this.mobile?.portrait) this.mode.update(dt); this.pressed.clear(); }

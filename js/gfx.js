@@ -373,6 +373,7 @@ export class Dust {
 export function disposeScene(scene) {
   scene.traverse(o => {
     if(o.isLight&&o.shadow)o.shadow.dispose();
+    if(o.isInstancedMesh)o.dispose(); // Release per-instance GPU buffers as well as shared geometry.
     if (o.geometry) o.geometry.dispose();
     if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { for (const k in m) { const v = m[k]; if (v && v.isTexture) v.dispose(); } m.dispose(); });
   });

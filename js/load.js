@@ -136,7 +136,13 @@ export class LoadScene {
     if(tx===undefined&&!this.loading){this.exitStarted=true;if(localStart)this.pathIndex=path.length-2;let p=path[Math.min(this.pathIndex,path.length-1)];while(this.pathIndex<path.length-1&&Math.hypot(c.x-p.x,c.z-p.z)<6){p=path[++this.pathIndex];}[tx,tz]=[p.x,p.z];}
     if(this.loading){tx=c.x-4;tz=0;}
     const want=Math.atan2(tz-c.z,tx-c.x),steer=clamp(wrapAngle(want-c.th)*2.2,-1,1),stop=c.x< -11.4&&Math.abs(c.z)<.4;
-    return {steer,throttle:stop?0:1,brake:stop?1:0};
+    // Paid assist slows for heading corrections instead of pinning full throttle into a narrow exit.
+    if(stop&&Math.abs(c.v)<.12)c.v=0;
+    if(!this.autoProgress||Math.hypot(c.x-this.autoProgress.x,c.z-this.autoProgress.z)>1)this.autoProgress={x:c.x,z:c.z,t:this.t};
+    if(!this.loading&&this.t-this.autoProgress.t>1.8){this.autoReverseUntil=this.t+1.3;this.autoProgress={x:c.x,z:c.z,t:this.t};}
+    if(!this.loading&&this.t<(this.autoReverseUntil||0))return{steer:-steer,throttle:0,brake:1};
+    const target=this.loading?1.3:clamp(8-Math.abs(wrapAngle(want-c.th))*6,3,8);
+    return{steer,throttle:!stop&&c.v<target-.08?1:0,brake:stop?(c.v>.05?1:0):(c.v>target+.15?1:0)};
   }
   flash(t, col) { this.hud.msg.textContent = t; this.hud.msg.style.color = col; clearTimeout(this.ft); this.ft = setTimeout(() => { if (this.hud) this.hud.msg.textContent = ''; }, 1400); }
   updateCamera(dt) {
