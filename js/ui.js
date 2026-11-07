@@ -186,6 +186,7 @@ export function arrive(app, info) {
     <div class="kicker">ROAD REPORT</div><h2>${T.name}</h2><div class="muted">${T.city} • ${T.event}</div>
     <div class="arrival-status ${info.late?'down':'up'}">${info.late ? 'A late arrival.' : 'Right on time.'}</div>
     <table><tr><td>Travel time</td><td>${(info.hours || 0).toFixed(1)} h (deadline ${(info.deadline || 0).toFixed(1)} h)</td></tr>
+      ${info.fastTravel?'<tr><td>Paid fast travel</td><td>Relief driver · delivered to paddock</td></tr>':''}
       ${info.auto ? '<tr><td>Driver</td><td>Co-driver hauled it overnight</td></tr>' : ''}
       <tr><td>Fuel & stops</td><td>${fmt(info.fuelSpent || 0)}</td></tr>
       ${info.tickets ? `<tr><td>Speeding tickets</td><td style="color:#ff5a4a">${info.tickets} × $250</td></tr>` : ''}
