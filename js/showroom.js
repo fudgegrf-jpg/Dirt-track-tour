@@ -24,7 +24,7 @@ export class ShowroomScene {
     const g = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshStandardMaterial({ map: dirt.map, bumpMap: dirt.bump, bumpScale: 0.12, roughness: 1, color: 0xb0a090 }));
     g.rotation.x = -Math.PI / 2; g.receiveShadow = true; s.add(g);
     // the rig, ramp down
-    const semi = makeSemi({ team: st.team || 'Red Clay Racing', num: st.num || DEFAULT_PROFILE.num, color: st.color ?? DEFAULT_PROFILE.color, accent: st.accent ?? DEFAULT_PROFILE.accent, cabColor: 0x1a1a1e });
+    const semi = makeSemi({ team: st.team || 'Red Clay Racing', num: st.num || DEFAULT_PROFILE.num, color: st.color ?? DEFAULT_PROFILE.color, accent: st.accent ?? DEFAULT_PROFILE.accent, cabColor:st.scheme===8?st.accent:0x1a1a1e,scheme:st.scheme });
     semi.position.set(6, 0, -6); semi.rotation.y = 0.15; s.add(semi);
     const u = semi.userData; u.rampPivot.rotation.z = Math.asin(u.floorY / u.rampLen); // ramp down to the ground
     // awning + work lights + tool boxes
