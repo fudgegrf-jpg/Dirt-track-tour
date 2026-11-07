@@ -1,3 +1,6 @@
+import {foliageMap,crownGeometry,pineGeometry} from './foliage.js';
+import {buildCab} from './cab-interior.js';
+import {groundObject,groundFoot,projectHighway} from './grounding.js';
 import {travelQuote,updateTravelButton,openTravel} from './highway-travel.js';
 import {ensureTrailer,stepTrailer,syncTrailer} from './articulation.js';
 import {woodTexture,drawTruckGauges} from './truck-cockpit.js';
@@ -59,6 +62,10 @@ export class HighwayScene {
   pt(S, lat, dy = 0) { const c = this.at(S); return new THREE.Vector3(c.x - Math.sin(c.th) * lat, c.y + dy, c.z + Math.cos(c.th) * lat); }
   grade(S) { return (this.at(S + 5).y - this.at(S - 5).y) / 10; }
   curvature(S) { return (this.at(S + 5).th - this.at(S - 5).th) / 10; }
+  groundY(S,lat){if((lat>=-1&&lat<=11.4)||(lat>=-MEDIAN-12.4&&lat<=-MEDIAN+1))return this.at(S).y;
+    if(lat>11.4&&lat<120&&this.exits?.some(e=>S>e.S-220&&S<e.S+510))return this.at(S).y+(lat>=28&&lat<=100&&this.exits.some(e=>S>=e.S+45&&S<=e.S+225)?.035:-.12);
+    return this.terrainY(S,lat);}
+  groundWorld(x,z){const q=projectHighway(this,x,z);return this.groundY(q.S,q.lat);}
   // terrain height at (S, lat)
   terrainY(S, lat) {
     const base = this.at(S).y, a = Math.abs(lat < 0 ? lat + MEDIAN + 12.4 + 0 : lat - 11.4) ;
@@ -84,7 +91,7 @@ export class HighwayScene {
   }
   // ---------------------------------------------------------------- world
   buildWorld() {
-    detailEnvironment(this.scene,.32);this.solids=[];
+    detailEnvironment(this.scene,.32);this.solids=[];this.groundSupports=[];
     const s = this.scene, Lend = this.Lg + 700;const fuelN=1,fuelSites=[this.Lg*.5];const fuelLand=(S,lat)=>lat>10&&lat<125&&fuelSites.some(e=>S>e-230&&S<e+520);
     this.sky = makeSky({ top: 0x2a5fb0, horizon: 0xbfd6e8, bottom: 0x40403a, sunDir: [0.3, 0.4, -1], sunColor: 0xfff0d0, sunSize: 0.03, stars: true, moon: [-0.4, 0.5, 0.7] }); s.add(this.sky);
     this.skyU = this.sky.children[0].material.uniforms; this.stars = this.sky.userData.stars;
@@ -133,10 +140,10 @@ export class HighwayScene {
     s.add(posts);
     // trees: broadleaf + pines, in lines along field edges and woodlots
     const NT = Math.round(bio.trees*qualityPreset(this.app.quality).trees);
-    const pines = new THREE.InstancedMesh(new THREE.ConeGeometry(2.2, 9, 7), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 }), NT);
+    const pines = new THREE.InstancedMesh(pineGeometry(this.app.quality==='low'), new THREE.MeshStandardMaterial({ color: 0xffffff, map:foliageMap(), roughness: 0.95 }), NT);
     let nPine = 0; const hide = new THREE.Matrix4().makeScale(0, 0, 0);
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.4, 4, 5), new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 1 }), NT);
-    const crowns = new THREE.InstancedMesh(new THREE.SphereGeometry(3.0,this.app.quality==='low'?8:12,this.app.quality==='low'?6:8), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 }), NT*3);
+    const crowns = new THREE.InstancedMesh(crownGeometry(3.0,this.app.quality==='low'), new THREE.MeshStandardMaterial({ color: 0xffffff, map:foliageMap(), roughness: 0.95 }), NT*3);
     const tc = new THREE.Color();
     for (let i = 0; i < NT; i++) {
       const S = this.S0 + rnd() * (Lend - this.S0); const side = rnd() < 0.55 ? 1 : -1;
@@ -193,6 +200,8 @@ export class HighwayScene {
     this.sign(this.Lg - 260, 13.6, signTexture([`${this.to.name}`, `${this.to.event}`, 'RACERS EXIT HERE ▶'], '#7a1d10', '#fff', 640, 300), 6, 2.8);
     this.dest = this.pt(this.Lg + 120, 140);
     const glow = glowTexture();this.buildFuelAccess();enrichRoadside(this);
+    for(let i=0;i<posts.count;i++){posts.getMatrixAt(i,mt);if(mt.elements[13]<-50)continue;const S=this.S0+Math.floor(i/2)*4,lat=i%2?-7.5:11.05,top=mt.elements[13]+.5,target=this.groundY(S,lat),height=Math.max(.1,top-target);mt.elements[5]=height;mt.elements[13]=top-height/2;posts.setMatrixAt(i,mt);groundObject(this.groundSupports,posts,(x,z)=>this.groundWorld(x,z),{kind:'guardrail post foot',instance:i});}posts.instanceMatrix.needsUpdate=true;
+
   }
   buildFuelAccess(){
     const aggregate=canvasTexture('asphalt',this.app.quality==='low'?512:1024);aggregate.repeat.set(1,1);const pavement=new THREE.MeshStandardMaterial({map:aggregate,bumpMap:aggregate,bumpScale:.035,color:0xc4cbd0,roughness:.95}),mark=new THREE.MeshBasicMaterial({color:0xd2f77f,transparent:true,opacity:.16,depthWrite:false}),edge=new THREE.MeshBasicMaterial({color:0xd2f77f});
@@ -212,7 +221,7 @@ export class HighwayScene {
   waterTower(S, lat, town) {
     const g = new THREE.Group(), p = this.pt(S, lat); p.y = this.terrainY(S, lat); g.position.copy(p); this.scene.add(g);
     const steel = new THREE.MeshStandardMaterial({ color: 0xd8dcdf, metalness: 0.5, roughness: 0.45 });
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + 0.785, leg = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 26, 6), steel); leg.position.set(Math.cos(a) * 3.2, 13, Math.sin(a) * 3.2); g.add(leg); }
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + 0.785, leg = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 26, 6), steel); leg.position.set(Math.cos(a) * 3.2, 13, Math.sin(a) * 3.2); g.add(leg);groundFoot(this.groundSupports,leg,(x,z)=>this.groundWorld(x,z),{kind:"water tower footing"}); }
     const tank = new THREE.Mesh(new THREE.SphereGeometry(6.5, 20, 12), steel); tank.scale.y = 0.8; tank.position.y = 30; tank.castShadow = true; g.add(tank);
     const c = document.createElement('canvas'); c.width = 512; c.height = 128; const x = c.getContext('2d'); x.fillStyle = '#1b3f7a'; x.font = '900 72px Arial Black, Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(town.toUpperCase().slice(0, 14), 256, 66);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
@@ -222,12 +231,12 @@ export class HighwayScene {
   }
   faceRot(S) { const th = this.at(S).th; return Math.atan2(-Math.cos(th), -Math.sin(th)); }
   sign(S, lat, tex, w, h, postH = 2.4) {
-    const g = new THREE.Group(); const p = this.pt(S, lat); g.position.copy(p); g.rotation.y = this.faceRot(S) + 0.12; this.scene.add(g);
+    const g = new THREE.Group(); const p = this.pt(S, lat);p.y=this.groundY(S,lat); g.position.copy(p); g.rotation.y = this.faceRot(S) + 0.12; this.scene.add(g);
     const rim=new THREE.Mesh(beveledBox(w+.14,h+.14,.1,.05,3),new THREE.MeshStandardMaterial({color:0x53646b,metalness:.55,roughness:.4}));rim.position.set(0,postH+h/2,-.065);g.add(rim);
     const board = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, metalness: 0.1, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.05 }));
     board.position.y = postH + h / 2; board.castShadow = true; g.add(board); this.signs.push(board.material);
     const back = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ color: 0x8a8e92, metalness: 0.7, roughness: 0.4 })); back.position.set(0, postH + h / 2, -0.03); back.rotation.y = Math.PI; g.add(back);
-    for (const x of w > 2.5 ? [-w / 3, w / 3] : [0]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, postH + h * 0.9, 0.14), new THREE.MeshStandardMaterial({ color: 0x9a9ea2, metalness: 0.7, roughness: 0.4 })); post.position.set(x, (postH + h * 0.9) / 2, -0.1); post.castShadow = true; g.add(post); }
+    for (const x of w > 2.5 ? [-w / 3, w / 3] : [0]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, postH + h * 0.9, 0.14), new THREE.MeshStandardMaterial({ color: 0x9a9ea2, metalness: 0.7, roughness: 0.4 })); post.position.set(x, (postH + h * 0.9) / 2, -0.1); post.castShadow = true; g.add(post);groundFoot(this.groundSupports,post,(x,z)=>this.groundWorld(x,z),{kind:"highway sign foot"}); }
     return g;
   }
   truckStop(S, brand) {
@@ -248,7 +257,15 @@ export class HighwayScene {
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 30, 8), new THREE.MeshStandardMaterial({ color: 0x777 })); pole.position.set(-30, 15, -22); g.add(pole);
     const brd = new THREE.Mesh(new THREE.BoxGeometry(10, 5, 0.6), [0, 1, 2, 3, 4, 5].map(i => i >= 4 ? new THREE.MeshStandardMaterial({ map: tx, emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: 0.5 }) : new THREE.MeshStandardMaterial({ color: 0x333 })));
     brd.position.set(-30, 31, -22); brd.rotation.y = Math.PI / 2 - 0.5; g.add(brd); this.lamps.push(brd.material[4]);
-    enrichTruckStop(g,this.app.quality==='low');this.solids.push({S,lat:58,hs:23,hl:1.4,name:'PUMP ISLAND'},{S:S+10,lat:84,hs:17,hl:8,name:'STORE'});for(const x of[-20,20])for(const z of[-4,4])this.solids.push({S:S+x,lat:58+z,hs:.2,hl:.2,name:'CANOPY POST'});for(let i=0;i<(this.app.quality==='low'?3:5);i++)this.solids.push({S:S-48+i*8,lat:82,hs:1.4,hl:11,name:'PARKED TRUCK'});
+    enrichTruckStop(g,this.app.quality==='low');
+    // Follow the same graded highway station coordinates as the access pavement.
+    g.position.y=this.at(S).y+.035;g.updateWorldMatrix(true,true);
+    for(const o of g.children){if(!o.isMesh)continue;if(o.isInstancedMesh){const mx=new THREE.Matrix4();for(let i=0;i<o.count;i++){o.getMatrixAt(i,mx);mx.elements[13]+=this.at(S+mx.elements[12]).y-this.at(S).y;o.setMatrixAt(i,mx);}o.instanceMatrix.needsUpdate=true;continue;}
+      o.updateMatrix();const inv=o.matrix.clone().invert(),p=o.geometry.attributes.position,v=new THREE.Vector3();o.geometry=o.geometry.clone();const P=o.geometry.attributes.position;
+      for(let i=0;i<P.count;i++){v.fromBufferAttribute(P,i).applyMatrix4(o.matrix);v.y+=this.at(S+v.x).y-this.at(S).y;v.applyMatrix4(inv);P.setXYZ(i,v.x,v.y,v.z);}P.needsUpdate=true;o.geometry.computeVertexNormals();
+    }
+    for(const o of g.children){if(!o.isMesh||o.isInstancedMesh)continue;const type=o.geometry.type;if(type!=='BoxGeometry'&&type!=='CylinderGeometry')continue;o.geometry.computeBoundingBox();const foot=o.position.y+o.geometry.boundingBox.min.y;if(foot<1&&o.geometry.boundingBox.max.y-o.geometry.boundingBox.min.y>1){groundFoot(this.groundSupports,o,(x,z)=>{const q=projectHighway(this,x,z);return this.at(q.S).y+.035+(o.geometry.parameters?.width===1.2?.29:0);},{kind:'truck stop support'});}}
+    this.solids.push({S,lat:58,hs:23,hl:1.4,name:'PUMP ISLAND'},{S:S+10,lat:84,hs:17,hl:8,name:'STORE'});for(const x of[-20,20])for(const z of[-4,4])this.solids.push({S:S+x,lat:58+z,hs:.2,hl:.2,name:'CANOPY POST'});for(let i=0;i<(this.app.quality==='low'?3:5);i++)this.solids.push({S:S-48+i*8,lat:82,hs:1.4,hl:11,name:'PARKED TRUCK'});
   }
   overpass(S) {
     const s = this.scene, c = this.at(S), y = c.y, mat = new THREE.MeshStandardMaterial({ color: 0xa8a49c, roughness: 0.85 });
@@ -256,7 +273,7 @@ export class HighwayScene {
     const deck = new THREE.Mesh(beveledBox(12,1.4,64,.15,4), mat); deck.position.set(0, 7.6, 0); deck.castShadow = true; deck.receiveShadow = true; g.add(deck);
     for (const z of [-31.5, 31.5]) { const wall = new THREE.Mesh(new THREE.BoxGeometry(12, 1, 0.4), mat); wall.position.set(0, 8.8, z); g.add(wall); }
     for (const sz of [-1, 1]) { const par = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.0, 64), mat); par.position.set(sz * 5.8, 8.8, 0); g.add(par); }
-    for (const z of [-28, -6, 16]) for (const x of [-3.5, 3.5]) { const pier = new THREE.Mesh(new THREE.CylinderGeometry(.6,.65,7,this.app.quality==='low'?16:32), mat); pier.position.set(x, 3.5, z);pier.userData.overpassPier=true;pier.userData.lateral=-MEDIAN/2+5+z;this.solids.push({S:S+x,lat:-MEDIAN/2+5+z,hs:.65,hl:.65,name:'BRIDGE PIER'}); pier.castShadow = true; g.add(pier); }
+    for (const z of [-28, -6, 16]) for (const x of [-3.5, 3.5]) { const pier = new THREE.Mesh(new THREE.CylinderGeometry(.6,.65,7,this.app.quality==='low'?16:32), mat); pier.position.set(x, 3.5, z);pier.userData.overpassPier=true;pier.userData.lateral=-MEDIAN/2+5+z;this.solids.push({S:S+x,lat:-MEDIAN/2+5+z,hs:.65,hl:.65,name:'BRIDGE PIER'}); pier.castShadow = true; g.add(pier);groundFoot(this.groundSupports,pier,(x,z)=>this.groundWorld(x,z),{kind:"overpass pier foot"}); }
     // embankments
     for(const x of[-4.2,4.2]){const beam=new THREE.Mesh(new THREE.BoxGeometry(.35,.6,63),mat);beam.position.set(x,6.65,0);g.add(beam);}for(const z of[-28,-6,16])for(const x of[-3.5,3.5]){const cap=new THREE.Mesh(beveledBox(1.5,.45,1.6,.08,3),mat);cap.position.set(x,6.8,z);g.add(cap);}const uprights=[];for(const x of[-5.8,5.8])for(let z=-30;z<=30;z+=4)uprights.push({x,y:9.3,z});instances(g,new THREE.BoxGeometry(.07,1,.07),new THREE.MeshStandardMaterial({color:0x89979f,metalness:.4,roughness:.45}),uprights);
     for (const z of [-34, 34]) { const e = new THREE.Mesh(new THREE.BoxGeometry(14, 8, 12), new THREE.MeshStandardMaterial({ color: 0x6a7a4a, roughness: 1 })); e.position.set(0, 3.2, z + Math.sign(z) * 4); g.add(e); }
@@ -267,7 +284,7 @@ export class HighwayScene {
     const tex = billboardTexture();
     const b = new THREE.Mesh(new THREE.PlaneGeometry(14, 5.2), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.04, roughness: 0.6 })); b.position.y = 10; b.castShadow = true; g.add(b); this.signs.push(b.material);
     const back = new THREE.Mesh(new THREE.BoxGeometry(14.2, 5.4, 0.3), new THREE.MeshStandardMaterial({ color: 0x55585c })); back.position.set(0, 10, -0.2); g.add(back);
-    for (const x of [-4, 4]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, 8, 0.5), new THREE.MeshStandardMaterial({ color: 0x55585c, metalness: 0.5 })); post.position.set(x, 4, -0.3); g.add(post); }
+    for (const x of [-4, 4]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, 8, 0.5), new THREE.MeshStandardMaterial({ color: 0x55585c, metalness: 0.5 })); post.position.set(x, 4, -0.3); g.add(post);groundFoot(this.groundSupports,post,(x,z)=>this.groundWorld(x,z),{kind:"billboard footing"}); }
   }
   trooper(S) {
     const car = makeTrafficCar('car'); car.traverse(o => { if (o.material && o.material.clearcoat !== undefined) o.material = o.material.clone(), o.material.color.setHex(0x1c1c22); });
@@ -290,61 +307,7 @@ export class HighwayScene {
       const sp = new THREE.SpotLight(0xfff2dd, 0, 140, 0.42, 0.5, 1.5); sp.position.set(4.1, 1.45, sz * 1.0); sp.target.position.set(40, -1, sz * 1.5);
       u.tractor.add(sp, sp.target); this.heads.push(sp);
     }
-    // cab interior (cab view only): dash, live gauge cluster, steering wheel, pillars, headliner, mirrors.
-    // Interior meshes don't receive the sun shadow (the hidden exterior would otherwise black them out)
-    const dash = new THREE.Group(); u.tractor.add(dash); this.dash = dash;
-    const IM = (color, rough = 0.8, metal = 0) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
-    const addI = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); dash.add(o); return o; };
-    const dashM = new THREE.MeshStandardMaterial({map:woodTexture(),roughness:.58}), trimM = IM(0x2e2c2a, 0.7), headM = IM(0x9a948a, 0.95), pilM = IM(0x5c5852, 0.8), chromeM = IM(0xc8ccd0, 0.55, 0.7);
-    addI(new THREE.BoxGeometry(0.6, 0.42, 2.3), dashM, 1.62, 2.51, 0);                 // main dash slab (top at 2.72)
-    addI(new THREE.BoxGeometry(0.55, 0.03, 2.28), trimM, 1.64, 2.725, 0);                 // dash top pad
-    addI(beveledBox(.08,.53,1.91,.018,2),dashM,1.235,2.64,-.02);               // gauge binnacle
-    // Wide reference-style dash replaces the old projecting center stack.    // center stack
-    // live gauge cluster (canvas, redrawn a few times a second)
-    const gc = document.createElement('canvas'); gc.width = 1024; gc.height = 320; this.gaugeCtx = gc.getContext('2d');
-    this.gaugeTex = new THREE.CanvasTexture(gc); this.gaugeTex.colorSpace = THREE.SRGBColorSpace;
-    const gp = addI(new THREE.PlaneGeometry(1.85, 0.50), new THREE.MeshBasicMaterial({ map: this.gaugeTex, toneMapped: false, color: 0xc0c0c0 }), 1.185, 2.64, -0.02, 0, -Math.PI / 2, 0); this.gaugeT = 0;
-    // center-stack radio / CB glow
-    const radio = document.createElement('canvas'); radio.width = 128; radio.height = 48; { const g = radio.getContext('2d'); g.fillStyle = '#081018'; g.fillRect(0, 0, 128, 48); g.fillStyle = '#3fd0ff'; g.font = '700 22px monospace'; g.fillText('CH 19', 26, 32); }
-    const rt = new THREE.CanvasTexture(radio); rt.colorSpace = THREE.SRGBColorSpace;
-    addI(new THREE.PlaneGeometry(0.2, 0.075), new THREE.MeshBasicMaterial({ map: rt, toneMapped: false, color: 0x909090 }), 1.16, 2.34, .35, 0, -Math.PI / 2, 0).rotateX(-0.35);
-    // steering wheel on a tilted column, facing the driver
-    const pivot = new THREE.Group(); pivot.position.set(.90, 2.64, -0.62); dash.add(pivot);
-    pivot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(-0.62, 0.78, 0).normalize());
-    this.wheel = new THREE.Group(); pivot.add(this.wheel);
-    const wm = IM(0x26221e, 0.6);
-    this.wheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.235, 0.024, 10, 36), wm));
-    for (const r of [Math.PI, 1.05, -1.05]) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.035, 0.02), new THREE.MeshStandardMaterial({color:0x737579,roughness:.86,metalness:.05})); sp.position.set(Math.cos(r - Math.PI / 2) * 0.11, Math.sin(r - Math.PI / 2) * 0.11, 0); sp.rotation.z = r - Math.PI / 2; this.wheel.add(sp); }
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 20), trimM); hub.rotation.x = Math.PI / 2; this.wheel.add(hub);
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.5, 10), trimM); col.position.set(0, 0, -0.25); col.rotation.x = Math.PI / 2; this.wheel.parent.add(col);
-    // A-pillars, header/headliner, door tops, sun visors
-    for (const sz of [-1, 1]) {
-      addI(new THREE.BoxGeometry(0.1, 0.9, 0.12), pilM, 1.55, 3.05, sz * 1.1, 0, 0, -0.42);
-      addI(new THREE.BoxGeometry(1.6, 0.06, 0.12), pilM, 0.7, 2.6, sz * 1.16);             // door sill / window line
-      addI(new THREE.BoxGeometry(0.12, 0.72, 0.1), pilM, -0.1, 2.95, sz * 1.13);           // B-pillar
-      addI(new THREE.BoxGeometry(0.34, 0.025, 0.72), IM(0x8a8070, 0.9), 1.32, 3.36, sz * 0.52, 0, 0, 0.45); // visors
-      // west-coast mirror outside each door
-      addI(new THREE.BoxGeometry(0.06, 0.34, 0.16), IM(0x9a9ea4, 0.5), 2.1, 2.9, sz * 1.62);
-      addI(new THREE.BoxGeometry(0.02, 0.3, 0.13), IM(0x8fa6bf, 0.15, 0.6), 2.06, 2.9, sz * 1.62);
-      addI(new THREE.BoxGeometry(0.6, 0.025, 0.025), IM(0x9a9ea4, 0.5), 1.8, 2.75, sz * 1.4, 0, sz * 0.5, 0);
-    }
-    addI(new THREE.BoxGeometry(0.5, 0.1, 2.35), pilM, 1.42, 3.47, 0);                    // windshield header
-    addI(new THREE.BoxGeometry(2.2, 0.04, 2.35), headM, 0.4, 3.6, 0);                    // headliner
-    addI(new THREE.BoxGeometry(0.05, 0.55, 0.06), pilM, 1.6, 3.0, 0, 0, 0, -0.42);      // center divider
-    // matte hood seen over the dash (replaces the glossy exterior hood in cab view, so no sun glare)
-    addI(new THREE.BoxGeometry(2.3, 0.2, 2.0), IM(st.accent||0x2455ad, 0.55, 0.2), 2.85, 2.7, 0);
-    // Physical switch bank, louvred vents and parked windshield wipers.
-    for(let i=0;i<10;i++){addI(beveledBox(.025,.048,.055,.006,1),trimM,1.295,2.44,-.86+i*.18);addI(new THREE.BoxGeometry(.012,.012,.023),IM(i===6?0xd2f77f:0xd9d5c7),1.275,2.451,-.86+i*.18);}
-    for(const side of[-1,1]){addI(beveledBox(.025,.085,.24,.008,1),chromeM,1.18,2.96,side*.91);addI(new THREE.BoxGeometry(.028,.065,.218),trimM,1.16,2.96,side*.91);for(let i=0;i<5;i++)addI(new THREE.BoxGeometry(.032,.006,.21),IM(0x63615b),1.14,2.935+i*.012,side*.91);addI(new THREE.BoxGeometry(.018,.018,.63),trimM,1.7,2.94,side*.53,0,0,-.4);addI(new THREE.BoxGeometry(.025,.22,.018),trimM,1.65,2.86,side*.74,0,0,-.4);}
-    batchStatic(dash,[pivot]);
-    dash.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
-    // soft dome / dash light so the interior reads in daylight and at night
-    const dome = new THREE.PointLight(0xfff0dc, 2.2, 3.2, 1.5); dome.position.set(0.5, 3.4, -0.3); dash.add(dome);
-    this.cabFill = dome;
-    // faint instrument back-light spill onto the driver's hands / wheel at night
-    const dg = new THREE.PointLight(0xffa040, 0, 1.4, 2); dg.position.set(1.05, 2.85, -0.52); dash.add(dg); this.dashGlow = dg;
-    this.glass = u.tractor.children.filter(o => o !== dash && !o.isLight && o !== this.heads[0]?.target && o !== this.heads[1]?.target);
-    dash.visible = false;
+    buildCab(this);
     // A world-space trailer body, joined only by the articulated kingpin constraint.
     this.scene.add(u.trailer);u.trailer.rotation.order='YXZ';
   }
@@ -452,7 +415,7 @@ export class HighwayScene {
     this.sun.color.set(0xfff2dd).lerp(new THREE.Color(0xffa060), golden * 0.8).lerp(new THREE.Color(0x8090c0), 1 - day);
     if (el <= 0) this.sunDir = new THREE.Vector3(-0.3, 0.6, 0.5).normalize(); // moonlight direction
     this.hemi.intensity = 0.48 + 0.60 * day; this.hemi.color.set(0x8090c0).lerp(new THREE.Color(0xbfd6ff), day);
-    const night = 1 - day;
+    const night = 1 - day;this.night=night;
     this.heads.forEach(l => l.intensity = night > 0.3 ? 380 * night : 0);
     for (const m of this.lamps || []) m.emissiveIntensity = 0.25 + 0.55 * night;
     for (const m of this.signs) m.emissiveIntensity = 0.04 + 0.5 * night;   // retro-reflective look in headlights
@@ -578,9 +541,10 @@ export class HighwayScene {
       cam.position.lerp(want, 1 - Math.exp(-dt * 3.5));
       cam.lookAt(p.x + Math.cos(th) * 14, p.y + 2.5, p.z + Math.sin(th) * 14); cam.fov = 58;
     } else if (this.camMode === 1) {
-      const eye = new THREE.Vector3(0.05, 3.12, -0.30).applyMatrix4(m.matrixWorld), tgt = new THREE.Vector3(40, -1.0, -0.3 + T.steer * 1.2).applyMatrix4(m.matrixWorld);
+      const bob=Math.sin(this.time*7)*Math.min(.008,T.v*.0003),sway=Math.sin(this.time*2.1)*Math.min(.009,T.v*.0003);
+      const eye = new THREE.Vector3(0.03+sway, 3.10+bob, -0.46+T.steer*.012).applyMatrix4(m.matrixWorld), tgt = new THREE.Vector3(40, -4.0, -0.46 + T.steer * 1.2).applyMatrix4(m.matrixWorld);
       cam.position.copy(eye); cam.lookAt(tgt); cam.fov = 66;
-      if ((this.gaugeT -= dt) <= 0) { this.gaugeT = 0.15; this.drawGauges(); }
+      if ((this.gaugeT -= dt) <= 0) { this.gaugeT = this.app.quality==='low'?.1:.05; this.drawGauges(); }
     } else {
       if (!this.cine || T.S - this.cine.S > 70) { const S = T.S + 160; this.cine = { S, pos: this.pt(S, Math.random() < 0.5 ? 14 : -10, 3 + Math.random() * 6) }; }
       cam.position.lerp(this.cine.pos,1-Math.exp(-dt*6)); cam.lookAt(p.x, p.y + 2, p.z); cam.fov = clamp(2400 / Math.max(10, cam.position.distanceTo(p)), 18, 60);

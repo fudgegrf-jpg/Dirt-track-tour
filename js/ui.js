@@ -92,6 +92,7 @@ export function shop(app) {
 // ---------------------------------------------------------------- results
 export function applyResults(app, res, playerDmg) {
   const st = app.state; if (!st) return;
+  if(st.results[st.round])return;
   const me = res.find(r => r.player);
   for (const r of res) st.standings[r.name] = (st.standings[r.name] || 0) + r.pts;
   const payroll = st.crew.reduce((a, id) => a + (CREW_POOL.find(c => c.id === id)?.salary || 0), 0);
@@ -101,7 +102,8 @@ export function applyResults(app, res, playerDmg) {
   st.results.push({ track: app.track.short, pos: me.pos, pts: me.pts, purse: me.purse + bonus, late: st.late, dnf: me.dnf });
   st.late = false;
   app.save();
-  app.goto('results', { res, payroll });
+  st.lastClassification={round:st.round,res,payroll};app.save();
+  app.goto(me.dnf?'load':'results', { res, payroll });
 }
 export function results(app, { res, payroll } = {}) {
   const st = app.state, last = st.round >= TRACKS.length - 1;

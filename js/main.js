@@ -104,10 +104,11 @@ class App {
     this.audio.stop();
     const d = document.createElement('div'); d.id = 'pause';
     d.setAttribute('role','dialog'); d.setAttribute('aria-modal','true'); d.setAttribute('aria-label','Pause menu');
-    d.innerHTML = `<div class="panel pause-card"><section><div class="kicker">SESSION PAUSED</div><h2>Take a breather.</h2><p class="pause-driver">${UI.esc(this.state?.driver || DEFAULT_DRIVER)}</p><p class="muted">${this.isMobile?'Tap Resume when you’re ready.':'Esc / Start to get back to it.'}<br>Earlier stages are autosaved.</p></section><nav class="pause-actions"><button id="p-res">Resume ${UI.icon('arrow')}</button><button id="p-set" class="alt">Settings ${UI.icon('settings')}</button><button id="p-quit" class="text-button">Return to title</button></nav></div>`;
+    d.innerHTML = `<div class="panel pause-card"><section><div class="kicker">SESSION PAUSED</div><h2>Take a breather.</h2><p class="pause-driver">${UI.esc(this.state?.driver || DEFAULT_DRIVER)}</p><p class="muted">${this.isMobile?'Tap Resume when you’re ready.':'Esc / Start to get back to it.'}<br>Earlier stages are autosaved.</p></section><nav class="pause-actions"><button id="p-res">Resume ${UI.icon('arrow')}</button><button id="p-set" class="alt">Settings ${UI.icon('settings')}</button>${this.phase==='race'&&!this.mode?.player?.finished&&!this.mode?.player?.dnf?'<button id="p-retire" class="alt">Retire to paddock</button>':''}<button id="p-quit" class="text-button">Return to title</button></nav></div>`;
     document.body.appendChild(d);
     d.querySelector('#p-res').onclick = () => this.togglePause(false);
     d.querySelector('#p-set').onclick = () => this.openSettings();
+    if(d.querySelector('#p-retire'))d.querySelector('#p-retire').onclick=()=>{if(!confirm('Retire from this race? You will be classified DNF and recovered straight to your hauler.'))return;this.togglePause(false);this.mode.retire();this.mode.endRace();};
     d.querySelector('#p-quit').onclick = () => { this.togglePause(false); this.goto('title'); };
   }
   openHelp() {
@@ -219,7 +220,7 @@ class App {
     const p={...qualityPreset(this.quality)};if(this.isMobile){p.dpr=Math.min(p.dpr,1.5);p.shadow=Math.min(p.shadow,this.quality==='low'?512:1024);p.dust=Math.min(p.dust,this.quality==='low'?450:1000);p.lod=Math.min(p.lod,24);}
     localStorage.setItem('dtt.quality',this.quality);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio,p.dpr)*p.scale);this.composer.setPixelRatio(this.renderer.getPixelRatio());
-    this.mode?.scene?.traverse(o=>{if(o.isLight&&o.castShadow&&o.shadow){const sh=o.shadow;if(sh.mapSize.x!==p.shadow){sh.map?.dispose();sh.map=null;sh.mapSize.set(p.shadow,p.shadow);sh.needsUpdate=true;}}if(o.isLOD&&o.levels[1])o.levels[1].distance=p.lod;});this.mode?.dust?.setBudget(p.dust);this.resize();
+    this.mode?.scene?.traverse(o=>{if(o.isLight&&o.castShadow&&o.shadow){const sh=o.shadow;sh.radius=this.quality==='low'?1:1.6;if(sh.mapSize.x!==p.shadow){sh.map?.dispose();sh.map=null;sh.mapSize.set(p.shadow,p.shadow);sh.needsUpdate=true;}}if(o.isLOD&&o.levels[1])o.levels[1].distance=p.lod;});this.mode?.dust?.setBudget(p.dust);this.resize();
   }
   resize() {
     const w = innerWidth, h = innerHeight;
