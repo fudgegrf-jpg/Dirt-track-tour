@@ -28,3 +28,6 @@ THIRD-PARTY FONTS (car numbers and sponsor lettering)
 STATIC GITHUB RELEASE
   OFL fonts are embedded as CSS data URLs; licenses remain in vendor/fonts.
   App icons are embedded. Unused preview WAVs are omitted; audio is synthesized.
+
+MENU MUSIC
+  Greenlight Current: original procedural composition, 132 BPM. No commercial recordings or sampled riffs.

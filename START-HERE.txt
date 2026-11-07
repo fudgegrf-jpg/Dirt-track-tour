@@ -177,7 +177,7 @@ TRACK-TO-PADDOCK / AUTOMATIC PACE / DIESEL UPDATE
   they blend in over 0.3 seconds when the green flag waves. Settings can disable
   Auto-drive pace laps & cautions. Stopped cars are recovered to their lineup slot.
 - After results, Return to pits keeps your car and the same oval world. Take the
-  marked backstretch gate into the graded paddock. The limit is 15 mph. Find your
+  marked corner gate and loop road into the graded paddock. The limit is 25 mph. Find your
   blue/white Bay 42 hauler, line up on the guide stripes and creep into the trailer.
   X / controller B / Winch $300 offers crew-assisted return and loading. Timing
   starts near the ramp, not during your drive back. Tie-downs and a closing ramp
@@ -195,3 +195,21 @@ TRACK-TO-PADDOCK / AUTOMATIC PACE / DIESEL UPDATE
   tire/wind hum and trailer rattle. First touch unlocks audio on phones.
 - Three new local demo WAVs and semi-spectrograms.png are under audio-samples/.
   semi-demos.html embeds all three for the public text-only release.
+
+DETAIL / CONTACT UPDATE
+Beveled cabs, polished hardware, textured loading floors, pitched canopies, detailed
+pumps/storefront and instanced foliage scale with graphics quality. Static truck
+parts are batched and tree clusters are culled beyond fog distance on phones.
+Race and semi contacts use bounded substep separation and low-rebound impulses,
+not whole-penetration teleports. Semi contacts include the swinging trailer,
+traffic, barriers, piers, pump islands, canopy posts, store and parked rigs.
+The pit lane now peels from the outside of turn 2, loops behind the oval and
+comes into the paddock beside its left end. Follow cones/signs at 25 mph;
+loading precision and the ramp's slow speed are unchanged.
+
+SEMI DETAIL / TRAVEL
+C or touch Cam cycles chase, the woodgrain cockpit, and roadside camera. Trailer axles follow their own articulated path: take wider turns and allow for off-tracking. The loaded trailer adds mass to braking and acceleration.
+Fast Travel on the highway shows a remaining-mile fuel + paid hauling quote. Confirm to pay and reach the next paddock; cancel keeps driving. The button explains if team money is insufficient. Travel time still counts toward the meeting deadline.
+
+ORIGINAL MENU MUSIC
+Greenlight Current is an original 132-BPM instrumental rock loop synthesized locally (no downloaded recording). First tap/key unlocks it. Settings has separate Menu music volume and mute; driving fades it out, menus bring it back.
