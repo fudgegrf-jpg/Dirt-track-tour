@@ -57,3 +57,15 @@ body[data-phase=highway] #sub-msg:not(:empty){padding:9px 14px;border:1px solid 
 
 /* Keep a large, readable duplicate speed/fuel readout on small cockpit screens. */
 .mobile.cab-view #hud>.hud-box:nth-child(2){display:block}
+
+/* Announcements are one measured stack, never independent percentage offsets. */
+.race-messages{position:absolute;top:160px;left:50%;transform:translateX(-50%);width:min(60vw,740px);display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;pointer-events:none}
+.race-messages #center-msg,.race-messages #sub-msg{position:static;inset:auto;width:100%;padding:0;margin:0;transform:none;line-height:1.16;text-wrap:balance}
+.race-messages #center-msg{font-size:clamp(28px,4.5vw,64px)}
+.race-messages #sub-msg{font-size:18px;line-height:1.4}
+.race-messages #center-msg:empty,.race-messages #sub-msg:empty{display:none}
+.auto-pace{display:none!important}
+
+.pit-hud .loading-messages{top:auto;bottom:132px;width:min(56vw,580px)}
+.pit-hud .loading-messages #center-msg,.pit-hud .loading-messages #sub-msg{position:static;inset:auto;transform:none;width:100%;max-width:none}
+.pit-hud .loading-messages #sub-msg{font-size:14px}

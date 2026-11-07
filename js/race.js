@@ -371,7 +371,7 @@ export class RaceScene {
         <div class="lbl" style="margin-top:6px" id="h-tear">TEAR-OFFS 5</div></div>
       <div class="hud-box order" style="right:16px;top:190px;min-width:190px" id="h-order"></div>
       <canvas id="h-map" width="220" height="130" class="hud-box" style="left:16px;bottom:40px;padding:0"></canvas>
-      <div class="coach" id="race-coach"></div><div id="center-msg"></div><div id="sub-msg"></div>
+      <div class="coach" id="race-coach"></div><div class="race-messages" role="status"><div id="center-msg"></div><div id="sub-msg"></div></div>
       <div class="hint">W/↑ throttle • S/↓ brake (hold when stopped = reverse) • A/D ←/→ steer • C camera • T tear-off • R reset to track • P/Esc pause • H guide</div>`;
     const auto=document.createElement('div');auto.className='auto-pace';auto.id='auto-pace';auto.hidden=true;h.append(auto);
     this.app.ui.appendChild(h);this.coach=h.querySelector('#race-coach');this.showCoach=!this.app.settings?.tutorialSeen;
@@ -389,7 +389,7 @@ export class RaceScene {
         if (this.tearOffs > 0 && p.lexanMud > 0.04) { this.tearOffs--; p.lexanMud = 0; p.mesh.userData.lexanMud = 0; p.mesh.userData.updateLook?.(p.mud, p.damage); this.flash(`TEAR-OFF (${this.tearOffs} left)`, 0.9, '#9fd6ff'); }
         else if (!this.tearOffs) this.flash('OUT OF TEAR-OFFS', 0.9, '#ff9a4a');
       }
-      if (app.tap('KeyR') && this.phase === 'race') { const p = this.player, pr = trk.project(p.x, p.z), pt = trk.point(pr.s, 0);if(pr.d< -trk.W/2-2)p.lapInvalid=true; Object.assign(p, { x: pt.x, z: pt.z, th: pt.th, vx: 0, vz: 0, w: 0,steer:0,reversing:false,reverseHold:0,yawCatch:0,recoverTime:0 }); this.flash('RESET', 1); }
+      if (app.tap('KeyR') && this.phase === 'race') { const p = this.player, pr = trk.project(p.x, p.z), pt = trk.point(pr.s, 0);if(pr.d< -trk.W/2-2)p.lapInvalid=true;delete p.formationArc; Object.assign(p, { x: pt.x, z: pt.z, th: pt.th, vx: 0, vz: 0, w: 0,steer:0,reversing:false,reverseHold:0,yawCatch:0,recoverTime:0 }); this.flash('RESET', 1); }
     }
     if(this.player?.dnf&&!this.ended&&this.phase!=='cooldown')this.retire();
     this.updateFlags(dt);
@@ -411,7 +411,7 @@ export class RaceScene {
     this.updateVisuals(dt);updateRetirementVisuals(this);
     this.updateCamera(dt);
     this.updateAudio(dt);
-    if (!this.attract){this.updateHud();const a=document.querySelector('#auto-pace');if(a){const on=(this.flag==='pace'||this.flag==='yellow')&&this.app.settings.autoPace!==false;a.hidden=!on;a.textContent=this.flag==='yellow'?'AUTO CAUTION — holding P'+((this.formationOrder||[]).indexOf(this.player)+1):'AUTO PACE — get ready for green';}}
+    if (!this.attract){this.updateHud();const a=document.querySelector('#auto-pace');if(a){a.hidden=true;a.textContent=this.flag==='yellow'?'AUTO CAUTION — holding P'+((this.formationOrder||[]).indexOf(this.player)+1):'AUTO PACE — get ready for green';}}
     if (this.msgT > 0) { this.msgT -= dt; if (this.msgT <= 0 && this.phase === 'race') this.hud.msg.textContent = ''; }
   }
   physics(h, pin) {
@@ -419,7 +419,11 @@ export class RaceScene {
     const pace = this.flag === 'pace' || this.flag === 'yellow', green = !pace && (this.phase === 'race' || this.phase === 'attract');
     const leader = this.paceLeader;
     updateRetirements(this,h);
-    if(pace&&this.app.settings.autoPace!==false&&!this.attract){this.autoFormation(h);return;}
+    if(pace&&this.app.settings.autoPace!==false&&!this.attract){
+      if(this.formationActive===false){const lead=(this.formationOrder||this.cars).find(c=>!c.dnf);this.formationS=lead?.s||0;this.formationV=Math.max(4,lead?.speed||this.paceSpeed());}
+      this.formationActive=true;this.autoFormation(h);return;
+    }
+    if(this.formationActive){this.formationActive=false;for(const c of this.cars)delete c.formationArc;}
     if(this.handover>0)this.handover=Math.max(0,this.handover-h);
     for(const c of this.cars){c._contactBudget=2*h;c.contactHold=Math.max(0,(c.contactHold||0)-h);}
     computeDraft(this.cars, trk);
@@ -472,11 +476,22 @@ export class RaceScene {
   }
   autoFormation(h){
     const trk=this.trk,yellow=this.flag==='yellow',targetV=this.paceSpeed()*(yellow?.88:1);
-    this.formationV+=(targetV-this.formationV)*Math.min(1,h*1.5);this.formationS+=this.formationV*h;
+    this.formationV+=(targetV-this.formationV)*(1-Math.exp(-h*1.5));this.formationS+=this.formationV*h;
     (this.formationOrder||this.cars).forEach((c,i)=>{if(c.dnf)return;
-      const ds=yellow?i*9:Math.floor(i/2)*9;let d=yellow?-1:(i%2?1:-1)*Math.min(3.2,this.T.W*.18);const s=this.formationS-ds,stopped=this.cars.find(o=>o.retirement&&Math.abs(((s-o.s+trk.P*1.5)%trk.P)-trk.P*.5)<16&&Math.abs(o.d-d)<3);if(stopped)d=clamp(stopped.d+4,-trk.W/2+2,trk.W/2-2);const pt=trk.point(s,d),oldS=c.s;
-      const recover=c.player&&(Math.hypot(c.x-pt.x,c.z-pt.z)>65||c.speed<.5);
-      const a=(this.phase==='pace'||recover)?1:1-Math.exp(-h*2);c.x=lerp(c.x+Math.cos(pt.th)*this.formationV*h,pt.x,a);c.z=lerp(c.z+Math.sin(pt.th)*this.formationV*h,pt.z,a);c.th-=this.formationV*trk.curvature(s)*h;c.th+=wrapAngle(pt.th-c.th)*a;c.vx=Math.cos(c.th)*this.formationV;c.vz=Math.sin(c.th)*this.formationV;c.w=-this.formationV*trk.curvature(s);c.speed=this.formationV;c.steer=-Math.atan(2.8*trk.curvature(s));c.throttle=.25;c.brake=0;c.human=false;c.reverseHold=0;c.reversing=false;c.s=trk.project(c.x,c.z).s;c.d=d;
+      const ds=yellow?i*9:Math.floor(i/2)*9,target=this.formationS-ds,q=trk.project(c.x,c.z),oldS=c.s;
+      let lane=yellow?-1:(i%2?1:-1)*Math.min(3.2,this.T.W*.18);
+      const stopped=this.cars.find(o=>o.retirement&&Math.abs(((target-o.s+trk.P*1.5)%trk.P)-trk.P*.5)<16&&Math.abs(o.d-lane)<3);
+      if(stopped)lane=clamp(stopped.d+4,-trk.W/2+2,trk.W/2-2);
+      if(!Number.isFinite(c.formationArc)||c.formationEpoch!==this.cautions){c.formationArc=target+((q.s-target+trk.P*100.5)%trk.P-trk.P*.5);c.formationSpeed=Math.hypot(c.vx,c.vz);c.formationLane=q.d;c.formationEpoch=this.cautions;}
+      // Critically damped, acceleration-limited gap servo. Never integrate then snap
+      // back to a moving target; each car owns a continuous unwrapped arc distance.
+      const desired=this.formationV+clamp((target-c.formationArc)*.6,-4,4);
+      c.formationSpeed+=clamp((desired-c.formationSpeed)*1.8,-2.5,2)*h;
+      c.formationSpeed=Math.max(0,c.formationSpeed);c.formationArc+=c.formationSpeed*h;
+      c.formationLane+=clamp((lane-c.formationLane)*1.5,-.8,.8)*h;
+      const pt=trk.point(c.formationArc,c.formationLane),ox=c.x,oz=c.z;
+      c.x=pt.x;c.z=pt.z;c.th+=clamp(wrapAngle(pt.th-c.th)*6,-1.8,1.8)*h;
+      c.vx=(c.x-ox)/h;c.vz=(c.z-oz)/h;c.speed=Math.hypot(c.vx,c.vz);c.w=-c.formationSpeed*trk.curvature(c.formationArc);c.steer=-Math.atan(2.8*trk.curvature(c.formationArc));c.throttle=.25;c.brake=0;c.human=false;c.reverseHold=0;c.reversing=false;c.s=trk.project(c.x,c.z).s;c.d=c.formationLane;
       if(oldS>trk.P*.75&&c.s<trk.P*.25){c.lap++;c.lapStart=this.time;}c.prevS=c.s;
     });
   }
@@ -765,7 +780,7 @@ export class RaceScene {
     if(this.coach&&this.showCoach){let msg=this.phase==='pace'?'<b>ROLLING START</b>Stay in line until green. Short steering taps are easier than holding full lock.':this.time<17?'<b>LET THE CAR SLIDE</b>Ease into the throttle. High assist catches extra yaw; avoid chasing it with opposite lock.':this.time<28?'<b>READ THE CLAY</b>The groove dries and ruts form. Try another lane if the entry feels rough. C changes camera; T clears the windshield.':'';this.coach.innerHTML=msg;if(this.time>28){this.showCoach=false;this.app.settings.tutorialSeen=true;this.app.saveSettings?.();}}
 
     hud.pos.textContent = pos; hud.lap.textContent = clamp(p.lap, 1, T.laps); if (hud.laps.textContent != T.laps) hud.laps.textContent = T.laps;
-    const fl = this.flag; if (hud.flag.dataset.f !== fl) { hud.flag.dataset.f = fl; hud.flag.className = 'hud-flag f-' + fl; hud.flag.querySelector('span').textContent = { pace: 'PACE LAP', green: 'GREEN FLAG', yellow: 'CAUTION', white: 'WHITE — LAST LAP', checkered: 'CHECKERED' }[fl]; }
+    const fl=this.flag,auto=(fl==='pace'||fl==='yellow')&&this.app.settings.autoPace!==false;if(hud.flag.dataset.f!==fl||hud.flag.dataset.auto!==String(auto)){hud.flag.dataset.f=fl;hud.flag.dataset.auto=String(auto); hud.flag.className = 'hud-flag f-' + fl; hud.flag.querySelector('span').textContent = { pace: 'PACE LAP', green: 'GREEN FLAG', yellow: 'CAUTION', white: 'WHITE — LAST LAP', checkered: 'CHECKERED' }[fl]+(auto?' · AUTO':''); }
     hud.tire.style.width = Math.round((p.tire ?? 1) * 100) + '%'; hud.tear.textContent = `TEAR-OFFS ${this.tearOffs}` + (p.lexanMud > 0.35 && this.camMode === 1 ? ' — press T!' : '');
     const dry = this.trk.dry; hud.track.textContent = 'track: ' + (dry < 0.3 ? 'tacky — bottom is fast' : dry < 0.6 ? 'drying — middle/top coming in' : 'rubbered groove / rutted entries — choose your line');
     hud.spd.textContent = Math.round(p.speed * 2.237); hud.dmg.style.width = p.damage.toFixed(0) + '%';

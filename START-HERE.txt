@@ -289,3 +289,5 @@ FAST MUSIC / HUD 2 / SEMI 2 / INFIELD UPDATE
   money, damage and result accounting. Normal finishes still drive the pit road.
 - Every orange cone is grounded and checked clear of the racing clay, including
   its base corners; cones only line the corner pit road and are not stacked.
+
+FIXES 1: Pits are matte asphalt. Winch: X / Winch toggles release; gas, brake/reverse or steering also releases it. If blocked, reverse away or use R / Re-align at ramp. Crew assist costs $300 once per completed loading, not once per tap. Pace/caution formation is damped; mobile announcements use a stacked layout.

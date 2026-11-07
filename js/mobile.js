@@ -73,6 +73,8 @@ export class MobileControls {
     this.root.querySelector('#touch-driving').hidden=!driving;this.root.querySelector('.touch-telemetry').hidden=!driving;this.root.dataset.steering=a.settings.touchSteering==='arrows'?'arrows':'wheel';this.updateHud();
     for(const el of this.root.querySelectorAll('[data-driving]'))el.hidden=!driving;
     for(const el of this.root.querySelectorAll('[data-phase]'))el.hidden=!driving||el.dataset.phase!==phase;
+    const reset=this.root.querySelector('#touch-reset');if(phase==='load'){reset.hidden=!driving;reset.querySelector('span').textContent='Re-align';reset.setAttribute('aria-label','Re-align at trailer ramp');}else{reset.querySelector('span').textContent='Reset';reset.setAttribute('aria-label','Reset');}
+    const winch=this.root.querySelector('#touch-winch');winch.setAttribute('aria-pressed',String(!!a.mode?.winch));winch.querySelector('span').textContent=a.mode?.winch?'Release':'Winch $300';
     this.root.querySelector('#touch-jake').setAttribute('aria-pressed',String(a.mode?.jakeEnabled!==false));
     this.root.querySelector('#touch-cruise').setAttribute('aria-pressed',String(!!(phase==='highway'&&a.mode?.t?.cruise)));
     this.root.querySelector('#touch-travel').disabled=!!document.querySelector('#highway-fasttravel')?.disabled;

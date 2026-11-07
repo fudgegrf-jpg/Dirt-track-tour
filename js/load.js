@@ -17,15 +17,18 @@ export class LoadScene {
     this.contact=p.contactShadow;this.rigContact=new ContactShadow(this.scene,this.semi,true);this.rigContact.update(()=>0);
     race.cars.filter(c=>!c.player).forEach((c,i)=>{const b=this.pits.bays[i%this.pits.bays.length];c.mesh.position.set(this.offset.x+b.x,0,this.offset.z+b.z+Math.floor(i/this.pits.bays.length)*4);c.mesh.rotation.set(0,Math.PI,0);c.mesh.traverse(o=>{if(o.isLOD){o.autoUpdate=false;o.levels[0].object.visible=false;o.levels[1].object.visible=true;}});c.contactShadow.update(()=>0);});
     this.goal=new THREE.Mesh(new THREE.PlaneGeometry(2.3,2.2),new THREE.MeshStandardMaterial({color:0xd2f77f,emissive:0x799f33,emissiveIntensity:.25,transparent:true,opacity:.65}));this.goal.rotation.x=-Math.PI/2;this.goal.position.set(-11.65,FLOOR+.02,0);this.pits.root.add(this.goal);
-    this.t=0;this.timer=0;this.dmg=0;this.hits=0;this.falls=0;this.hold=0;this.cool=0;this.camMode=0;this.intro=0;this.done=false;this.winch=false;this.crew=[];this.pathIndex=0;this.loading=false;
+    this.t=0;this.timer=0;this.dmg=0;this.hits=0;this.falls=0;this.hold=0;this.cool=0;this.camMode=0;this.intro=0;this.done=false;this.winch=false;this.winchUsed=false;this.crew=[];this.pathIndex=0;this.loading=false;
     if(st.pitPose?.round===st.round&&st.pitPose.session)Object.assign(this,st.pitPose.session);
+    this.winchUsed=!!(this.winchUsed||this.winch);
+    if(![this.c.x,this.c.z,this.c.th,this.c.v,this.c.steer].every(Number.isFinite)||(this.c.wr!==undefined&&!Number.isFinite(this.c.wr))){Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0,wr:0});this.winch=false;this.loading=true;this.exitStarted=true;}
+    if(!Number.isFinite(this.pathIndex))this.pathIndex=0;
     this.towed=!!st.results?.[st.round]?.dnf;
     if(this.towed&&!st.pitPose?.session){Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0});this.exitStarted=true;this.pathIndex=this.pits.road.drive.length-1;this.intro=.65;this.towMessage=5;st.pitPose={layout:2,round:st.round,c:{...this.c},session:{exitStarted:true,pathIndex:this.pathIndex}};app.save();}
     const mech=app.crew('Mechanic');this.par=35+(mech?mech.skill*2:0);app.ui.innerHTML='';this.buildHud();this.wheelH=this.wheelPts(this.c).map(w=>this.height(w.x,w.z));this.car.position.set(this.c.x+this.offset.x,this.height(this.c.x,this.c.z),this.c.z+this.offset.z);this.car.rotation.set(0,-this.c.th,0);this.updateCamera(1);this.updateHud();
   }
   buildHud() {
     const h = document.createElement('div'); h.id = 'hud';
-    h.className='pit-hud';h.innerHTML=`<section class="pit-status"><div class="kicker">${UI.esc(this.app.track.short)} / POST RACE</div><h3 id="pit-stage">Return to your hauler</h3><p id="l-st">Take the marked corner pit entrance · 25 mph limit</p><div class="pit-metrics"><span><b id="pit-speed">0</b> MPH</span><span>LOAD <b id="l-t">0.0</b>s / ${this.par}s</span><span>DAMAGE +<b id="l-d">0%</b></span></div><canvas id="l-al" width="200" height="60"></canvas></section><section class="pit-nav"><canvas id="pit-map" width="220" height="150"></canvas><span id="pit-dist"></span></section><div id="center-msg"></div><div id="sub-msg"></div><div class="hint">25 mph in the pits · WASD / arrows · C camera · X crew assist / winch ($300)</div>`;
+    h.className='pit-hud';h.innerHTML=`<section class="pit-status"><div class="kicker">${UI.esc(this.app.track.short)} / POST RACE</div><h3 id="pit-stage">Return to your hauler</h3><p id="l-st">Take the marked corner pit entrance · 25 mph limit</p><div class="pit-metrics"><span><b id="pit-speed">0</b> MPH</span><span>LOAD <b id="l-t">0.0</b>s / ${this.par}s</span><span>DAMAGE +<b id="l-d">0%</b></span></div><canvas id="l-al" width="200" height="60"></canvas></section><section class="pit-nav"><canvas id="pit-map" width="220" height="150"></canvas><span id="pit-dist"></span></section><div class="race-messages loading-messages" role="status"><div id="center-msg"></div><div id="sub-msg"></div></div><div class="hint">25 mph in the pits · WASD / arrows · C camera · X winch / release ($300 once) · R re-align at ramp</div>`;
     this.app.ui.appendChild(h);
     this.hud = { t: h.querySelector('#l-t'), d: h.querySelector('#l-d'), al: h.querySelector('#l-al').getContext('2d'), st: h.querySelector('#l-st'), msg: h.querySelector('#center-msg'), sub: h.querySelector('#sub-msg') };
     this.hud.msg.textContent='';this.hud.sub.textContent='';
@@ -60,17 +63,22 @@ export class LoadScene {
     return null;
   }
   update(dt) {
-    const { app, c } = this; this.t += dt;
+    if(!Number.isFinite(dt)||dt<0)return;dt=Math.min(dt,.1);
+    const { app, c } = this;this.t+=dt;
+    if(![c.x,c.z,c.th,c.v,c.steer].every(Number.isFinite)||(c.wr!==undefined&&!Number.isFinite(c.wr)))this.recoverWinch();
+    if(app.tap('KeyR')&&!this.done)this.recoverWinch();
     if (app.tap('KeyC')) this.camMode = (this.camMode + 1) % 3;
     if(this.towMessage>0)this.towMessage=Math.max(0,this.towMessage-dt);
     // ramp opens during intro
     const rp = this.semi.userData.rampPivot; rp.rotation.z = lerp(rp.rotation.z, this.rampTarget, 1 - Math.exp(-dt * 2.2));
     if (this.intro > 0) { this.intro -= dt; if (this.intro <= 0) { this.hud.msg.textContent = ''; this.hud.sub.textContent = ''; } }
     if (!this.done) {
-      if (app.tap('KeyX') && !this.winch) { this.winch = true; this.hud.sub.textContent = 'Crew is winching it in… (+$300)'; }
+      if(this.winch)this.winchUsed=true;
+      if(app.tap('KeyX')){this.winch=!this.winch;this.winchUsed||=this.winch;this.autoProgress=null;c.v=0;this.hud.sub.textContent=this.winch?'Crew winching · X release / R re-align · $300 once':'Winch released · drive or reverse freely';}
       let inp = app.input();
       if (this.intro > 0) {inp = { steer: 0, throttle: 0, brake: 0 };c.v=0;}
-      if (this.winch) inp = this.autopilot();
+      if(this.winch&&(inp.throttle||inp.brake||Math.abs(inp.steer)>.2)){this.winch=false;c.v=0;this.hud.sub.textContent='Winch released — manual control';}
+      if(this.winch)inp=this.autopilot(dt);
       if(c.x<17&&c.x> -17&&Math.abs(c.z)<4)this.loading=true;
       if(this.loading)this.timer += dt*(this.winch?1.6:1);
       // kinematic drive
@@ -88,7 +96,8 @@ export class LoadScene {
       const b = this.blocked(c);
       if (b) {
         const sp = Math.abs(c.v);
-        Object.assign(c, prev); c.v = -prev.v * 0.25;
+        Object.assign(c,prev);c.v=-prev.v*.25;
+        if(this.winch&&this.loading){this.winch=false;c.v=0;this.hud.sub.textContent='Winch paused at obstruction · reverse to back out, or R / Re-align';}
         if (this.cool <= 0 && sp > 0.35) { const d = 1 + sp * 2.6; this.dmg += d; this.hits++; this.cool = 0.6; this.shake = 0.5; this.flash(b === 'front' ? 'BANG! Hit the cabinets' : 'SCRAPED THE TRAILER WALL', '#ff5a4a'); }
       }
       // falling off the ramp edge
@@ -127,20 +136,33 @@ export class LoadScene {
     this.updateCamera(dt);
     this.updateHud();
     if(this.done){this.secureT=(this.secureT||0)+dt;this.hud.msg.textContent=this.secureT<1.6?'TYING DOWN':'READY TO ROLL';rp.rotation.z=lerp(this.rampTarget,-Math.PI/2,clamp((this.secureT-1.6)/2,0,1));if(this.secureT>4){delete app.state.pitPose;UI.afterLoad(app,this.result);return;}}
-    else if((this.saveT=(this.saveT||0)+dt)>2){this.saveT=0;app.state.pitPose={layout:2,round:app.state.round,c:{...c},session:{timer:this.timer,dmg:this.dmg,hits:this.hits,falls:this.falls,winch:this.winch,loading:this.loading,pathIndex:this.pathIndex,exitStarted:this.exitStarted}};app.save();}
+    else if((this.saveT=(this.saveT||0)+dt)>2){this.saveT=0;app.state.pitPose={layout:2,round:app.state.round,c:{...c},session:{timer:this.timer,dmg:this.dmg,hits:this.hits,falls:this.falls,winch:this.winch,winchUsed:this.winchUsed,loading:this.loading,pathIndex:this.pathIndex,exitStarted:this.exitStarted}};app.save();}
     this.app.audio.set(0.12 + Math.abs(c.v) * 0.06, Math.abs(c.v) > 0.1 ? 0.5 : 0.2, 0.08);
   }
-  autopilot() {
+  recoverWinch(){
+    Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0,wr:0});this.winch=false;this.loading=true;this.exitStarted=true;this.pathIndex=this.pits.road.drive.length-1;this.falling=0;this.hold=0;this.autoProgress=null;
+    this.wheelH=this.wheelPts(this.c).map(w=>this.height(w.x,w.z));
+    if(this.hud)this.hud.sub.textContent='Crew re-aligned at ramp · drive or X / Winch to retry';
+  }
+  autopilot(dt=1/60) {
     const c=this.c,trk=this.race.trk;let tx,tz;const lot=Math.abs(c.x)<72&&c.z>-51&&c.z<39,path=this.pits.road.drive,localStart=lot&&!this.exitStarted;
     if(!this.exitStarted&&!lot){const q=trk.project(c.x+this.offset.x,c.z+this.offset.z),ds=(this.pits.gateS-q.s+trk.P)%trk.P;if(ds<38||this.pits.road.nearest(c.x+this.offset.x,c.z+this.offset.z).distance<6){this.exitStarted=true;this.pathIndex=path.reduce((best,p,i)=>Math.hypot(c.x-p.x,c.z-p.z)<Math.hypot(c.x-path[best].x,c.z-path[best].z)?i:best,0);this.pathIndex=Math.min(path.length-1,this.pathIndex+1);}else{const p=trk.point(q.s+16,0);tx=p.x-this.offset.x;tz=p.z-this.offset.z;}}
     if(tx===undefined&&!this.loading){this.exitStarted=true;if(localStart)this.pathIndex=path.length-2;let p=path[Math.min(this.pathIndex,path.length-1)];while(this.pathIndex<path.length-1&&Math.hypot(c.x-p.x,c.z-p.z)<6){p=path[++this.pathIndex];}[tx,tz]=[p.x,p.z];}
-    if(this.loading){tx=c.x-4;tz=0;}
+    if(this.loading){
+      // Align on the open pad BEFORE the nose enters the narrow trailer.
+      if(c.x>5&&(Math.abs(c.z)>.025||Math.abs(wrapAngle(Math.PI-c.th))>.012)){
+        const aligned={...c,z:c.z+clamp(-c.z,-.6*dt,.6*dt),th:c.th+clamp(wrapAngle(Math.PI-c.th),-.5*dt,.5*dt)};
+        if(!this.blocked(aligned)){Object.assign(c,aligned);c.v=0;this.autoProgress={x:c.x,z:c.z,t:this.t};return{steer:0,throttle:0,brake:0};}
+      }
+      tx=c.x-4;tz=0;
+    }
     const want=Math.atan2(tz-c.z,tx-c.x),steer=clamp(wrapAngle(want-c.th)*2.2,-1,1),stop=c.x< -11.4&&Math.abs(c.z)<.4;
     // Paid assist slows for heading corrections instead of pinning full throttle into a narrow exit.
     if(stop&&Math.abs(c.v)<.12)c.v=0;
     if(!this.autoProgress||Math.hypot(c.x-this.autoProgress.x,c.z-this.autoProgress.z)>1)this.autoProgress={x:c.x,z:c.z,t:this.t};
     if(!this.loading&&this.t-this.autoProgress.t>1.8){this.autoReverseUntil=this.t+1.3;this.autoProgress={x:c.x,z:c.z,t:this.t};}
     if(!this.loading&&this.t<(this.autoReverseUntil||0))return{steer:-steer,throttle:0,brake:1};
+    if(this.loading&&this.t-this.autoProgress.t>3){this.winch=false;this.hud.sub.textContent='Winch paused — X release / R re-align';return{steer:0,throttle:0,brake:0};}
     const target=this.loading?1.3:clamp(8-Math.abs(wrapAngle(want-c.th))*6,3,8);
     return{steer,throttle:!stop&&c.v<target-.08?1:0,brake:stop?(c.v>.05?1:0):(c.v>target+.15?1:0)};
   }
@@ -179,9 +201,9 @@ export class LoadScene {
   finish() {
     this.done = true; this.hud.st.textContent = 'PARKED'; this.c.v = 0;
     const t = this.timer, over = Math.max(0, t - this.par);
-    const cost = Math.round(over * 15) + (this.winch ? 300 : 0);
-    const bonus = this.winch ? 0 : clamp((this.par - t) / this.par, 0, 1) * (this.dmg ? 0.5 : 1.2);
-    const r = { round:this.app.state.round,time: t, dmg: this.dmg, cost, bonusHours: +bonus.toFixed(2), hits: this.hits, falls: this.falls, winch: this.winch };
+    const cost = Math.round(over * 15) + (this.winchUsed ? 300 : 0);
+    const bonus = this.winchUsed ? 0 : clamp((this.par - t) / this.par, 0, 1) * (this.dmg ? 0.5 : 1.2);
+    const r = { round:this.app.state.round,time: t, dmg: this.dmg, cost, bonusHours: +bonus.toFixed(2), hits: this.hits, falls: this.falls, winch: this.winchUsed };
     this.result = r;
     this.semi.userData.rampPivot.rotation.z = this.rampTarget;
     this.hud.msg.textContent='TYING DOWN';this.hud.sub.textContent='Crew securing the car. Ramp closing…';
