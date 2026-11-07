@@ -20,3 +20,6 @@ The highway trailer has independent world-space axle/heading state, constrained 
 
 ### Nitro Riffs / continuous showroom turntable
 Menu music: "Nitro Riffs" by Jayden (made with Suno), supplied by the owner. The complete song loops after the first tap/key, with saved music volume/mute and driving/menu fades. A 112-kbps stereo MP3 is embedded in three text chunks, each below 1.5 MB, then played from a Blob URL without decoding the whole song into a large PCM buffer. MP3 works in Safari and other modern browsers. Title/garage cars rotate at a constant 0.14 rad/s (about 45 seconds per full turn), without stopping or easing.
+
+### Grounded-world / recovery / visual polish
+Pit roads are clipped to the actual oval edge and graded to the paddock, with triangle-matched wheel heights and conforming cone feet. A wreck or confirmed Pause → Retire to paddock goes straight to your hauler while preserving classification, purse, payroll, points and damage; normal finishes retain the pit-road drive. The rebuilt cockpit has a shaped wood dash, live instruments, leather-look wheel, framed windshield, red hood and economical rearward mirrors. Procedural clay normal/roughness maps, layered textured foliage, grass, crowd heads, outdoor reflections and softer shadows retain phone Performance scaling. Scene changes now release shadow render targets.

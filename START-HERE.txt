@@ -213,3 +213,10 @@ Fast Travel on the highway shows a remaining-mile fuel + paid hauling quote. Con
 
 MENU MUSIC / SHOWROOM
 "Nitro Riffs" by Jayden (made with Suno) plays after the first tap/key in menus. Settings has separate music volume/mute, saved between visits. Driving fades music out; returning to menus fades it back in. The full song loops. Title and garage cars rotate steadily through 360 degrees without stopping.
+
+POLISH UPDATE
+  Pit roads are graded flush to the oval with matching wheel-contact heights.
+  A wreck or Retire to paddock (Pause menu, confirmed) recovers you directly to
+  Bay 42. Normally finished races still use the corner pit road.
+  The rebuilt cab camera has live instruments, wood trim, mirrors and a red hood.
+  Visual materials, foliage and lighting scale with the existing quality presets.
