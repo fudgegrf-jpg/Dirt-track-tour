@@ -170,3 +170,28 @@ The tour map and road planner have persistent primary actions. Results show
 your finish and net payout first; expand the breakdown for payroll, bonuses
 and standings. Scroll the classification on short phone screens.
 All overlays use the same dark/lime design and respect landscape safe areas.
+
+
+TRACK-TO-PADDOCK / AUTOMATIC PACE / DIESEL UPDATE
+- Pace laps and cautions are auto-driven by default. Hold your preferred controls;
+  they blend in over 0.3 seconds when the green flag waves. Settings can disable
+  Auto-drive pace laps & cautions. Stopped cars are recovered to their lineup slot.
+- After results, Return to pits keeps your car and the same oval world. Take the
+  marked backstretch gate into the graded paddock. The limit is 15 mph. Find your
+  blue/white Bay 42 hauler, line up on the guide stripes and creep into the trailer.
+  X / controller B / Winch $300 offers crew-assisted return and loading. Timing
+  starts near the ramp, not during your drive back. Tie-downs and a closing ramp
+  lead directly to the highway (or season recap after the last round).
+- No fuel-stop menu: drive the off-ramp to the lit canopy and park nearly straight
+  and stopped in the highlighted diesel bay. Fuel and cost tick up together;
+  leaving the bay stops the pump. Follow the on-ramp back to the right lane.
+  E / touch Exit is an optional exit-and-fuel driving assist. Steer, brake or
+  tap Exit again to cancel the assist at any point. The two signed bays at the
+  rear preserve rest and paid road-service gameplay without a menu: park in REST
+  to recover fatigue (30 points / half-hour), or ROAD SERVICE to repair the rig
+  at the previous discounted per-point rate. The travel clock keeps running.
+- J / touch Jake / controller right bumper toggles the semi engine brake. The
+  diesel has 10-speed shifts, turbo lift air, air-brake release, cab/exterior mixes,
+  tire/wind hum and trailer rattle. First touch unlocks audio on phones.
+- Three new local demo WAVs and semi-spectrograms.png are under audio-samples/.
+  semi-demos.html embeds all three for the public text-only release.
