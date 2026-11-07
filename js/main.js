@@ -1,5 +1,7 @@
+import {GraphicsFinishPass} from './gfx2-post.js';
+import {upgradeScanMaterials} from './gfx2-materials.js';
 import { MobileControls, isTouchDevice } from './mobile.js';
-import {QUALITY,qualityPreset} from './quality.js';
+import {QUALITY,qualityPreset,resolveQuality} from './quality.js';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -25,12 +27,12 @@ class App {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.0;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.composer = new EffectComposer(this.renderer);
+    this.composer = new EffectComposer(this.renderer,new THREE.WebGLRenderTarget(1,1,{type:THREE.HalfFloatType,depthTexture:new THREE.DepthTexture(1,1)}));
+    this.graphicsFinish=new GraphicsFinishPass();
     this.renderPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
     this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.1, 0.25, 3.0);
-    this.composer.addPass(this.renderPass); this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass());
-    if(this.isMobile && !localStorage.getItem('dtt.mobileDefaults.v1')){localStorage.setItem('dtt.quality','low');localStorage.setItem('dtt.mobileDefaults.v1','1');}
-    this.quality = localStorage.getItem('dtt.quality') || (this.isMobile?'low':'medium');if(!QUALITY[this.quality])this.quality=this.isMobile?'low':'medium';
+    this.composer.addPass(this.renderPass);this.composer.addPass(this.graphicsFinish); this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass());
+    this.qualityChoice=localStorage.getItem('dtt.quality')||'auto';if(!QUALITY[this.qualityChoice]&&this.qualityChoice!=='auto')this.qualityChoice='auto';this.quality=resolveQuality(this.qualityChoice,this.isMobile);
     this.ui = document.getElementById('ui');
     this.keys = new Set(); this.pressed = new Set();
     addEventListener('keydown', e => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code) && !['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) e.preventDefault(); if (!this.keys.has(e.code)) this.pressed.add(e.code); this.keys.add(e.code); });
@@ -114,7 +116,7 @@ class App {
   openHelp() {
     if(document.getElementById('help')){this.closeHelp();return;}
     this.mobile?.reset();this.helpWasPaused=this.paused;this.paused=true;this.audio.stop();this.audio.setMusicPhase('help');this.keys.clear();
-    const d=document.createElement('div');d.id='help';d.innerHTML=`<div class="panel"><div class="kicker">DRIVING GUIDE</div><h2 style="margin-top:8px">Find your rhythm, not full lock.</h2><p class="muted">High assist is the keyboard-friendly default. The car still slides; the assist catches excess yaw and softens bumps. Start with short steering taps and let it settle.</p><div class="help-grid"><section><h3>On the clay</h3><p><kbd>W</kbd> / <kbd>↑</kbd> Throttle<br><kbd>S</kbd> / <kbd>↓</kbd> Brake; hold when stopped to reverse<br><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd> Steer<br><kbd>C</kbd> Chase / cockpit / trackside<br><kbd>T</kbd> Tear off muddy windshield<br><kbd>R</kbd> Recover to center of the track</p><p>Fresh clay: try the bottom. As it dries, explore the middle and cushion. Ruts bounce the body; High assist keeps the steering effects gentle.</p></section><section><h3>In the paddock & on the road</h3><p>Loading: creep up the striped ramp, stop in the green box. <kbd>X</kbd> lets the crew winch for $300.<br>Highway: arrows/WASD, <kbd>S</kbd> / <kbd>↓</kbd> brake, <kbd>E</kbd> take a signed exit, <kbd>C</kbd> change camera.<br><kbd>Q</kbd> Cruise control, <kbd>H</kbd> this guide.</p><p>Controller: left stick, RT gas, LT brake; Y camera, A/B/X actions, Start pause.<br><kbd>P</kbd> / Esc pause · <kbd>M</kbd> mute · <kbd>G</kbd> graphics</p></section></div><div class="row" style="margin-top:18px;justify-content:space-between"><span class="muted">High / Max assist are recommended for a relaxed keyboard race.</span><button id="help-close">Got it →</button></div></div>`;document.body.appendChild(d);d.querySelector('#help-close').onclick=()=>this.closeHelp();
+    const d=document.createElement('div');d.id='help';d.innerHTML=`<div class="panel"><div class="kicker">DRIVING GUIDE</div><h2 style="margin-top:8px">Find your rhythm, not full lock.</h2><p class="muted">High assist is the keyboard-friendly default. The car still slides; the assist catches excess yaw and softens bumps. Start with short steering taps and let it settle.</p><div class="help-grid"><section><h3>On the clay</h3><p><kbd>W</kbd> / <kbd>↑</kbd> Throttle<br><kbd>S</kbd> / <kbd>↓</kbd> Brake; hold when stopped to reverse<br><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd> Steer<br><kbd>C</kbd> Chase / cockpit / trackside<br><kbd>T</kbd> Tear off muddy windshield<br><kbd>R</kbd> Recover to center of the track</p><p>Fresh clay: try the bottom. As it dries, explore the middle and cushion. Ruts bounce the body; High assist keeps the steering effects gentle.</p></section><section><h3>In the paddock & on the road</h3><p>Loading: creep up the striped ramp, stop in the green box. <kbd>X</kbd> lets the crew winch for $300.<br>Highway: arrows/WASD, <kbd>S</kbd> / <kbd>↓</kbd> brake, then hold to reverse, <kbd>E</kbd> take a signed exit, <kbd>C</kbd> change camera.<br><kbd>Q</kbd> Cruise control, <kbd>H</kbd> this guide.</p><p>Controller: left stick, RT gas, LT brake; Y camera, A/B/X actions, Start pause.<br><kbd>P</kbd> / Esc pause · <kbd>M</kbd> mute · <kbd>G</kbd> graphics</p></section></div><div class="row" style="margin-top:18px;justify-content:space-between"><span class="muted">High / Max assist are recommended for a relaxed keyboard race.</span><button id="help-close">Got it →</button></div></div>`;document.body.appendChild(d);d.querySelector('#help-close').onclick=()=>this.closeHelp();
   }
   closeHelp(){document.getElementById('help')?.remove();this.paused=!!this.helpWasPaused;this.audio.setMusicPhase(this.paused?'pause':this.phase);this.keys.clear();this.pressed.clear();}
   openSettings() {
@@ -125,18 +127,18 @@ class App {
     d.innerHTML = `<div class="panel settings-card"><header class="modal-head"><div><div class="kicker">PERSONALIZE</div><h2>Your drive.</h2></div><span class="pill">${this.isMobile?'TOUCH + TILT':'KEYBOARD / CONTROLLER'}</span></header><div class="settings-body"><section><h3>Audio & feel</h3>
       ${sl('s-vol','Master volume',S.volume,0,1,.05)}${sl('s-music','Menu music',S.musicVolume,0,1,.05)}<div class="row set-row"><label>Menu music</label><button id="s-music-mute" class="alt">${S.musicMuted?'Unmute music':'Mute music'}</button></div>${sl('s-crowd','Crowd & field',S.crowd,0,1,.05)}${sl('s-shake','Camera shake',S.shake,0,1.5,.05)}
       <div class="row set-row"><label>Sound</label><button id="s-mute" class="alt">${this.audio.muted?'Unmute':'Mute'}</button></div></section><section><h3>Driving & display</h3>
-      <div class="row set-row"><label for="s-q">Graphics</label><select id="s-q"><option value="low">Performance</option><option value="medium">Balanced</option><option value="high">Detail</option></select></div>
+      <div class="row set-row"><label for="s-q">Graphics</label><select id="s-q"><option value="auto">Auto (device recommended)</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
       <div class="row set-row"><label for="s-assist">Steering assist</label><select id="s-assist"><option value="off">Off · pro</option><option value="low">Low</option><option value="med">Medium</option><option value="high">High · recommended</option><option value="max">Max · relaxed</option></select></div>
       <div class="row set-row"><label for="s-diff">AI difficulty</label><select id="s-diff"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
       <div class="row set-row"><label for="s-auto">Auto-drive pace laps & cautions</label><select id="s-auto"><option value="on">On · recommended</option><option value="off">Off · manual</option></select></div><div class="row set-row"><label for="s-cam">Race camera</label><select id="s-cam"><option value="chase">Chase</option><option value="incar">Cockpit</option></select></div></section></div>
       <footer class="modal-footer"><button id="s-help" class="text-button">Driving guide ${UI.icon('arrow')}</button><button id="s-done">Done ${UI.icon('check')}</button></footer></div>`;
     document.body.appendChild(d);
-    d.querySelector('#s-q').value = this.quality; d.querySelector('#s-cam').value = S.cam; d.querySelector('#s-assist').value = S.assist || 'high'; d.querySelector('#s-diff').value = S.diff || 'normal';
+    d.querySelector('#s-q').value = this.qualityChoice; d.querySelector('#s-cam').value = S.cam; d.querySelector('#s-assist').value = S.assist || 'high'; d.querySelector('#s-diff').value = S.diff || 'normal';
     d.querySelector('#s-auto').value=S.autoPace===false?'off':'on';d.querySelector('#s-auto').onchange=e=>{S.autoPace=e.target.value==='on';this.saveSettings();};
     const bind = (id, key) => { const e = d.querySelector('#' + id); e.oninput = () => { S[key] = +e.value; d.querySelector(`#${id}-v`).textContent = Math.round(S[key] * 100) + '%'; this.saveSettings(); }; };
     d.querySelector('#s-music-mute').onclick=e=>{S.musicMuted=!S.musicMuted;this.saveSettings();e.target.textContent=S.musicMuted?'Unmute music':'Mute music';};
     bind('s-music','musicVolume');bind('s-vol', 'volume'); bind('s-crowd', 'crowd'); bind('s-shake', 'shake');
-    d.querySelector('#s-q').onchange = e => { this.quality = e.target.value; this.applyQuality(); };
+    d.querySelector('#s-q').onchange = e => { this.setQuality(e.target.value); };
     d.querySelector('#s-assist').onchange = e => { S.assist = e.target.value; this.saveSettings(); };
     d.querySelector('#s-diff').onchange = e => { S.diff = e.target.value; this.saveSettings(); };
     d.querySelector('#s-cam').onchange = e => { S.cam = e.target.value;if(this.phase==='race'){this.mode.camMode=S.cam==='incar'?1:0;this.mode.camInit=false;} this.saveSettings(); };
@@ -162,6 +164,7 @@ class App {
       const s = JSON.parse(localStorage.getItem(SAVE_KEY));
       if (s && s.v === 1) {
         const paintMigrated=migrateDefaultLivery(s);
+        if(!s.salinaLayoutVersion){if(s.results?.[0]?.track==='Volusia')s.results[0].track='Salina';if(s.round===0&&s.pitPose?.c&&(Math.abs(s.pitPose.c.x)>75||s.pitPose.c.z< -51||s.pitPose.c.z>41))delete s.pitPose;s.salinaLayoutVersion=1;localStorage.setItem(SAVE_KEY,JSON.stringify(s));}
         if (!s.driver?.trim() || (s.driver === 'Dale Rhodes' && paintMigrated)) {
           const old = s.driver ?? ''; s.driver = DEFAULT_DRIVER; s.standings ||= {};
           if (old !== DEFAULT_DRIVER && Object.hasOwn(s.standings, old)) {
@@ -216,23 +219,25 @@ class App {
     this.canvas.style.visibility = this.mode ? 'visible' : 'hidden';
     this.mobile?.sync();
   }
+  setQuality(choice){this.qualityChoice=QUALITY[choice]||choice==='auto'?choice:'auto';this.quality=resolveQuality(this.qualityChoice,this.isMobile);this.applyQuality();}
   applyQuality(){
-    const p={...qualityPreset(this.quality)};if(this.isMobile){p.dpr=Math.min(p.dpr,1.5);p.shadow=Math.min(p.shadow,this.quality==='low'?512:1024);p.dust=Math.min(p.dust,this.quality==='low'?450:1000);p.lod=Math.min(p.lod,24);}
-    localStorage.setItem('dtt.quality',this.quality);
+    if(this.mode?.scene)upgradeScanMaterials(this.mode.scene);
+    const p={...qualityPreset(this.quality)};if(this.isMobile){p.dpr=Math.min(p.dpr,this.quality==='low'?1:this.quality==='medium'?1:1.25);p.shadow=Math.min(p.shadow,this.quality==='low'?512:1024);p.dust=Math.min(p.dust,this.quality==='low'?450:1000);p.lod=Math.min(p.lod,24);}
+    localStorage.setItem('dtt.quality',this.qualityChoice||this.quality);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio,p.dpr)*p.scale);this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.mode?.scene?.traverse(o=>{if(o.isLight&&o.castShadow&&o.shadow){const sh=o.shadow;sh.radius=this.quality==='low'?1:1.6;if(sh.mapSize.x!==p.shadow){sh.map?.dispose();sh.map=null;sh.mapSize.set(p.shadow,p.shadow);sh.needsUpdate=true;}}if(o.isLOD&&o.levels[1])o.levels[1].distance=p.lod;});this.mode?.dust?.setBudget(p.dust);this.resize();
   }
   resize() {
     const w = innerWidth, h = innerHeight;
     this.renderer.setSize(w, h, false); this.composer.setSize(w, h);
-    this.bloom.resolution.set(w / 2, h / 2);
+    this.bloom.resolution.set(w / 2, h / 2);this.graphicsFinish.uniforms.resolution.value.set(w*this.renderer.getPixelRatio(),h*this.renderer.getPixelRatio());
     if (this.mode?.camera) { this.mode.camera.aspect = w / h; this.mode.camera.updateProjectionMatrix(); }
     this.mode?.onResize?.(w, h);
     this.mobile?.sync();
   }
   render() {
     if (!this.mode) return;
-    if (this.quality === 'high') this.composer.render(); else this.renderer.render(this.mode.scene, this.mode.camera);
+    if (this.quality === 'high'){this.graphicsFinish.uniforms.nearFar.value.set(this.mode.camera.near,this.mode.camera.far);this.composer.render();} else this.renderer.render(this.mode.scene, this.mode.camera);
   }
   step(dt) { if (this.mode && (!this.paused || (this.mode instanceof ShowroomScene && this.mode.studio)) && !this.mobile?.portrait) this.mode.update(dt); this.pressed.clear(); }
   frame(t) {
@@ -249,7 +254,7 @@ class App {
       else if (document.getElementById('settings')) this.closeSettings();
       else if (['race', 'load', 'highway'].includes(this.phase)) this.togglePause();
     }
-    if (this.tap('KeyG') && document.activeElement?.tagName !== 'INPUT') { this.quality = ['low','medium','high'][(['low','medium','high'].indexOf(this.quality)+1)%3];this.applyQuality();this.toast(qualityPreset(this.quality).label+' graphics'); }
+    if (this.tap('KeyG') && document.activeElement?.tagName !== 'INPUT') { this.setQuality(['auto','low','medium','high'][(['auto','low','medium','high'].indexOf(this.qualityChoice)+1)%4]);this.toast(qualityPreset(this.quality).label+' graphics'); }
     if (!typing&&this.tap('KeyM')) this.audio.toggleMute();
     this.step(dt); this.render();
   }

@@ -105,7 +105,7 @@ export class HighwayScene {
     this.roadMat = roadMat;
     // regional look per leg: Deep South pines -> Ozark hardwoods -> Missouri/Iowa prairie -> Corn Belt
     const BIOMES = [
-      { name: 'Gulf Coast pines', grass: '#526d3c', pine: 0.7, trees: 2800, windy: 0.3 },
+      { name: 'Oklahoma / Ozark foothills', grass: '#526d3c', pine: 0.3, trees: 2800, windy: 0.3 },
       { name: 'Ozark hills', grass: '#4b6238', pine: 0.35, trees: 3400, windy: 0.35 },
       { name: 'Prairie', grass: '#747b47', pine: 0.08, trees: 1300, windy: 0.85 },
       { name: 'Corn Belt', grass: '#5d703e', pine: 0.04, trees: 1500, windy: 0.7 },
@@ -384,7 +384,7 @@ export class HighwayScene {
         <div class="lbl">RIG DAMAGE</div><div class="bar" style="width:180px"><i id="hw-dmg"></i></div></div>
       <div class="fast-travel-control"><button id="highway-fasttravel">Fast travel</button><small id="fasttravel-note"></small></div>
       <div id="center-msg" style="font-size:54px"></div><div id="sub-msg"></div>
-      <div class="hint">W/↑ throttle • S/↓ brake • A/D ←/→ steer • Q cruise • E exit assist · park in the pump bay to fuel · J engine brake • C camera • P pause</div>`;
+      <div class="hint">W/↑ throttle • S/↓ brake; hold to reverse • A/D ←/→ steer • Q cruise • E exit assist · park in the pump bay to fuel · J engine brake • C camera • P pause</div>`;
     this.app.ui.appendChild(h);
     const q = id => h.querySelector(id);
     this.hud = { clock: q('#hw-clock'), el: q('#hw-el'), miles: q('#hw-miles'), exit: q('#hw-exit'), spd: q('#hw-spd'), cruise: q('#hw-cruise'), fuel: q('#hw-fuel'), fat: q('#hw-fat'), dmg: q('#hw-dmg'), msg: q('#center-msg'), sub: q('#sub-msg') };
@@ -445,16 +445,20 @@ export class HighwayScene {
     // longitudinal: heavy truck
     const grade = this.grade(T.S);
     let acc = 0;
-    thr = inp.throttle || (T.cruise && T.v < T.cruise) ? 1 : 0;
-    const massFactor=22300/(9500+T.trailerBody.mass);
-    if (thr) acc += massFactor*(2.4 - T.v * 0.04) * (1 - T.v / 37) * (inp.throttle ? 1 : clamp((T.cruise - T.v) * 0.6, 0, 1));
-    if (inp.brake) acc -= 4.2*massFactor;
-    if (!thr && (this.jake || 0) > 0.5) acc -= 0.45;                // jake brake holds it back on decel
-    acc -= 9.81 * grade * 0.55 + 0.0006 * T.v * T.v + 0.08;
-    T.v = clamp(T.v + acc * h, 0, 38);
+    thr = !inp.brake && (inp.throttle || (T.cruise && T.v < T.cruise)) ? 1 : 0;
+    const massFactor=22300/(9500+T.trailerBody.mass),speed=Math.abs(T.v);
+    if(inp.brake&&!inp.throttle&&!this.fuelAutopilot&&T.v<.08){T.reverseHold=(T.reverseHold||0)+h;if(T.reverseHold>.4)T.reversing=true;}else T.reverseHold=0;
+    if(inp.throttle||this.fuelAutopilot||T.v>.15)T.reversing=false;
+    if(thr)acc+=T.v<-.05?4.2*massFactor:massFactor*(2.4-T.v*.04)*(1-T.v/37)*(inp.throttle?1:clamp((T.cruise-T.v)*.6,0,1));
+    if(inp.brake){if(T.reversing)acc-=1.25*massFactor*Math.max(.15,1+T.v/2.5);else if(T.v>0)acc-=4.2*massFactor;else if(T.v<0)acc+=4.2*massFactor;}
+    if(!thr&&!inp.brake&&(this.jake||0)>.5&&T.v>0)acc-=.45;
+    acc-=9.81*grade*.55+(.0006*speed*speed+.08)*Math.sign(T.v);
+    const oldV=T.v;T.v=clamp(T.v+acc*h,-2.5,38);
+    if(inp.brake&&!T.reversing&&oldV*T.v<=0)T.v=0;
+    if(!thr&&!inp.brake&&speed<.12)T.v=0; // automatic parking hold, also at a pump
     // steering (sluggish, speed sensitive) + fatigue drift
     T.steer += clamp(inp.steer - T.steer, -1.6 * h, 1.6 * h);
-    const maxA = (fuelZone&&T.lat>12?.75:.45) / (1 + T.v / 5);
+    const maxA = (fuelZone&&T.lat>12?.75:.45) / (1 + Math.abs(T.v) / 5);
     this.drowsy = this.fatigue > 0.75 ? (this.fatigue - 0.75) * 4 : 0;
     const drift = this.drowsy * 0.012 * Math.sin(this.time * 0.7) * Math.sin(this.time * 0.23 + 1);
     T.yaw += (T.v * Math.tan(T.steer * maxA) / 6.2 - T.v * this.curvature(T.S) * (inp.steer ? 1 : 0.12) + drift) * h;
@@ -474,13 +478,13 @@ export class HighwayScene {
     T.roll = T.roll ?? 0; T.rollV = T.rollV ?? 0;
     const latA = T.v * (tractorRate - T.v * this.curvature(T.S));
     T.rollV += ((-latA * 0.012 - T.roll) * 14 - T.rollV * 3.2) * h; T.roll += T.rollV * h;
-    this.hitCool-=h;resolveHighway(this,h,previous,fuelZone);syncTrailer(this);if(T.lat>7.6||T.lat<.6)this.rumble=.25;
+    if(T.S<0){T.S=0;T.v=Math.max(0,T.v);}this.hitCool-=h;resolveHighway(this,h,previous,fuelZone);syncTrailer(this);if(T.lat>7.6||T.lat<.6)this.rumble=.25;
     }
-    this.lastThrottle=thr;this.lastBrake=!!inp.brake;
+    this.lastThrottle=thr||T.reversing&&inp.brake?1:0;this.lastBrake=!!inp.brake&&!T.reversing;
     // clock / fuel / fatigue
-    const rest=this.exits.some(e=>T.S>e.S+164&&T.S<e.S+204)&&T.v<.7&&Math.abs(T.lat-66)<4&&Math.abs(T.yaw)<.22;this.resting=rest;const realSec = dt * this.timeScale * (T.v < 3 ? 0.4 : 1), hrs = rest?dt*.05:realSec / 3600;
+    const rest=this.exits.some(e=>T.S>e.S+164&&T.S<e.S+204)&&Math.abs(T.v)<.7&&Math.abs(T.lat-66)<4&&Math.abs(T.yaw)<.22;this.resting=rest;const realSec = dt * this.timeScale * (Math.abs(T.v) < 3 ? 0.4 : 1), hrs = rest?dt*.05:realSec / 3600;
     this.hours += hrs;
-    const milesNow = T.v * dt * this.mpm;
+    const milesNow = Math.abs(T.v) * dt * this.mpm;
     this.fuel = Math.max(0, this.fuel - milesNow / 900 - hrs * 0.004);
     this.fatigue = rest?Math.max(0,this.fatigue-dt*.03):clamp(this.fatigue + hrs / 11 * (this.co ? 1 - 0.12 * this.co.skill : 1), 0, 1);
     if (this.fuel <= 0) { this.tows++; this.hours += 3; this.app.state.money -= 650; this.spent += 650; this.fuel = 0.22; T.v = 0; this.flash('OUT OF DIESEL — towed! -$650, +3h', '#ff5a4a', 3); }
@@ -498,7 +502,7 @@ export class HighwayScene {
       if (T.lat > 3.7 && T.v < 29) this.openStop(ex); else this.flash(T.lat <= 3.7 ? 'Get in the right lane to exit' : 'Slow down to take the exit', '#ffc83d', 1.4);
     }
     this.pumpFuel(dt);if(this.resting)this.hud.sub.textContent=`RESTING · fatigue ${Math.round(this.fatigue*100)}% · clock running`;else if(this.hud.sub.textContent.startsWith('RESTING'))this.hud.sub.textContent='';
-    const service=this.exits.some(e=>T.S>e.S+164&&T.S<e.S+204)&&T.v<.7&&Math.abs(T.lat-79)<4&&Math.abs(T.yaw)<.22,st=app.state;if(service&&st.haulerDmg>0&&st.money>0){const repair=Math.min(st.haulerDmg,dt*4,st.money/(UI.HAULER_PER_PT*.8)),cost=repair*UI.HAULER_PER_PT*.8;st.haulerDmg-=repair;st.money-=cost;this.spent+=cost;this.serviceCost=(this.serviceCost||0)+cost;this.hours+=repair/Math.max(this.serviceStartDmg||0,st.haulerDmg+repair);this.serviceStartDmg=this.serviceStartDmg||st.haulerDmg+repair;this.hud.sub.textContent=`ROAD SERVICE · rig ${Math.round(st.haulerDmg)}% damage · $${this.serviceCost.toFixed(2)} total`;this.serviceNotice=3;}else if(this.hud.sub.textContent.startsWith('ROAD SERVICE')&&(this.serviceNotice-=dt)<=0)this.hud.sub.textContent='';if(!service){this.serviceStartDmg=0;this.serviceCost=0;}
+    const service=this.exits.some(e=>T.S>e.S+164&&T.S<e.S+204)&&Math.abs(T.v)<.7&&Math.abs(T.lat-79)<4&&Math.abs(T.yaw)<.22,st=app.state;if(service&&st.haulerDmg>0&&st.money>0){const repair=Math.min(st.haulerDmg,dt*4,st.money/(UI.HAULER_PER_PT*.8)),cost=repair*UI.HAULER_PER_PT*.8;st.haulerDmg-=repair;st.money-=cost;this.spent+=cost;this.serviceCost=(this.serviceCost||0)+cost;this.hours+=repair/Math.max(this.serviceStartDmg||0,st.haulerDmg+repair);this.serviceStartDmg=this.serviceStartDmg||st.haulerDmg+repair;this.hud.sub.textContent=`ROAD SERVICE · rig ${Math.round(st.haulerDmg)}% damage · $${this.serviceCost.toFixed(2)} total`;this.serviceNotice=3;}else if(this.hud.sub.textContent.startsWith('ROAD SERVICE')&&(this.serviceNotice-=dt)<=0)this.hud.sub.textContent='';if(!service){this.serviceStartDmg=0;this.serviceCost=0;}
     // arrival
     if (T.S >= this.Lg) { this.arrive(); }
     if (Math.floor(this.time * 2) !== this.lastTod) { this.lastTod = Math.floor(this.time * 2); this.applyTimeOfDay(); }
@@ -507,7 +511,7 @@ export class HighwayScene {
     this.updateCamera(dt);
     this.updateHud(ex);
     document.getElementById('vignette').style.opacity = clamp(this.drowsy * 0.9 + (this.drowsy > 0 ? 0.25 * Math.sin(this.time * 1.3) : 0), 0, 0.95);
-    app.audio.truck?.({ dt, bump:this.rumble||0, jakeOn:this.jakeEnabled!==false, speed: T.v, throttle: thr ? 1 : 0, brake: inp.brake ? 1 : 0, cam: this.camMode === 1 ? 'cab' : 'out' }); this.jake = this.jakeEnabled!==false&&!thr && T.v > 8 ? 1 : 0;
+    app.audio.truck?.({ dt, bump:this.rumble||0, jakeOn:this.jakeEnabled!==false, speed: Math.abs(T.v), throttle: thr||T.reversing&&inp.brake ? 1 : 0, brake: inp.brake&&!T.reversing ? 1 : 0, cam: this.camMode === 1 ? 'cab' : 'out' }); this.jake = this.jakeEnabled!==false&&!thr && T.v > 8 ? 1 : 0;
   }
   damage(d, msg) {
     this.hitCool = 0.8; this.rigDmg += d; this.carDmg += d * 0.4; this.shake = Math.min(1.2, d * 0.1);
@@ -517,7 +521,7 @@ export class HighwayScene {
   placeTruck(dt) {
     const T=this.t;if(!this.visualT||Math.abs(this.visualT.S-T.S)>40)this.visualT={S:T.S,lat:T.lat,yaw:T.yaw,trailer:T.trailer};const V=this.visualT,k=1-Math.exp(-dt*22);for(const key of['S','lat','yaw','trailer'])V[key]=lerp(V[key],T[key],k);const p=this.pt(V.S,V.lat),a=this.at(V.S),th=a.th+V.yaw;
     const m = this.semi; m.position.copy(p);
-    m.rotation.y = -th; m.rotation.z = Math.atan(this.grade(T.S)); m.rotation.x = Math.sin(this.time*34)*.0015/(1+T.v)+clamp(T.roll || 0, -0.05, 0.05) + (this.rumble > 0 ? Math.sin(this.time * 47) * 0.003 : 0);
+    m.rotation.y = -th; m.rotation.z = Math.atan(this.grade(T.S)); m.rotation.x = Math.sin(this.time*34)*.0015/(1+Math.abs(T.v))+clamp(T.roll || 0, -0.05, 0.05) + (this.rumble > 0 ? Math.sin(this.time * 47) * 0.003 : 0);
     // trailer pitches with the road under its own axles (crests / sags), relative to the tractor
     const tr=m.userData.trailer;m.updateMatrixWorld();tr.position.copy(new THREE.Vector3(-2.6,0,0).applyMatrix4(m.matrixWorld));tr.rotation.y=-(th+V.trailer);tr.rotation.x=(T.roll||0)*.35;
     tr.rotation.z = lerp(tr.rotation.z, Math.atan(this.grade(T.S - 12)), 1 - Math.exp(-dt * 8));
@@ -541,7 +545,7 @@ export class HighwayScene {
       cam.position.lerp(want, 1 - Math.exp(-dt * 3.5));
       cam.lookAt(p.x + Math.cos(th) * 14, p.y + 2.5, p.z + Math.sin(th) * 14); cam.fov = 58;
     } else if (this.camMode === 1) {
-      const bob=Math.sin(this.time*7)*Math.min(.008,T.v*.0003),sway=Math.sin(this.time*2.1)*Math.min(.009,T.v*.0003);
+      const bob=Math.sin(this.time*7)*Math.min(.008,Math.abs(T.v)*.0003),sway=Math.sin(this.time*2.1)*Math.min(.009,Math.abs(T.v)*.0003);
       const eye = new THREE.Vector3(0.03+sway, 3.10+bob, -0.46+T.steer*.012).applyMatrix4(m.matrixWorld), tgt = new THREE.Vector3(40, -4.0, -0.46 + T.steer * 1.2).applyMatrix4(m.matrixWorld);
       cam.position.copy(eye); cam.lookAt(tgt); cam.fov = 66;
       if ((this.gaugeT -= dt) <= 0) { this.gaugeT = this.app.quality==='low'?.1:.05; this.drawGauges(); }
@@ -554,8 +558,8 @@ export class HighwayScene {
   }
   updateHud(ex) {
     const h = this.hud, T = this.t; if (!h) return;updateTravelButton(this);
-    const mph = Math.round(T.v * 2.237);
-    h.spd.textContent = mph; h.spd.style.color = mph > TRAP ? '#ff5a4a' : mph > LIMIT ? '#ffc83d' : '#fff';
+    const mph = Math.round(Math.abs(T.v) * 2.237);
+    h.spd.textContent = (T.v<-.1?'R ':'')+mph; h.spd.style.color = mph > TRAP ? '#ff5a4a' : mph > LIMIT ? '#ffc83d' : '#fff';
     h.cruise.textContent = T.cruise ? `CRUISE ${Math.round(T.cruise * 2.237)}` : '';
     h.clock.textContent = this.clockStr(); h.el.textContent = this.hours.toFixed(1); h.el.style.color = this.hours > this.deadline ? '#ff5a4a' : '#fff';
     h.miles.textContent = `${Math.max(0, Math.round((this.Lg - T.S) * this.mpm))} mi to go`;
@@ -568,7 +572,7 @@ export class HighwayScene {
   openStop(ex){this.fuelAutopilot=true;this.fuelFilled=false;this.flash('FUEL EXIT — steer toward the highlighted pump bay','#d2f77f',2);}
   pumpFuel(dt){
     const T=this.t,ex=this.exits.find(e=>T.S>e.S+101&&T.S<e.S+145&&Math.abs(T.lat-51)<4.5);
-    this.filling=!!(ex&&T.v<.7&&Math.abs(T.yaw)<.22&&this.fuel<1&&this.app.state.money>0);
+    this.filling=!!(ex&&Math.abs(T.v)<.7&&Math.abs(T.yaw)<.22&&this.fuel<1&&this.app.state.money>0);
     if(this.filling){const add=Math.min(1-this.fuel,dt*.10,this.app.state.money/(150*4.09)),cost=add*150*4.09;this.fuel+=add;this.spent+=cost;this.app.state.money-=cost;this.pumpCost=(this.pumpCost||0)+cost;this.hud.sub.textContent=`DIESEL ${Math.round(this.fuel*100)}% · $${(this.pumpCost||0).toFixed(2)} · leave bay to stop`;if((this.pumpTick=(this.pumpTick||0)+dt)>.8){this.pumpTick=0;this.app.audio.air?.(.025,.05);}}
     else if(this.hud.sub.textContent.startsWith('DIESEL')){this.hud.sub.textContent='PUMP STOPPED · follow the on-ramp';this.pumpNotice=4;}else if(this.hud.sub.textContent.startsWith('PUMP STOPPED')&&(this.pumpNotice-=dt)<=0)this.hud.sub.textContent='';
   }
