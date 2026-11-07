@@ -245,3 +245,19 @@ select reverse after a short pause. Reverse is limited to 2.5 m/s (about 5.6 mph
 with signed steering and independent trailer motion. Throttle brakes reverse
 motion before driving forward. Fuel use never becomes negative while backing.
 The race car and pit car also support brake-to-reverse.
+
+CONCRETE PADDOCKS / DUSTY CLAY / 3D GRASS
+All five tracks now have concrete hauler lots: CC0 concrete PBR maps tiled every
+5 meters, expansion joints, white/yellow stalls, ramp guides, faint oil/tire marks
+and 15cm perimeter curbs with an open road entrance. The lot stays at the existing
+flat loading datum; the corner pit road ends flush, with a graded terrain apron.
+Clay and pit road are matte in all quality settings: no metal, specular or
+environment highlight; even the darker tacky groove stays very rough and cannot
+trigger bloom. Cars, lamps and other reflective surfaces retain their lighting.
+Grass is now rooted 3D cutout tufts with darker bases, lighter/drier tips and
+gentle wind. Camera-local patches stream around the track and highway, with
+sparser one-plane distant LODs and a smooth distance fade. Low/Medium/High
+visibility ranges are 28/48/74m; Low is sparse, High lush. Grass avoids driving
+surfaces, the concrete lots, access roads and equipment; live vehicle clearance
+keeps it out of cars and the articulated tractor/trailer. Auto still picks Low
+on phones. No new download or external asset host is needed.
