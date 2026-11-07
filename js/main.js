@@ -38,13 +38,13 @@ class App {
     addEventListener('blur', () => this.keys.clear());
     addEventListener('resize', () => this.resize());
     this.mode = null; this.last = performance.now(); this.paused = false; this.manual = false;
-    this.settings = Object.assign({ shake: 1, volume: 0.8, crowd: 1, cam: 'chase', assist: 'high', diff: 'normal', autoPace: true }, (() => { try { return JSON.parse(localStorage.getItem('dtt.settings')) || {}; } catch (e) { return {}; } })());
+    this.settings = Object.assign({ shake: 1, volume: 0.8, crowd: 1, cam: 'chase', assist: 'high', diff: 'normal', autoPace: true,musicVolume:.35,musicMuted:false }, (() => { try { return JSON.parse(localStorage.getItem('dtt.settings')) || {}; } catch (e) { return {}; } })());
     // One-time migration: existing saves receive the safer new default too.
     // Subsequent explicit Off/Low/Medium/High/Max choices are respected.
     if(this.settings.assistVersion!==2){this.settings.assist='high';this.settings.assistVersion=2;localStorage.setItem('dtt.settings',JSON.stringify(this.settings));}
     if(!['off','low','med','high','max'].includes(this.settings.assist))this.settings.assist='high';
     this.audio = new GameAudio(this);
-    addEventListener('pointerdown',()=>this.audio.live(),{passive:true});addEventListener('keydown',()=>this.audio.live());
+    addEventListener('pointerdown',()=>this.audio.unlockMusic(),{passive:true});addEventListener('keydown',()=>this.audio.unlockMusic());document.addEventListener('visibilitychange',()=>this.audio.music?.apply());
     this.mobile = new MobileControls(this);
     addEventListener('gamepadconnected', e => this.toast?.(`Controller connected: ${e.gamepad.id.slice(0, 32)}`));
     this.state = this.load();
@@ -99,7 +99,7 @@ class App {
     const on = force ?? !this.paused;
     this.mobile?.reset();
     document.getElementById('pause')?.remove();
-    this.paused = on;
+    this.paused = on;this.audio.setMusicPhase(on?'pause':this.phase);
     if (!on) return;
     this.audio.stop();
     const d = document.createElement('div'); d.id = 'pause';
@@ -112,17 +112,17 @@ class App {
   }
   openHelp() {
     if(document.getElementById('help')){this.closeHelp();return;}
-    this.mobile?.reset();this.helpWasPaused=this.paused;this.paused=true;this.audio.stop();this.keys.clear();
+    this.mobile?.reset();this.helpWasPaused=this.paused;this.paused=true;this.audio.stop();this.audio.setMusicPhase('help');this.keys.clear();
     const d=document.createElement('div');d.id='help';d.innerHTML=`<div class="panel"><div class="kicker">DRIVING GUIDE</div><h2 style="margin-top:8px">Find your rhythm, not full lock.</h2><p class="muted">High assist is the keyboard-friendly default. The car still slides; the assist catches excess yaw and softens bumps. Start with short steering taps and let it settle.</p><div class="help-grid"><section><h3>On the clay</h3><p><kbd>W</kbd> / <kbd>↑</kbd> Throttle<br><kbd>S</kbd> / <kbd>↓</kbd> Brake; hold when stopped to reverse<br><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd> Steer<br><kbd>C</kbd> Chase / cockpit / trackside<br><kbd>T</kbd> Tear off muddy windshield<br><kbd>R</kbd> Recover to center of the track</p><p>Fresh clay: try the bottom. As it dries, explore the middle and cushion. Ruts bounce the body; High assist keeps the steering effects gentle.</p></section><section><h3>In the paddock & on the road</h3><p>Loading: creep up the striped ramp, stop in the green box. <kbd>X</kbd> lets the crew winch for $300.<br>Highway: arrows/WASD, <kbd>S</kbd> / <kbd>↓</kbd> brake, <kbd>E</kbd> take a signed exit, <kbd>C</kbd> change camera.<br><kbd>Q</kbd> Cruise control, <kbd>H</kbd> this guide.</p><p>Controller: left stick, RT gas, LT brake; Y camera, A/B/X actions, Start pause.<br><kbd>P</kbd> / Esc pause · <kbd>M</kbd> mute · <kbd>G</kbd> graphics</p></section></div><div class="row" style="margin-top:18px;justify-content:space-between"><span class="muted">High / Max assist are recommended for a relaxed keyboard race.</span><button id="help-close">Got it →</button></div></div>`;document.body.appendChild(d);d.querySelector('#help-close').onclick=()=>this.closeHelp();
   }
-  closeHelp(){document.getElementById('help')?.remove();this.paused=!!this.helpWasPaused;this.keys.clear();this.pressed.clear();}
+  closeHelp(){document.getElementById('help')?.remove();this.paused=!!this.helpWasPaused;this.audio.setMusicPhase(this.paused?'pause':this.phase);this.keys.clear();this.pressed.clear();}
   openSettings() {
-    this.mobile?.reset();document.getElementById('settings')?.remove();this.settingsWasPaused=this.paused;this.paused=true;this.audio.stop();
+    this.mobile?.reset();document.getElementById('settings')?.remove();this.settingsWasPaused=this.paused;this.paused=true;this.audio.stop();this.audio.setMusicPhase('settings');
     const S = this.settings, d = document.createElement('div'); d.id = 'settings';
     const sl = (id, label, v, min, max, step) => `<div class="row set-row slider-row"><label for="${id}">${label}</label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${v}"><span id="${id}-v">${Math.round(v*100)}%</span></div>`;
     d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','Settings');
     d.innerHTML = `<div class="panel settings-card"><header class="modal-head"><div><div class="kicker">PERSONALIZE</div><h2>Your drive.</h2></div><span class="pill">${this.isMobile?'TOUCH + TILT':'KEYBOARD / CONTROLLER'}</span></header><div class="settings-body"><section><h3>Audio & feel</h3>
-      ${sl('s-vol','Master volume',S.volume,0,1,.05)}${sl('s-crowd','Crowd & field',S.crowd,0,1,.05)}${sl('s-shake','Camera shake',S.shake,0,1.5,.05)}
+      ${sl('s-vol','Master volume',S.volume,0,1,.05)}${sl('s-music','Menu music',S.musicVolume,0,1,.05)}<div class="row set-row"><label>Menu music</label><button id="s-music-mute" class="alt">${S.musicMuted?'Unmute music':'Mute music'}</button></div>${sl('s-crowd','Crowd & field',S.crowd,0,1,.05)}${sl('s-shake','Camera shake',S.shake,0,1.5,.05)}
       <div class="row set-row"><label>Sound</label><button id="s-mute" class="alt">${this.audio.muted?'Unmute':'Mute'}</button></div></section><section><h3>Driving & display</h3>
       <div class="row set-row"><label for="s-q">Graphics</label><select id="s-q"><option value="low">Performance</option><option value="medium">Balanced</option><option value="high">Detail</option></select></div>
       <div class="row set-row"><label for="s-assist">Steering assist</label><select id="s-assist"><option value="off">Off · pro</option><option value="low">Low</option><option value="med">Medium</option><option value="high">High · recommended</option><option value="max">Max · relaxed</option></select></div>
@@ -133,7 +133,8 @@ class App {
     d.querySelector('#s-q').value = this.quality; d.querySelector('#s-cam').value = S.cam; d.querySelector('#s-assist').value = S.assist || 'high'; d.querySelector('#s-diff').value = S.diff || 'normal';
     d.querySelector('#s-auto').value=S.autoPace===false?'off':'on';d.querySelector('#s-auto').onchange=e=>{S.autoPace=e.target.value==='on';this.saveSettings();};
     const bind = (id, key) => { const e = d.querySelector('#' + id); e.oninput = () => { S[key] = +e.value; d.querySelector(`#${id}-v`).textContent = Math.round(S[key] * 100) + '%'; this.saveSettings(); }; };
-    bind('s-vol', 'volume'); bind('s-crowd', 'crowd'); bind('s-shake', 'shake');
+    d.querySelector('#s-music-mute').onclick=e=>{S.musicMuted=!S.musicMuted;this.saveSettings();e.target.textContent=S.musicMuted?'Unmute music':'Mute music';};
+    bind('s-music','musicVolume');bind('s-vol', 'volume'); bind('s-crowd', 'crowd'); bind('s-shake', 'shake');
     d.querySelector('#s-q').onchange = e => { this.quality = e.target.value; this.applyQuality(); };
     d.querySelector('#s-assist').onchange = e => { S.assist = e.target.value; this.saveSettings(); };
     d.querySelector('#s-diff').onchange = e => { S.diff = e.target.value; this.saveSettings(); };
@@ -141,7 +142,7 @@ class App {
     d.querySelector('#s-mute').onclick = e => { this.audio.toggleMute(); e.target.textContent = this.audio.muted ? 'Unmute' : 'Mute'; };
     d.querySelector('#s-help').onclick=()=>this.openHelp();d.querySelector('#s-done').onclick = () => this.closeSettings();
   }
-  closeSettings(){document.getElementById('settings')?.remove();this.paused=!!this.settingsWasPaused;this.keys.clear();}
+  closeSettings(){document.getElementById('settings')?.remove();this.paused=!!this.settingsWasPaused;this.audio.setMusicPhase(this.paused?'pause':this.phase);this.keys.clear();}
   fade() {
     const f = document.getElementById('fade'); if (!f || this.manual) return;
     f.style.transition = 'none'; f.style.opacity = 1; void f.offsetWidth;
@@ -193,7 +194,7 @@ class App {
     const retained=(phase==='results'&&this.mode instanceof RaceScene)||(phase==='load'&&this.mode instanceof RaceScene);
     const race=retained?this.mode:null;if(race)race.pausedRace=true;
     if (this.mode&&!retained) { this.mode.dispose?.(); this.mode = null; }
-    this.ui.innerHTML = ''; this.phase = phase; this.audio.stop();
+    this.ui.innerHTML = ''; this.phase = phase; this.audio.stop();this.audio.setMusicPhase(phase);
     this.helpWasPaused=false;document.getElementById('help')?.remove();this.togglePause(false); document.getElementById('settings')?.remove(); this.fade();
     this.bloom.strength = 0.1; this.bloom.radius = 0.25; this.bloom.threshold = 3.0; this.renderer.toneMappingExposure = 1; // scenes may override
     document.getElementById('vignette').style.opacity = 0;
@@ -232,7 +233,7 @@ class App {
     if (!this.mode) return;
     if (this.quality === 'high') this.composer.render(); else this.renderer.render(this.mode.scene, this.mode.camera);
   }
-  step(dt) { if (this.mode && !this.paused && !this.mobile?.portrait) this.mode.update(dt); this.pressed.clear(); }
+  step(dt) { if (this.mode && (!this.paused || (this.mode instanceof ShowroomScene && this.mode.studio)) && !this.mobile?.portrait) this.mode.update(dt); this.pressed.clear(); }
   frame(t) {
     requestAnimationFrame(t2 => this.frame(t2));
     const dt = Math.min(0.05, (t - this.last) / 1000); this.last = t;

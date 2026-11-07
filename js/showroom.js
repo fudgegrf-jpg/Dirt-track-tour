@@ -64,8 +64,10 @@ export class ShowroomScene {
   update(dt) {
     this.t += dt;
     if(this.studio){
+      // Constant-rate turntable: no oscillation, easing, wrap snap or stopping.
+      this.car.rotation.y+=dt*.14;this.contact?.update(()=>0);
       const title=this.app.phase==='title',compact=innerWidth<1000||this.app.isMobile;
-      const a=.75+Math.sin(this.t*.07)*.035,r=compact?(title?9:11.8):11.4;
+      const a=.75,r=compact?(title?9:11.8):11.4;
       this.camera.position.set(Math.cos(a)*r,3.5,Math.sin(a)*r);this.camera.lookAt(0,.8,0);
       const target=title?(compact?.70:.70):(compact?.16:.27);
       this.camera.filmOffset=(.5-target)*2*this.camera.getFilmWidth()*this.camera.aspect*Math.tan(this.camera.fov*Math.PI/360);this.camera.updateProjectionMatrix();return;
