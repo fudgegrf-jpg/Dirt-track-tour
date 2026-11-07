@@ -1,3 +1,4 @@
+import {pbrMaterial} from './gfx2-materials.js';
 import * as THREE from 'three';
 import {outdoorEnvironment} from './surface-detail.js';
 // Small deterministic procedural assets: no network textures or extra lights.
@@ -26,7 +27,7 @@ const benches=[],legs=[];for(const x of[-54,54])for(let i=0;i<4;i++){benches.pus
 for(const [x,z,r]of(low?[[52,26,3.5]]:[[52,26,3.5],[-47,-35,2.4],[-40,29,2]])){const m=add(new THREE.CircleGeometry(r,low?24:48),new THREE.MeshPhysicalMaterial({color:0x34372f,metalness:.25,roughness:.16,clearcoat:.8,transparent:true,opacity:.72}),x,.024,z);m.rotation.x=-Math.PI/2;m.scale.y=.45;}
 }
 
-export function enrichTruckStop(group,low){const metal=new THREE.MeshStandardMaterial({color:0xb5bec3,metalness:.58,roughness:.32}),black=new THREE.MeshStandardMaterial({color:0x1a2227,roughness:.55}),concrete=new THREE.MeshStandardMaterial({color:0xb8b7ac,roughness:.94});const add=(geo,mat,x,y,z,ry=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.y=ry;m.castShadow=!low;m.receiveShadow=true;group.add(m);return m;};
+export function enrichTruckStop(group,low){const metal=new THREE.MeshStandardMaterial({color:0xb5bec3,metalness:.58,roughness:.32}),black=new THREE.MeshStandardMaterial({color:0x1a2227,roughness:.55}),concrete=pbrMaterial('concrete',{color:0xd8d7cd,roughness:.96},[4,1]);const add=(geo,mat,x,y,z,ry=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.y=ry;m.castShadow=!low;m.receiveShadow=true;group.add(m);return m;};
 add(beveledBox(46,.22,2.8,.1,3),concrete,0,.18,0);add(beveledBox(38,.2,3.3,.08,3),concrete,10,.15,16.7);const screens=labelTexture(['DIESEL','128.4 GAL / $4.09'],'#101d25','#a4e1b5');
 for(let i=0;i<5;i++){const x=-18+i*9;for(const sz of[-1,1]){add(new THREE.PlaneGeometry(.88,.52),new THREE.MeshStandardMaterial({map:screens,emissive:0xffffff,emissiveMap:screens,emissiveIntensity:.25}),x,1.55,sz*.415,sz<0?Math.PI:0);const curve=new THREE.CatmullRomCurve3([new THREE.Vector3(x+.55,1.75,sz*.2),new THREE.Vector3(x+1.05,1.1,sz*.5),new THREE.Vector3(x+.85,.45,sz*.6),new THREE.Vector3(x+.48,.8,sz*.44)]);add(new THREE.TubeGeometry(curve,low?10:20,.035,low?4:7,false),black,0,0,0);add(beveledBox(.12,.28,.1,.025,3),black,x+.48,.95,sz*.46);}add(new THREE.CylinderGeometry(.1,.1,1,12),new THREE.MeshStandardMaterial({color:0xdeb94e,roughness:.65}),x+1.4,.6,0);}
 const fixtures=[],beams=[];for(let i=0;i<8;i++){beams.push({x:-20+i*6,y:6.27,z:0});for(const z of[-5,5])fixtures.push({x:-20+i*6,y:6.25,z});}instances(group,new THREE.BoxGeometry(.14,.18,17),metal,beams);instances(group,new THREE.BoxGeometry(.6,.08,1.2),new THREE.MeshStandardMaterial({color:0xfff4d8,emissive:0xfff0ca,emissiveIntensity:.8}),fixtures);

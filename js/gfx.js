@@ -1,3 +1,4 @@
+import {pbrMaps,scanImage,pbrMaterial} from './gfx2-materials.js';
 import {clayMaterialMaps} from './surface-detail.js';
 import {beveledBox,canvasTexture,instances,batchStatic} from './details.js';
 import * as THREE from 'three';
@@ -20,29 +21,14 @@ export function dirtTextures(rgb = [0.5, 0.27, 0.16]) {
   return clayMaterialMaps(rgb);
 }
 
-export function grassTexture(base = '#2f4a22') {
-  const S = 512, c = canvas(S, S), g = c.getContext('2d');
-  g.fillStyle = base; g.fillRect(0, 0, S, S);
-  for (let i = 0; i < 14000; i++) {
-    const x = Math.random() * S, y = Math.random() * S, k = Math.random();
-    g.fillStyle = k > 0.5 ? 'rgba(80,110,50,0.35)' : 'rgba(20,35,15,0.35)';
-    g.fillRect(x, y, 1.5, Math.random() * 5 + 1);
-  }
-  return tex(c);
-}
-
-export function asphaltTexture() {
-  const S = 512, c = canvas(S, S), g = c.getContext('2d');
-  g.fillStyle = '#3a3a3c'; g.fillRect(0, 0, S, S);
-  for (let i = 0; i < 20000; i++) { const v = 40 + Math.random() * 50 | 0; g.fillStyle = `rgba(${v},${v},${v + 2},0.6)`; g.fillRect(Math.random() * S, Math.random() * S, 1.5, 1.5); }
-  return tex(c);
-}
+export function grassTexture(base='#2f4a22'){const t=pbrMaps('grass').map;t.repeat.set(4,4);return t;}
+export function asphaltTexture(){return pbrMaps('asphalt').map;}
 
 // interstate lane texture across 12.4 m (u) and 12 m along (v)
 export function laneTexture() {
   const W = 512, H = 512, c = canvas(W, H), g = c.getContext('2d');
-  g.fillStyle = '#353537'; g.fillRect(0, 0, W, H);
-  for (let i = 0; i < 26000; i++) { const v = 35 + Math.random() * 55 | 0; g.fillStyle = `rgba(${v},${v},${v},0.55)`; g.fillRect(Math.random() * W, Math.random() * H, 1.6, 1.6); }
+  for(let y=0;y<4;y++)for(let x=0;x<4;x++)g.drawImage(scanImage('asphalt'),x*W/4,y*H/4,W/4,H/4);
+  for (let i = 0; i < 26000; i++) { const v = 35 + Math.random() * 55 | 0; g.fillStyle = `rgba(${v},${v},${v},0.08)`; g.fillRect(Math.random() * W, Math.random() * H, 1.6, 1.6); }
   const px = m => (m + 1) / 12.4 * W; // lat -1 .. 11.4
   // tire wear darker strips
   for (const lc of [1.85, 5.55]) for (const o of [-0.9, 0.9]) { g.fillStyle = 'rgba(20,20,22,0.25)'; g.fillRect(px(lc + o) - 12, 0, 24, H); }
@@ -51,9 +37,9 @@ export function laneTexture() {
   g.fillStyle = '#d8b21c'; g.fillRect(px(0) - 4, 0, 8, H);               // left yellow edge
   g.fillStyle = '#e8e8e8'; g.fillRect(px(7.4) - 4, 0, 8, H);             // right white edge
   g.fillRect(px(3.7) - 4, 0, 8, H * 0.25);                              // dashed (3m of 12m)
-  g.fillStyle = '#4a4a4c'; g.fillRect(px(7.6), 0, W - px(7.6), H);        // shoulder lighter
+  g.fillStyle = 'rgba(180,180,180,.14)'; g.fillRect(px(7.6), 0, W - px(7.6), H);        // shoulder lighter
   for (let y = 0; y < H; y += 16) { g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(px(7.9), y, 20, 7); } // rumble strip
-  const t = tex(c); return t;
+  const t = tex(c);t.userData.gfx2Kind='asphalt';t.userData.gfx2Repeat=4;return t;
 }
 
 export function glowTexture() {
@@ -79,7 +65,7 @@ const SPONSORS = ['CLAYMASTER TIRES', 'RED DIRT OIL', "HAULIN' HOGS BBQ", 'CUSHI
 const SPCOL = ['#c81d25', '#1e5fd8', '#f2c014', '#1f9e4a', '#111', '#ff6a00', '#7a2bd1'];
 export function bannerTexture() {
   const W = 2048, H = 128, c = canvas(W, H), g = c.getContext('2d');
-  g.fillStyle = '#e9e6df'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#e9e6df'; g.fillRect(0, 0, W, H);g.globalAlpha=.45;for(let x=0;x<W;x+=128)g.drawImage(scanImage('concrete'),x,0,128,H);g.globalAlpha=1;
   let x = 0, i = 0;
   while (x < W) {
     const wdt = 300 + (i % 3) * 60, col = SPCOL[i % SPCOL.length];
@@ -93,7 +79,8 @@ export function bannerTexture() {
 
 export function fenceTexture() {
   const S = 128, c = canvas(S, S), g = c.getContext('2d');
-  g.clearRect(0, 0, S, S); g.strokeStyle = 'rgba(200,200,205,1)'; g.lineWidth = 3;
+  g.clearRect(0, 0, S, S); g.strokeStyle = 'rgba(200,200,205,1)'; // Thin galvanized wire: thick mipmapped lines averaged to an opaque gray wall from the stands.
+  g.lineWidth = 1.2;
   for (let i = -S; i < S * 2; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + S, S); g.stroke(); g.beginPath(); g.moveTo(i + S, 0); g.lineTo(i, S); g.stroke(); }
   const t = tex(c); return t;
 }
@@ -304,7 +291,7 @@ export function makeSemi({ team = 'Your Racing', num = '1', color = 0xc81d25, ac
   // landing gear
   for (const sz of [-1, 1]) { const lg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.9, 0.12), dark); lg.position.set(-1.5, 0.55, sz * 0.9); trailer.add(lg); }
   // Detail is decorative only; articulation, loading dimensions and wheel pivots stay unchanged.
-  const plate=canvasTexture('metal',256),plateM=new THREE.MeshStandardMaterial({map:plate,bumpMap:plate,bumpScale:.025,metalness:.4,roughness:.55});floor.material=plateM;ramp.material=[rearM,rearM,plateM,rearM,rearM,rearM];cab.material=new THREE.MeshStandardMaterial({map:canvasTexture('cabinet',256),metalness:.22,roughness:.55});
+  const plate=canvasTexture('metal',256),plateM=pbrMaterial('metal',{metalness:.55,roughness:.65},[3,1]);floor.material=plateM;ramp.material=[rearM,rearM,plateM,rearM,rearM,rearM];cab.material=new THREE.MeshStandardMaterial({map:canvasTexture('cabinet',256),metalness:.22,roughness:.55});
   const ribs=[],grips=[],rivets=[],hinges=[];for(let i=0;i<12;i++)grips.push({x:-.12-i*(rampLen-.24)/11,y:.05,z:0});instances(rampPivot,new THREE.BoxGeometry(.035,.02,TW-.25),dark,grips);
   for(const sz of[-1,1]){for(let i=0;i<10;i++){ribs.push({x:rearX+.6+i*1.5,y:floorY+TH/2,z:sz*1.245});if(!low)for(const y of[floorY+.25,floorY+TH-.25])rivets.push({x:rearX+.35+i*1.65,y,z:sz*1.334});}for(let i=0;i<3;i++)hinges.push({x:rearX-.08,y:floorY+.5+i*.9,z:sz*1.23});const rail=add(new THREE.CylinderGeometry(.045,.045,TL,low?8:14),chrome,.8-TL/2,floorY+TH,sz*1.29,trailer,false);rail.rotation.z=Math.PI/2;
   add(round(.25,.07,.12,.02),chrome,.9,2.3,sz*1.22);for(const x of[1.35,1.65])add(new THREE.BoxGeometry(.045,.3,.045),chrome,x,2.6,sz*1.28,tractor,false);add(round(.28,.08,.3,.03),chrome,-1.5,.12,sz*.9,trailer,false);}

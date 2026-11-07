@@ -1,3 +1,4 @@
+import {pbrMaterial} from './gfx2-materials.js';
 import * as THREE from 'three';
 import {beveledBox,batchStatic,canvasTexture} from './details.js';
 import {woodTexture} from './truck-cockpit.js';
@@ -5,7 +6,7 @@ import {woodTexture} from './truck-cockpit.js';
 export function buildCab(m){
  const u=m.semi.userData,dash=new THREE.Group();u.tractor.add(dash);m.dash=dash;dash.name='crafted-cab-interior';
  const material=(color,roughness=.75,metalness=0)=>new THREE.MeshStandardMaterial({color,roughness,metalness});
- const leather=canvasTexture('rubber',256);leather.repeat.set(8,8);const pad=new THREE.MeshStandardMaterial({color:0x302e28,map:leather,bumpMap:leather,bumpScale:.0015,roughness:.94}),wood=new THREE.MeshStandardMaterial({map:woodTexture(),roughness:.36,metalness:.05}),chrome=material(0xc6c3ad,.34,.72),black=material(0x171b1c),beige=material(0x827969,.94);
+ const leather=canvasTexture('rubber',256);leather.repeat.set(8,8);const pad=new THREE.MeshStandardMaterial({color:0x302e28,map:leather,bumpMap:leather,bumpScale:.0015,roughness:.94}),wood=pbrMaterial('wood',{roughness:.48,metalness:.02},[2,1]),chrome=material(0xc6c3ad,.34,.72),black=material(0x171b1c),beige=material(0x827969,.94);
  const add=(geo,mat,x,y,z,rx=0,ry=0,rz=0)=>{const o=new THREE.Mesh(geo,mat);o.position.set(x,y,z);o.rotation.set(rx,ry,rz);dash.add(o);return o;};
  // Sculpted upholstered shelf, full-depth hardwood fascia and recessed lower console.
  add(beveledBox(.62,.48,2.30,.10,5),wood,1.63,2.43,0);
