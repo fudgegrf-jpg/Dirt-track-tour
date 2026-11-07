@@ -8,7 +8,7 @@ CODE, ART AND SOUND
   AUDIO: every sound is synthesized live in code with the Web Audio API (js/audio.js):
   the V8 (firing-order pulse synthesis, intake/exhaust, valvetrain and gear whine),
   tire/dirt noise, crowd, wind, and the semi's diesel and jake brake.
-  No audio recordings or third-party sound assets are used.
+  No audio recordings or third-party sound assets are used for engines/effects.
   The WAV files in audio-samples/ are offline renders of that same synthesizer, made for previewing.
 
   SPONSORS AND BRANDS: all sponsor, contingency, tire and fuel brand names on the cars are made up
@@ -25,6 +25,10 @@ THIRD-PARTY FONTS (car numbers and sponsor lettering)
   Archivo Black (vendor/fonts/ArchivoBlack-Regular.ttf) - Copyright 2017 The Archivo Black Project Authors,
   SIL Open Font License 1.1 (vendor/fonts/OFL-archivoblack.txt).
 
+MENU MUSIC
+  "Nitro Riffs" by Jayden (made with Suno). Owner-supplied original song.
+  The complete recording is re-encoded as a compact MP3 and embedded in text chunks.
+
 STATIC GITHUB RELEASE
   OFL fonts are embedded as CSS data URLs; licenses remain in vendor/fonts.
-  App icons are embedded. Unused preview WAVs are omitted; audio is synthesized.
+  App icons are embedded. Unused preview WAVs are omitted; engine/effect audio is synthesized. Nitro Riffs is embedded as MP3 text chunks.

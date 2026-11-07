@@ -210,3 +210,6 @@ loading precision and the ramp's slow speed are unchanged.
 SEMI DETAIL / TRAVEL
 C or touch Cam cycles chase, the woodgrain cockpit, and roadside camera. Trailer axles follow their own articulated path: take wider turns and allow for off-tracking. The loaded trailer adds mass to braking and acceleration.
 Fast Travel on the highway shows a remaining-mile fuel + paid hauling quote. Confirm to pay and reach the next paddock; cancel keeps driving. The button explains if team money is insufficient. Travel time still counts toward the meeting deadline.
+
+MENU MUSIC / SHOWROOM
+"Nitro Riffs" by Jayden (made with Suno) plays after the first tap/key in menus. Settings has separate music volume/mute, saved between visits. Driving fades music out; returning to menus fades it back in. The full song loops. Title and garage cars rotate steadily through 360 degrees without stopping.

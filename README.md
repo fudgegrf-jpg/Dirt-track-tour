@@ -13,7 +13,10 @@ Phone: turn sideways. Steer on the left and hold GAS/BRAKE on the right. Optiona
 
 Keyboard: WASD/arrows drive, C camera, P/Esc pause, H help. See START-HERE.txt and CREDITS.txt.
 
-Fonts and icons are embedded; sound is synthesized. No install/build is needed. To play locally, serve this folder over HTTP. Raw.githack can cache branch updates for a few minutes and may show an “Open the page” confirmation before the game. A commit-pinned rawcdn.githack link avoids branch-version caching.
+Fonts and icons are embedded; engine/effect audio is synthesized, and owner-supplied menu music is embedded as compressed MP3 text chunks. No install/build is needed. To play locally, serve this folder over HTTP. Raw.githack can cache branch updates for a few minutes and may show an “Open the page” confirmation before the game. A commit-pinned rawcdn.githack link avoids branch-version caching.
 
 ### Articulated rig, cockpit and paid Fast Travel
 The highway trailer has independent world-space axle/heading state, constrained at the fifth wheel, with off-tracking, yaw inertia, a jackknife limit and loaded-mass acceleration/braking. C or touch Cam cycles the chase, woodgrain cockpit (10 live instruments), and roadside cameras. Fast Travel quotes remaining-mile fuel plus relief hauling, requires confirmation, and updates arrival/season saves once.
+
+### Nitro Riffs / continuous showroom turntable
+Menu music: "Nitro Riffs" by Jayden (made with Suno), supplied by the owner. The complete song loops after the first tap/key, with saved music volume/mute and driving/menu fades. A 112-kbps stereo MP3 is embedded in three text chunks, each below 1.5 MB, then played from a Blob URL without decoding the whole song into a large PCM buffer. MP3 works in Safari and other modern browsers. Title/garage cars rotate at a constant 0.14 rad/s (about 45 seconds per full turn), without stopping or easing.
