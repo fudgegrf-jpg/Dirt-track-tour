@@ -20,8 +20,8 @@ export class ShowroomScene {
     const pitFill=new THREE.DirectionalLight(0xffead5,1.2);pitFill.position.set(0,9,24);pitFill.target.position.set(-5,0,-3);s.add(pitFill,pitFill.target);
     const sun = new THREE.DirectionalLight(0xffcba0, 1.6); sun.position.set(-40, 14, -50); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, near: 1, far: 150 }); sun.shadow.bias = -0.00003; sun.shadow.normalBias=0.004; s.add(sun);
-    const dirt = dirtTextures([0.45, 0.28, 0.18]); dirt.map.repeat.set(30, 30); dirt.bump.repeat.set(30, 30);
-    const g = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshStandardMaterial({ map: dirt.map, bumpMap: dirt.bump, bumpScale: 0.12, roughness: 1, color: 0xb0a090 }));
+    const dirt = dirtTextures([0.45, 0.28, 0.18]); dirt.map.repeat.set(30, 30); dirt.bump.repeat.set(30, 30);dirt.normal.repeat.set(30,30);dirt.roughness.repeat.set(30,30);
+    const g = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshStandardMaterial({ map: dirt.map, bumpMap: dirt.bump,normalMap:dirt.normal,roughnessMap:dirt.roughness,normalScale:new THREE.Vector2(.18,.18), bumpScale: 0.12, roughness: 1, color: 0xb0a090 }));
     g.rotation.x = -Math.PI / 2; g.receiveShadow = true; s.add(g);
     // the rig, ramp down
     const semi = makeSemi({ team: st.team || 'Red Clay Racing', num: st.num || DEFAULT_PROFILE.num, color: st.color ?? DEFAULT_PROFILE.color, accent: st.accent ?? DEFAULT_PROFILE.accent, cabColor:st.scheme===8?st.accent:0x1a1a1e,scheme:st.scheme,detail:app.quality });

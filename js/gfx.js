@@ -1,3 +1,4 @@
+import {clayMaterialMaps} from './surface-detail.js';
 import {beveledBox,canvasTexture,instances,batchStatic} from './details.js';
 import * as THREE from 'three';
 
@@ -16,28 +17,7 @@ function tex(c, repeat = true, srgb = true) {
 
 // ---------- Procedural textures ----------
 export function dirtTextures(rgb = [0.5, 0.27, 0.16]) {
-  const S = 512, c = canvas(S, S), g = c.getContext('2d');
-  const b = canvas(S, S), gb = b.getContext('2d');
-  const [r0, g0, b0] = rgb.map(v => v * 255);
-  g.fillStyle = `rgb(${r0},${g0},${b0})`; g.fillRect(0, 0, S, S);
-  gb.fillStyle = '#808080'; gb.fillRect(0, 0, S, S);
-  for (let i = 0; i < 9000; i++) {
-    const x = Math.random() * S, y = Math.random() * S, r = Math.random() * 3 + 0.5, k = Math.random() * 0.5 + 0.75;
-    g.fillStyle = `rgba(${r0 * k | 0},${g0 * k | 0},${b0 * k | 0},0.5)`; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
-    const v = (Math.random() * 255) | 0; gb.fillStyle = `rgba(${v},${v},${v},0.35)`; gb.beginPath(); gb.arc(x, y, r, 0, 7); gb.fill();
-  }
-  // clods
-  for (let i = 0; i < 500; i++) {
-    const x = Math.random() * S, y = Math.random() * S, r = Math.random() * 6 + 2;
-    g.fillStyle = `rgba(${r0 * 1.15 | 0},${g0 * 1.1 | 0},${b0 * 1.05 | 0},0.6)`; g.beginPath(); g.ellipse(x, y, r, r * 0.6, Math.random() * 3, 0, 7); g.fill();
-    gb.fillStyle = 'rgba(255,255,255,0.5)'; gb.beginPath(); gb.ellipse(x, y, r, r * 0.6, 0, 0, 7); gb.fill();
-  }
-  // tire tracks / grooves (along u)
-  for (let i = 0; i < 40; i++) {
-    const y = Math.random() * S; g.strokeStyle = `rgba(30,15,8,${Math.random() * 0.12})`; g.lineWidth = Math.random() * 8 + 2;
-    g.beginPath(); g.moveTo(0, y); g.lineTo(S, y + (Math.random() - 0.5) * 10); g.stroke();
-  }
-  return { map: tex(c), bump: tex(b, true, false) };
+  return clayMaterialMaps(rgb);
 }
 
 export function grassTexture(base = '#2f4a22') {
@@ -66,6 +46,8 @@ export function laneTexture() {
   const px = m => (m + 1) / 12.4 * W; // lat -1 .. 11.4
   // tire wear darker strips
   for (const lc of [1.85, 5.55]) for (const o of [-0.9, 0.9]) { g.fillStyle = 'rgba(20,20,22,0.25)'; g.fillRect(px(lc + o) - 12, 0, 24, H); }
+  for(const lc of[1.85,5.55])for(const o of[-.85,.85]){const cx=px(lc+o),gr=g.createLinearGradient(cx-14,0,cx+14,0);gr.addColorStop(0,'#18191a00');gr.addColorStop(.5,'#15171940');gr.addColorStop(1,'#18191a00');g.fillStyle=gr;g.fillRect(cx-14,0,28,H);}
+  g.strokeStyle='#1b1c1d70';g.lineWidth=1.2;for(let i=0;i<9;i++){g.beginPath();let x=(i*71)%W;g.moveTo(x,0);for(let y=0;y<=H;y+=32){x+=Math.sin(i*7+y*.1)*4;g.lineTo(x,y);}g.stroke();}
   g.fillStyle = '#d8b21c'; g.fillRect(px(0) - 4, 0, 8, H);               // left yellow edge
   g.fillStyle = '#e8e8e8'; g.fillRect(px(7.4) - 4, 0, 8, H);             // right white edge
   g.fillRect(px(3.7) - 4, 0, 8, H * 0.25);                              // dashed (3m of 12m)
@@ -180,6 +162,8 @@ export function makeSky({ top, horizon, bottom, sunDir, sunColor, sunSize = 0.03
         float az = max(dot((d.xz / max(length(d.xz), 0.0001)), (sd.xz / max(length(sd.xz), 0.0001))), 0.0);
         col += glow * glowAmt * exp(-abs(h) * 9.0) * (0.35 + 0.65 * pow(az, 3.0));
         col += sunColor * (pow(s, 8.0)*0.04 + pow(s, 64.0)*0.08);
+        float cloud=smoothstep(0.25,0.85,sin(d.x*11.0+d.z*4.0)*sin(d.z*13.0-d.x*3.0)+sin(d.x*27.0+d.z*19.0)*0.12)*smoothstep(0.025,0.16,h)*(1.0-smoothstep(0.45,0.8,h));
+        col=mix(col,col*0.86+horizon*0.19,cloud*0.24);
         // A haze layer meets the fog exactly at the horizon. This also
         // suppresses analytic sun halos behind the ground / distant trees.
         col=mix(horizon,col,smoothstep(0.0,0.12,abs(h)));
@@ -192,7 +176,7 @@ export function makeSky({ top, horizon, bottom, sunDir, sunColor, sunSize = 0.03
   const g = new THREE.Group(); const m = new THREE.Mesh(geo, mat); m.renderOrder = -10; g.add(m);
   if (stars) {
     const n = 2200, p = new Float32Array(n * 3), sz = new Float32Array(n), ph = new Float32Array(n);
-    for (let i = 0; i < n; i++) { const th = Math.random() * Math.PI * 2, a = Math.acos(Math.random() * 0.92 + 0.06); p[i * 3] = Math.sin(a) * Math.cos(th) * 3500; p[i * 3 + 1] = Math.cos(a) * 3500; p[i * 3 + 2] = Math.sin(a) * Math.sin(th) * 3500; sz[i] = Math.random() < 0.06 ? 3.2 : 1.2 + Math.random() * 1.4; ph[i] = Math.random() * 6.28; }
+    for (let i = 0; i < n; i++) { const th = Math.random() * Math.PI * 2, a = Math.acos(Math.random() * 0.92 + 0.06); p[i * 3] = Math.sin(a) * Math.cos(th) * 3500; p[i * 3 + 1] = Math.cos(a) * 3500; p[i * 3 + 2] = Math.sin(a) * Math.sin(th) * 3500; sz[i] = Math.random() < 0.06 ? 1.9 : .65 + Math.random() * .8; ph[i] = Math.random() * 6.28; }
     const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(p, 3)); sg.setAttribute('aSize', new THREE.BufferAttribute(sz, 1)); sg.setAttribute('aPh', new THREE.BufferAttribute(ph, 1));
     const sm = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, uniforms: { uTime: { value: 0 }, uAmt: { value: starAmt }, uPx: { value: Math.min(2, window.devicePixelRatio || 1) } },
       vertexShader: `attribute float aSize, aPh; uniform float uTime, uPx; varying float vA; void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); gl_Position = projectionMatrix*mv; float h = normalize(position).y;
@@ -200,7 +184,7 @@ export function makeSky({ top, horizon, bottom, sunDir, sunColor, sunSize = 0.03
       fragmentShader: `uniform float uAmt; varying float vA; void main(){ vec2 c = gl_PointCoord - 0.5; float a = (1.0 - smoothstep(0.1, 0.5, length(c))); gl_FragColor = vec4(vec3(0.85,0.9,1.0) * a * vA * uAmt, 1.0); }` });
     const pts = new THREE.Points(sg, sm); pts.renderOrder = -9; pts.frustumCulled = false; g.add(pts);
     g.userData.stars = sm;
-    pts.onBeforeRender = () => { sm.uniforms.uTime.value = performance.now() / 1000; };
+    pts.onBeforeRender = renderer => { sm.uniforms.uTime.value = performance.now() / 1000;sm.uniforms.uPx.value=renderer.getPixelRatio(); };
   }
   if (moon) {
     const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
@@ -401,6 +385,7 @@ export class Dust {
 
 export function disposeScene(scene) {
   scene.traverse(o => {
+    if(o.isLight&&o.shadow)o.shadow.dispose();
     if (o.geometry) o.geometry.dispose();
     if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { for (const k in m) { const v = m[k]; if (v && v.isTexture) v.dispose(); } m.dispose(); });
   });
