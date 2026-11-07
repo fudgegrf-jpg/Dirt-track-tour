@@ -103,7 +103,7 @@ WHOLE-TOUR POLISH
   a final sound limiter. Full keyboard/gamepad controls remain in Settings.
 - Loading has striped/ribbed ramp guides, clearer alignment help, a slower crawl
   and detailed crew; its intro no longer backs the car away by itself.
-- The night cab has legible gauges and a visible matte steering wheel. The rig
+- The night cab has legible gauges and a visible polished wood-grain steering wheel. The rig
   and traffic tires conform to road crests; truck stops clearly show time costs.
 
 
@@ -114,7 +114,8 @@ waits while the rotate prompt is showing. First touch wakes the audio engine.
 Touch devices default to Auto / Low graphics (512-pixel shadows, 450 dust particles,
 0.85 render pixel ratio at normal phone DPR); a later graphics choice is retained.
 
-Left: slide the steering bar. Right: hold GAS or BRAKE (reverse when stopped).
+Left: drag/rotate the analog wheel. Settings can switch to left/right arrows.
+Right: hold GAS or BRAKE (keep holding when stopped to reverse).
 Two fingers work together: steer while holding a pedal. Lifting one finger does
 not release the other. Cancelled touches, pause and leaving the page release all
 controls so nothing gets stuck.
@@ -125,7 +126,7 @@ exit (keep right and slow down). When loading, Winch uses $300 of game money.
 
 Optional tilt: hold the phone comfortably and tap Tilt, then grant motion access
 if iOS asks. The first motion reading calibrates your neutral position. Turn the
-phone gently left/right. The steering bar still overrides tilt while held. Tap
+phone gently left/right. The steering wheel still overrides tilt while held. Tap
 Touch to switch tilt off; toggle again to recalibrate. Motion requires HTTPS and
 browser/device support; denied permission never disables touch steering.
 
@@ -261,3 +262,30 @@ visibility ranges are 28/48/74m; Low is sparse, High lush. Grass avoids driving
 surfaces, the concrete lots, access roads and equipment; live vehicle clearance
 keeps it out of cars and the articulated tractor/trailer. Auto still picks Low
 on phones. No new download or external asset host is needed.
+
+FAST MUSIC / HUD 2 / SEMI 2 / INFIELD UPDATE
+----------------------------------------
+- Tap anywhere, even on the loading screen, to unlock Nitro Riffs. A tiny decoded
+  15-second intro starts first; background full-song preloads (after critical game loading) hand off with a
+  time-aligned crossfade. Browsers still require that first tap/key. Settings,
+  loop, fades and saved volume/mute remain. The complete track stays compressed.
+- Touch HUD: analog wheel, metal-look pedals, round actions, live all-car track
+  map, lap/position/time/cash/condition. Touch steering Wheel/Arrows is saved.
+  Highway: cruise, Jake, B/Horn, camera, Travel, fuel/Exit. Short-phone controls
+  and safe-area margins keep the view and independent multitouch zones clear.
+- The original synthesized big-rig diesel has a deeper uneven idle, load growl,
+  turbo spool/lift, ten-speed audio shifts, air-brake hiss, Jake bark, tire noise
+  and a dual-tone horn. Cab audio is lower and muffled. It is not a real branded
+  engine recording. Eight compact listening demos: audio-samples/semi-demos.html.
+- Closed cab: ribbed floor, firewall, lower dash, door/bulkhead/sill panels and
+  supported pedals. The steering rim is polished warm wood with metal spokes.
+- All five infields are drivable. Low tires mark the inside; there is no hidden
+  inside collision ring. Grass is slippery, slower, dusty and bumpy. Visible
+  equipment and pole bases are solid. Rejoin the clay; a deep infield shortcut
+  invalidates the next lap crossing. R does not grant a cut lap.
+- AI wreck/mechanical retirements limp or are pushed to a safe infield parking
+  spot, stay visible with amber markers, and cause a caution if needed. Player
+  wreck/retirement STILL goes immediately to the hauler/paddock with the same
+  money, damage and result accounting. Normal finishes still drive the pit road.
+- Every orange cone is grounded and checked clear of the racing clay, including
+  its base corners; cones only line the corner pit road and are not stacked.

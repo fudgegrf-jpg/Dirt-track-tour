@@ -22,20 +22,31 @@ export function buildCab(m){
  for(const z of[-.83,.77]){add(beveledBox(.05,.10,.30,.012,3),chrome,1.135,2.72,z);add(new THREE.BoxGeometry(.056,.076,.273),black,1.11,2.72,z);for(let j=0;j<5;j++)add(new THREE.BoxGeometry(.06,.005,.26),material(0x6b6d65),1.10,2.69+j*.014,z);}
  add(beveledBox(.18,.10,2.12,.025,3),wood,1.25,2.16,0);
  for(let i=0;i<12;i++){const z=-.99+i*.18;add(beveledBox(.032,.057,.075,.006,2),black,1.135,2.16,z);add(new THREE.BoxGeometry(.007,.006,.024),material(i===9?0xda7c35:0xd9d2b4),1.112,2.17,z);}
- const radio=document.createElement('canvas');radio.width=512;radio.height=96;const r=radio.getContext('2d');r.fillStyle='#0a1618';r.fillRect(0,0,512,96);r.fillStyle='#9bd6b0';r.font='36px monospace';r.fillText('CB 19   /   13 SPEED',15,59);const rt=new THREE.CanvasTexture(radio);rt.colorSpace=THREE.SRGBColorSpace;add(new THREE.PlaneGeometry(.62,.10),new THREE.MeshBasicMaterial({map:rt,toneMapped:false}),1.36,2.03,.51,0,-Math.PI/2);
- // Tilted leather steering wheel, proper connected spokes and steering-column stalks.
+ const radio=document.createElement('canvas');radio.width=512;radio.height=96;const r=radio.getContext('2d');r.fillStyle='#0a1618';r.fillRect(0,0,512,96);r.fillStyle='#9bd6b0';r.font='36px monospace';r.fillText('CB 19   /   10 SPEED',15,59);const rt=new THREE.CanvasTexture(radio);rt.colorSpace=THREE.SRGBColorSpace;add(new THREE.PlaneGeometry(.62,.10),new THREE.MeshBasicMaterial({map:rt,toneMapped:false}),1.36,2.03,.51,0,-Math.PI/2);
+ // Tilted polished-walnut steering wheel, proper connected spokes and steering-column stalks.
  const pivot=new THREE.Group();pivot.position.set(.70,2.47,-.46);pivot.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),new THREE.Vector3(-.78,.62,0).normalize());dash.add(pivot);m.wheel=new THREE.Group();pivot.add(m.wheel);
- const rim=new THREE.Mesh(new THREE.TorusGeometry(.255,.034,14,64),pad);m.wheel.add(rim);
+ const grain=woodTexture();grain.wrapS=grain.wrapT=THREE.RepeatWrapping;grain.repeat.set(3,1);grain.anisotropy=m.app.renderer.capabilities.getMaxAnisotropy();const walnut=new THREE.MeshPhysicalMaterial({map:grain,color:0xe0a16a,roughness:.34,metalness:0,clearcoat:.65,clearcoatRoughness:.25});const rim=new THREE.Mesh(new THREE.TorusGeometry(.255,.035,14,64),walnut);rim.name='polished-walnut-steering-rim';m.wheel.add(rim);
  for(const a of[.18,Math.PI-.18,-Math.PI/2]){const spoke=new THREE.Mesh(beveledBox(.205,.044,.027,.013,3),chrome);spoke.position.set(Math.cos(a)*.13,Math.sin(a)*.13,0);spoke.rotation.z=a;m.wheel.add(spoke);}
  const hub=new THREE.Mesh(beveledBox(.16,.12,.065,.035,5),pad);hub.position.z=.025;m.wheel.add(hub);
  const badge=new THREE.Mesh(new THREE.CircleGeometry(.023,24),chrome);badge.position.z=.06;m.wheel.add(badge);
  const column=new THREE.Mesh(new THREE.CylinderGeometry(.038,.065,.56,16),black);column.rotation.x=Math.PI/2;column.position.z=-.28;pivot.add(column);
  const stalk=new THREE.Mesh(new THREE.CylinderGeometry(.009,.012,.20,10),black);stalk.rotation.z=-Math.PI/2;stalk.position.set(-.15,0,-.08);pivot.add(stalk);
- // Closed footwell and upholstered door cards prevent seeing roadway through the cabin.
- add(new THREE.BoxGeometry(1.95,.07,2.28),black,.55,1.53,0);
- add(beveledBox(.54,.60,.52,.04,3),black,1.47,1.87,-.46);
- add(beveledBox(.26,.18,.22,.035,3),black,1.20,2.09,-.46);
- for(const sz of[-1,1]){add(beveledBox(1.73,.84,.13,.04,4),beige,.69,2.01,sz*1.13);add(beveledBox(.65,.085,.16,.025,3),pad,.55,2.28,sz*1.05);add(beveledBox(.13,.025,.045,.01,3),chrome,1.03,2.37,sz*1.042);}
+ // A watertight opaque inner shell remains visible when the exterior tractor is hidden.
+ // Floor/firewall/doors overlap by centimetres, so no FOV or head sway exposes roadway.
+ const shell=m.cabShell=new THREE.Group();shell.name='closed-cab-shell';dash.add(shell);
+ const lining=material(0x343c3e,.96),rubber=new THREE.MeshStandardMaterial({map:leather,color:0xb8c0c3,bumpMap:leather,bumpScale:.002,roughness:1});
+ const panel=(name,w,h,d,x,y,z,mat=lining)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);o.position.set(x,y,z);o.name=name;shell.add(o);return o;};
+ panel('solid-cab-floor',2.96,.12,2.42,.50,1.48,0,rubber);
+ panel('full-width-firewall',.16,1.10,2.42,1.91,2.00,0);
+ panel('lower-dashboard-knee-panel',.30,.40,2.25,1.61,2.13,0,pad);
+ panel('rear-cabin-bulkhead',.12,2.16,2.42,-.93,2.57,0,beige);
+ panel('continuous-cab-ceiling',2.96,.08,2.42,.50,3.61,0,beige);
+ for(const sz of[-1,1]){panel('solid-lower-door-card',2.94,1.30,.12,.50,2.13,sz*1.15,beige);panel('door-sill',2.98,.14,.20,.50,1.60,sz*1.11,rubber);panel('opaque-window-beltline',1.82,.07,.13,.72,2.77,sz*1.12,pad);add(beveledBox(.65,.085,.16,.025,3),pad,.55,2.28,sz*1.05);add(beveledBox(.13,.025,.045,.01,3),chrome,1.03,2.37,sz*1.042);}
+ // Recessed transmission tunnel, padded seats, and three supported non-floating pedals.
+ panel('transmission-tunnel',1.56,.26,.43,1.02,1.68,.18,rubber);
+ for(const z of[-.46,.67]){panel('seat-pedestal',.42,.37,.42,-.35,1.73,z);panel('seat-cushion',.65,.16,.63,-.33,1.99,z,pad);panel('seat-back',.16,.80,.63,-.65,2.37,z,pad);}
+ for(const [z,w,h]of[[-.82,.14,.21],[-.54,.18,.21],[-.24,.10,.28]]){const stem=panel('pedal-arm',.045,.29,.04,1.25,1.685,z,chrome);stem.rotation.z=-.28;const pedal=panel('rubber-pedal',.065,h,w,1.11,1.74,z,rubber);pedal.rotation.z=-.28;for(let i=0;i<5;i++){const q=new THREE.Vector3(-.035,-h*.38+i*h*.19,0).applyEuler(pedal.rotation).add(pedal.position),ridge=panel('pedal-ridge',.012,.009,w*.8,q.x,q.y,q.z,material(0x7a8383));ridge.rotation.copy(pedal.rotation);}}
+ batchStatic(shell);shell.traverse(o=>{if(o.isMesh)o.userData.cabOpaque=true;});
  // Windshield surrounds and door cards share matching endpoints (no isolated floating bars).
  for(const sz of[-1,1]){add(beveledBox(.12,.87,.13,.035,4),beige,1.63,3.08,sz*1.10,0,0,-.24);add(beveledBox(1.75,.22,.13,.045,4),pad,.69,2.56,sz*1.13);add(beveledBox(.13,.93,.13,.035,4),beige,-.16,3.02,sz*1.13);add(beveledBox(.35,.045,.78,.025,4),beige,1.40,3.47,sz*.54,0,0,.18);}
  add(beveledBox(.38,.13,2.32,.04,4),beige,1.54,3.50,0);add(new THREE.BoxGeometry(1.93,.055,2.32),beige,.56,3.59,0);add(new THREE.BoxGeometry(.055,.79,.045),beige,1.63,3.08,0,0,0,-.24);

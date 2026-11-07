@@ -1,3 +1,4 @@
+import {buildDrivableInfield,buildInfieldObstacles,collideInfield,retireAI,updateRetirements,updateInfieldProgress,updateRetirementVisuals} from './infield.js';
 import {raceGrass} from './grass-3d.js';
 import {matteClay,matteClayShader} from './clay-matte.js';
 import {buildSalina} from './salina.js';
@@ -49,7 +50,7 @@ export class RaceScene {
   }
   // One height query for ground-anchored props outside the racing ribbon.
   terrainHeight(x,z){const t=this.trk,q=t.project(x,z);if(this.pits&&Math.abs(x-this.pits.origin.x)<=75&&z>=-51&&z<=41)return 0;const road=this.pits?.road.heightAt(x,z);if(road!==null&&road!==undefined)return road;const apron=this.pits?.lot?.heightAt(x,z);if(apron!==null&&apron!==undefined)return apron;
-    if(q.d<=t.outer+.2)return q.d< -t.W/2-5?-.25:t.height(q.s,q.d);
+    if(q.d<=t.outer+.2)return this.infield?.heightAt(x,z)??t.height(q.s,q.d);
     return outsideHeight(t,q.s,q.d-t.outer);
   }
   trackHeightAt(x,z){const q=this.trk.project(x,z),D=this.trackD,M=D.length,N=this.trackN,P=this.trackGeo.attributes.position,seed=Math.floor(q.s/this.trk.P*N);let lane=D.findIndex(d=>d>q.d)-1;if(lane<0)lane=q.d<D[0]?0:M-2;
@@ -143,9 +144,7 @@ export class RaceScene {
     trackMat.customProgramCacheKey=()=>'dusty-clay-dynamic-track-v1';this.trackMaterial=trackMat;
     const tm = new THREE.Mesh(tg, trackMat);tm.name='matte-clay-track'; tm.receiveShadow = true; scene.add(tm);
 
-    // infield (grass + dirt pit lane)
-    const inf = new THREE.Mesh(new THREE.PlaneGeometry(T.L + 2 * (T.R - T.W / 2 - 5), 2 * (T.R - T.W / 2 - 5)), new THREE.MeshStandardMaterial({ map: (() => { const t = grassTexture('#2c4420'); t.repeat.set(120, 48); return t; })(), roughness: 1 }));
-    inf.rotation.x = -Math.PI / 2; inf.position.y = trk.smooth ? -0.25 : -0.14; inf.receiveShadow = true; scene.add(inf);
+    buildDrivableInfield(this);
 
     // ----- outer wall with sponsor banners + catch fence -----
     const ban = bannerTexture();
@@ -169,11 +168,11 @@ export class RaceScene {
     const embT = grassTexture('#2a3d1e'); embT.repeat.set(1, 1);
     scene.add(Object.assign(new THREE.Mesh(emb, new THREE.MeshStandardMaterial({ map: embT, roughness: 1 })), { receiveShadow: true }));
 
-    // infield tire barrier
-    const tireN = Math.floor(trk.P / 1.4);
-    const tires = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.42, 0.42, 0.85, 10), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }), tireN);
+    // Low, sparse, drive-over inside markers (not a continuous collision wall).
+    const tireN = Math.floor(trk.P / 24);
+    const tires = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.42, 0.42, 0.18, 10), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }), tireN);
     const cA = new THREE.Color(0x151515), cB = new THREE.Color(0xe8e8e8);
-    for (let i = 0; i < tireN; i++) { const s = i * 1.4, p = trk.point(s, trk.inner - 0.2); mtx.makeTranslation(p.x, (trk.smooth ? -.25 : -.14)+.425, p.z); tires.setMatrixAt(i, mtx); tires.setColorAt(i, (Math.floor(i / 3) % 2) ? cA : cB); }
+    for (let i = 0; i < tireN; i++) { const s = i * 24, p = trk.point(s, -T.W/2-5.6); mtx.makeTranslation(p.x, this.infield.heightAt(p.x,p.z)+.09, p.z); tires.setMatrixAt(i, mtx); tires.setColorAt(i, (Math.floor(i / 3) % 2) ? cA : cB); }
     tires.castShadow = true; scene.add(tires);
 
     // start/finish line + checkered flag stand
@@ -268,7 +267,7 @@ export class RaceScene {
       for (const x of [-5, 5]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.6, 10, 0.6), steel); leg.position.set(x, 5, -0.2); leg.castShadow = true; g.add(leg);groundFoot(this.groundSupports,leg,(x,z)=>this.terrainHeight(x,z),{kind:'scoreboard footing'}); }
       this.drawScoreboard(); }
     this.pits=createPitWorld(this);
-    for(let i=0;i<tireN;i++)groundObject(this.groundSupports,tires,()=>trk.smooth?-.25:-.14,{kind:'infield tire barrier',instance:i});
+    for(let i=0;i<tireN;i++)groundObject(this.groundSupports,tires,(x,z)=>this.infield.heightAt(x,z),{kind:'low inside marker',instance:i});
     const infieldStart=scene.children.length;
     // ----- infield: support trucks, canopies, tool carts, light towers (the "infield pit" look)
     { const iz = -(T.R - T.W / 2 - 7) * 0.35, n = clamp(Math.floor(T.L / 26), 2, 6), cols = [0xdfe3e8, 0x2a3a5a, 0x7a1d10, 0x30302e, 0x1f5f3a, 0xc9a227];
@@ -301,7 +300,7 @@ export class RaceScene {
     }
     scene.add(trunks, crowns);
     for(let i=0;i<treeN;i++)groundObject(this.groundSupports,trunks,()=>-.3,{kind:'tree trunk',instance:i});
-    buildSalina(this);this.grass=raceGrass(this);
+    buildSalina(this);buildInfieldObstacles(this);this.grass=raceGrass(this);
     // dust
     const dc = new THREE.Color(T.clay[0], T.clay[1], T.clay[2]).lerp(new THREE.Color(0xe8c8a8), 0.35);
     this.dust = new Dust(scene, 3000, dc);this.dust.setBudget(detail.dust); this.dust.mat.uniforms.uLight.value = 0.9;
@@ -390,7 +389,7 @@ export class RaceScene {
         if (this.tearOffs > 0 && p.lexanMud > 0.04) { this.tearOffs--; p.lexanMud = 0; p.mesh.userData.lexanMud = 0; p.mesh.userData.updateLook?.(p.mud, p.damage); this.flash(`TEAR-OFF (${this.tearOffs} left)`, 0.9, '#9fd6ff'); }
         else if (!this.tearOffs) this.flash('OUT OF TEAR-OFFS', 0.9, '#ff9a4a');
       }
-      if (app.tap('KeyR') && this.phase === 'race') { const p = this.player, pr = trk.project(p.x, p.z), pt = trk.point(pr.s, 0); Object.assign(p, { x: pt.x, z: pt.z, th: pt.th, vx: 0, vz: 0, w: 0,steer:0,reversing:false,reverseHold:0,yawCatch:0,recoverTime:0 }); this.flash('RESET', 1); }
+      if (app.tap('KeyR') && this.phase === 'race') { const p = this.player, pr = trk.project(p.x, p.z), pt = trk.point(pr.s, 0);if(pr.d< -trk.W/2-2)p.lapInvalid=true; Object.assign(p, { x: pt.x, z: pt.z, th: pt.th, vx: 0, vz: 0, w: 0,steer:0,reversing:false,reverseHold:0,yawCatch:0,recoverTime:0 }); this.flash('RESET', 1); }
     }
     if(this.player?.dnf&&!this.ended&&this.phase!=='cooldown')this.retire();
     this.updateFlags(dt);
@@ -399,8 +398,8 @@ export class RaceScene {
     const pin = this.attract ? null : app.input();
     while (this.acc >= h && steps < 12) { this.acc -= h; steps++; this.physics(h, pin); }
     // update race standings
-    for (const c of this.cars) c.dist = (c.lap - 1) * trk.P + c.s;
-    this.order = [...this.cars].sort((a, b) => (a.finishRank ?? 99) - (b.finishRank ?? 99) || b.dist - a.dist);
+    for (const c of this.cars) c.dist = c.dnf?(c.retiredDist??(c.lap-1)*trk.P+c.s):(c.lap - 1) * trk.P + c.s;
+    this.order = [...this.cars].sort((a, b) => (a.finishRank ?? 99) - (b.finishRank ?? 99) || Number(!!a.dnf)-Number(!!b.dnf) || b.dist - a.dist);
     if (this.phase === 'cooldown') { this.cool -= dt; if (this.cool <= 0) this.endRace(); }
     // track dries & rubbers in as the feature goes on
     if (!this.attract) { const lead = this.order[0], prog = clamp((lead.dist) / (this.T.laps * trk.P), 0, 1); trk.dry = clamp(this.dry0 + 0.78 * prog, 0, 0.92); }
@@ -409,7 +408,7 @@ export class RaceScene {
     this.excite = Math.max(0.25, this.excite - dt * 0.15); if (this.crowdU) { this.crowdU.uTime.value = this.time; this.crowdU.uExcite.value = this.excite; }
     if ((this.sbAcc = (this.sbAcc || 0) + dt) > 0.5) { this.sbAcc = 0; this.drawScoreboard(); }
     this.updateSurface(dt);
-    this.updateVisuals(dt);
+    this.updateVisuals(dt);updateRetirementVisuals(this);
     this.updateCamera(dt);
     this.updateAudio(dt);
     if (!this.attract){this.updateHud();const a=document.querySelector('#auto-pace');if(a){const on=(this.flag==='pace'||this.flag==='yellow')&&this.app.settings.autoPace!==false;a.hidden=!on;a.textContent=this.flag==='yellow'?'AUTO CAUTION — holding P'+((this.formationOrder||[]).indexOf(this.player)+1):'AUTO PACE — get ready for green';}}
@@ -419,11 +418,13 @@ export class RaceScene {
     const { trk } = this; const racing = this.phase === 'race' || this.phase === 'attract' || this.phase === 'cooldown' || this.phase === 'pace';
     const pace = this.flag === 'pace' || this.flag === 'yellow', green = !pace && (this.phase === 'race' || this.phase === 'attract');
     const leader = this.paceLeader;
+    updateRetirements(this,h);
     if(pace&&this.app.settings.autoPace!==false&&!this.attract){this.autoFormation(h);return;}
     if(this.handover>0)this.handover=Math.max(0,this.handover-h);
     for(const c of this.cars){c._contactBudget=2*h;c.contactHold=Math.max(0,(c.contactHold||0)-h);}
     computeDraft(this.cars, trk);
     for (const c of this.cars) {
+      if(c.retirement)continue;
       let inp;
       const ps = this.paceSpeed() * (this.flag === 'yellow' ? 0.88 : 1);
       const ctx = { dt: h, green, pace, paceSpeed: c === leader ? ps : ps + 4, paceLane: this.flag === 'pace' ? c.paceLane : -0.1, hold: green ? (4 - (this.greenT || 0)) / 2 : 0 };
@@ -452,9 +453,10 @@ export class RaceScene {
         if (c.contactHold>0)c.stuckT=0;
         if (c.stuckT > 2.5 && !(c.player && (c.reversing || pin?.brake))) { const pr = trk.project(c.x, c.z), pt = trk.point(pr.s, 0); Object.assign(c, { x: pt.x, z: pt.z, th: pt.th, vx: Math.cos(pt.th) * 6, vz: Math.sin(pt.th) * 6, w: 0, stuckT: 0 }); }
       }
+      updateInfieldProgress(this,c,h);const solid=collideInfield(this,c,h);if(solid>2.6)this.hit(c,(solid-2.2)*2.2,'infield object');
       const im = wallCollide(c, trk,h);
       if (im > 2.6) this.hit(c, (im - 2.2) * 2.2, 'wall');
-      if ((!c.player || this.attract)&&!c.contactHold) { if (checkStuck(c, trk, h)) {} }
+      if (!c.dnf&&(!c.player || this.attract)&&!c.contactHold) { if (checkStuck(c, trk, h)) {} }
     }
     for (let i = 0; i < this.cars.length; i++) for (let j = i + 1; j < this.cars.length; j++) {
       const im = carCollide(this.cars[i], this.cars[j],h);
@@ -462,7 +464,7 @@ export class RaceScene {
     }
     // lap counting
     for (const c of this.cars) {
-      const s = trk.project(c.x, c.z).s; c.s = s;
+      const pr=trk.project(c.x,c.z),s=pr.s;c.s=s;if(c.dnf||pr.d< -trk.W/2-2){c.prevS=s;continue;}
       if (c.prevS > trk.P * 0.75 && s < trk.P * 0.25) this.crossLine(c);
       else if (c.prevS < trk.P * 0.25 && s > trk.P * 0.75) c.lap--;
       c.prevS = s;
@@ -471,8 +473,8 @@ export class RaceScene {
   autoFormation(h){
     const trk=this.trk,yellow=this.flag==='yellow',targetV=this.paceSpeed()*(yellow?.88:1);
     this.formationV+=(targetV-this.formationV)*Math.min(1,h*1.5);this.formationS+=this.formationV*h;
-    (this.formationOrder||this.cars).forEach((c,i)=>{
-      const ds=yellow?i*9:Math.floor(i/2)*9,d=yellow?-1:(i%2?1:-1)*Math.min(3.2,this.T.W*.18),s=this.formationS-ds,pt=trk.point(s,d),oldS=c.s;
+    (this.formationOrder||this.cars).forEach((c,i)=>{if(c.dnf)return;
+      const ds=yellow?i*9:Math.floor(i/2)*9;let d=yellow?-1:(i%2?1:-1)*Math.min(3.2,this.T.W*.18);const s=this.formationS-ds,stopped=this.cars.find(o=>o.retirement&&Math.abs(((s-o.s+trk.P*1.5)%trk.P)-trk.P*.5)<16&&Math.abs(o.d-d)<3);if(stopped)d=clamp(stopped.d+4,-trk.W/2+2,trk.W/2-2);const pt=trk.point(s,d),oldS=c.s;
       const recover=c.player&&(Math.hypot(c.x-pt.x,c.z-pt.z)>65||c.speed<.5);
       const a=(this.phase==='pace'||recover)?1:1-Math.exp(-h*2);c.x=lerp(c.x+Math.cos(pt.th)*this.formationV*h,pt.x,a);c.z=lerp(c.z+Math.sin(pt.th)*this.formationV*h,pt.z,a);c.th-=this.formationV*trk.curvature(s)*h;c.th+=wrapAngle(pt.th-c.th)*a;c.vx=Math.cos(c.th)*this.formationV;c.vz=Math.sin(c.th)*this.formationV;c.w=-this.formationV*trk.curvature(s);c.speed=this.formationV;c.steer=-Math.atan(2.8*trk.curvature(s));c.throttle=.25;c.brake=0;c.human=false;c.reverseHold=0;c.reversing=false;c.s=trk.project(c.x,c.z).s;c.d=d;
       if(oldS>trk.P*.75&&c.s<trk.P*.25){c.lap++;c.lapStart=this.time;}c.prevS=c.s;
@@ -486,6 +488,7 @@ export class RaceScene {
       this.shake = Math.min(1, (this.shake || 0) + dmg * 0.06);
       if(c.damage>=100&&was<100&&!c.finished)this.retire();
     }
+    if(!c.player&&!this.attract&&c.damage>=100&&!c.finished)retireAI(this,c,'wreck damage');
     c.lookT = 0; // repaint damage/mud on next visual tick
   }
   updateFlags(dt) {
@@ -524,7 +527,8 @@ export class RaceScene {
   flash(t, sec = 1.2, color = '#fff') { if (!this.hud) return; this.hud.msg.textContent = t; this.hud.msg.style.color = color; this.msgT = sec; }
   crossLine(c) {
     if(c.dnf)return;
-    c.lap++;
+    if(c.lapInvalid){c.lapInvalid=false;c.invalidLaps=(c.invalidLaps||0)+1;c.infieldAdvance=0;c.infieldTime=0;c.lapStart=this.time;if(c.player)this.flash('LAP NOT COUNTED — INFIELD CUT',2,'#ffc780');return;}
+    c.infieldAdvance=0;c.lap++;
     if (this.attract) return;
     const T = this.T;
     if (c.lap > 1) { c.lastLap = this.time - (c.lapStart || this.time); if (!c.bestLap || c.lastLap < c.bestLap) c.bestLap = c.lastLap; }
@@ -657,7 +661,7 @@ export class RaceScene {
         const px = c.x - cs * 1.6 - sn * side, pz = c.z - sn * 1.6 + cs * side;
         dust.emit(px, y + 0.3, pz, c.vx * 0.35 + (Math.random() - 0.5) * 3 + (-sn) * (c.slipR * 8), 0.6 + Math.random() * 1.8, c.vz * 0.35 + (Math.random() - 0.5) * 3 + cs * (c.slipR * 8), 1.0 + Math.random() * .9, 1.3 + Math.random() * 1.0);
       }
-      if (c.damage > 55 && Math.random() < dt * 20) dust.emit(c.x + cs * 1.8, y + 1, c.z + sn * 1.8, 0, 2, 0, 1.0, 1.4); // steam/smoke
+      if (c.damage > 55 && Math.random() < dt * (c.retirement?.parked?2:20)) dust.emit(c.x + cs * 1.8, y + 1, c.z + sn * 1.8, 0, 2, 0, 1.0, 1.4); // steam/smoke
       // mud: worse in the cushion, while sliding, and running in someone's roost; less as the track dries
       let roost = 0;
       for (const o of this.cars) { if (o === c) continue; let ds = o.s - c.s; if (ds < -trk.P / 2) ds += trk.P; if (ds > trk.P / 2) ds -= trk.P; if (ds > 2 && ds < 22 && Math.abs(o.d - c.d) < 3) roost = Math.max(roost, 1 - ds / 22); }
@@ -693,7 +697,7 @@ export class RaceScene {
     const p = this.player, au = this.app.audio, cam = this.camera, fw = _vF.set(0, 0, -1).applyQuaternion(cam.quaternion);
     const car = c => ({ id: c.num ? (String(c.num).split('').reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) % 9973) : 1, x: c.x, y: c.mesh?.position.y ?? 0, z: c.z, vx: c.speed * Math.cos(c.th), vz: c.speed * Math.sin(c.th), speed: c.speed, wheelSpin: c.wheelSpin || 0, throttle: c.throttle || 0 });
     const f = { dt, cam: this.camMode === 1 ? 'incar' : this.camMode === 2 ? 'tv' : 'chase', L: { x: cam.position.x, y: cam.position.y, z: cam.position.z, fx: fw.x, fy: fw.y, fz: fw.z },
-      player: { speed: p.speed, wheelSpin: p.wheelSpin || 0, throttle: p.throttle || 0 }, cars: this.cars.filter(o => o !== p).map(car) };
+      player: { speed: p.speed, wheelSpin: p.wheelSpin || 0, throttle: p.throttle || 0 }, cars: this.cars.filter(o => o !== p&&(!o.dnf||o.retirement?.mode==='limping'&&!o.retirement.parked)).map(car) };
 
     const slide = clamp(Math.abs(p.slipR) * 2.5 + p.wheelSpin * 0.5, 0, 1) * clamp(p.speed / 12, 0, 1);
     au.surface?.(slide, p.speed / 40, p.zone === 'cushion' ? 1 : 0);

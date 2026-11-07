@@ -385,7 +385,7 @@ export class HighwayScene {
         <div class="lbl">RIG DAMAGE</div><div class="bar" style="width:180px"><i id="hw-dmg"></i></div></div>
       <div class="fast-travel-control"><button id="highway-fasttravel">Fast travel</button><small id="fasttravel-note"></small></div>
       <div id="center-msg" style="font-size:54px"></div><div id="sub-msg"></div>
-      <div class="hint">W/↑ throttle • S/↓ brake; hold to reverse • A/D ←/→ steer • Q cruise • E exit assist · park in the pump bay to fuel · J engine brake • C camera • P pause</div>`;
+      <div class="hint">W/↑ throttle • S/↓ brake; hold to reverse • A/D ←/→ steer • Q cruise • B horn • E exit assist · park in the pump bay to fuel · J engine brake • C camera • P pause</div>`;
     this.app.ui.appendChild(h);
     const q = id => h.querySelector(id);
     this.hud = { clock: q('#hw-clock'), el: q('#hw-el'), miles: q('#hw-miles'), exit: q('#hw-exit'), spd: q('#hw-spd'), cruise: q('#hw-cruise'), fuel: q('#hw-fuel'), fat: q('#hw-fat'), dmg: q('#hw-dmg'), msg: q('#center-msg'), sub: q('#sub-msg') };
@@ -433,6 +433,7 @@ export class HighwayScene {
     if (this.menu || this.ended) { this.updateCamera(dt); return; }
     if (this.paused) return;
     this.time += dt;if(this.foliageChunks){const p=this.pt(T.S,0),far=this.app.quality==='low'?1450:1750;for(const m of this.foliageChunks){const b=m.boundingSphere;m.visible=Math.hypot(b.center.x-p.x,b.center.z-p.z)<far+b.radius;}}
+    if(app.tap('KeyB'))app.audio.horn?.();
     if(app.tap('KeyJ')){this.jakeEnabled=this.jakeEnabled===false;this.flash('ENGINE BRAKE '+(this.jakeEnabled?'ON':'OFF'),'#d2f77f',1);}
     if (app.tap('KeyC')) this.camMode = (this.camMode + 1) % 3;
     if (app.tap('KeyQ')) { T.cruise = T.cruise ? 0 : Math.max(20, T.v); this.flash(T.cruise ? `CRUISE ${Math.round(T.cruise * 2.237)} MPH` : 'CRUISE OFF', '#fff', 1); }
@@ -535,7 +536,7 @@ export class HighwayScene {
     this.wheel.rotation.z = -T.steer * 2.6;
   }
   updateCamera(dt) {
-    const cam = this.camera, T = this.t, m = this.semi; m.updateMatrixWorld();
+    const cam = this.camera, T = this.t, m = this.semi;cam.near=this.camMode===1?.07:.2; m.updateMatrixWorld();
     const sh = (this.shake || 0) + (this.rumble || 0) * 0.3; this.shake = Math.max(0, (this.shake || 0) - dt * 2); this.rumble = Math.max(0, (this.rumble || 0) - dt);
     document.body.classList.toggle('cab-view',this.camMode===1);
     this.dash.visible = this.camMode === 1; for (const g of this.glass) g.visible = this.camMode !== 1;
@@ -548,7 +549,7 @@ export class HighwayScene {
     } else if (this.camMode === 1) {
       const bob=Math.sin(this.time*7)*Math.min(.008,Math.abs(T.v)*.0003),sway=Math.sin(this.time*2.1)*Math.min(.009,Math.abs(T.v)*.0003);
       const eye = new THREE.Vector3(0.03+sway, 3.10+bob, -0.46+T.steer*.012).applyMatrix4(m.matrixWorld), tgt = new THREE.Vector3(40, -4.0, -0.46 + T.steer * 1.2).applyMatrix4(m.matrixWorld);
-      cam.position.copy(eye); cam.lookAt(tgt); cam.fov = 66;
+      cam.position.copy(eye); cam.lookAt(tgt); cam.fov = 66;cam.near=.07;
       if ((this.gaugeT -= dt) <= 0) { this.gaugeT = this.app.quality==='low'?.1:.05; this.drawGauges(); }
     } else {
       if (!this.cine || T.S - this.cine.S > 70) { const S = T.S + 160; this.cine = { S, pos: this.pt(S, Math.random() < 0.5 ? 14 : -10, 3 + Math.random() * 6) }; }
@@ -558,7 +559,7 @@ export class HighwayScene {
     cam.updateProjectionMatrix();
   }
   updateHud(ex) {
-    const h = this.hud, T = this.t; if (!h) return;updateTravelButton(this);
+    const h = this.hud, T = this.t; if (!h) return;updateTravelButton(this);const touchTravel=document.getElementById('touch-travel');if(touchTravel)touchTravel.disabled=this.fastTravelButton.disabled;
     const mph = Math.round(Math.abs(T.v) * 2.237);
     h.spd.textContent = (T.v<-.1?'R ':'')+mph; h.spd.style.color = mph > TRAP ? '#ff5a4a' : mph > LIMIT ? '#ffc83d' : '#fff';
     h.cruise.textContent = T.cruise ? `CRUISE ${Math.round(T.cruise * 2.237)}` : '';

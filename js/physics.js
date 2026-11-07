@@ -14,7 +14,7 @@ export class OvalTrack {
     this.L = t.L; this.R = t.R; this.W = t.W; this.bank = t.bank * PI / 180;
     this.P = 2 * t.L + 2 * PI * t.R;
     this.outer = t.W / 2 + 0.6;           // wall offset from centerline
-    this.inner = -t.W / 2 - 7;            // infield tire barrier
+    this.inner = -t.W / 2 - 7;            // reference only; the infield is fully drivable
     this.cushionAmt = t.cushion ?? 1;
     this.s1 = t.L / 2; this.s2 = this.s1 + PI * t.R; this.s3 = this.s2 + t.L; this.s4 = this.s3 + PI * t.R;
     if (this.smooth) this.buildEasements();
@@ -117,9 +117,9 @@ export class OvalTrack {
     return Math.atan(lerp(lo, hi, q));
   }
   // surface height
-  height(s, d) { return this.baseHeight(s,d) + (this.surface ? this.surface.state(s,d).height : 0); }
+  height(s, d) { if(d< -this.W/2-5&&this.infieldHeightAt)return this.infieldHeightAt(s,d);return this.baseHeight(s,d) + (this.surface ? this.surface.state(s,d).height : 0); }
   baseHeight(s, d) {
-    const W = this.W, a = this.bankAngle(s);
+    const W = this.W, a = this.bankAngle(s);if(d< -W/2-5)return lerp(-.25,this.smooth?-.2:-.12,clamp((d+W/2+8)/3,0,1));
     if (this.smooth) {
       const f = this.cornerFactor(s), lo = Math.tan(lerp(this.bankStraight, this.bankLow, f) * PI / 180), hi = Math.tan(lerp(this.bankStraight, this.bankHigh, f) * PI / 180);
       if (d < -W / 2) {
@@ -147,7 +147,7 @@ export class OvalTrack {
   // early the bottom is king; as it rubbers/slicks off the top and cushion come in.
   groove(d, s) {
     const g=this.baseGroove(d), f=this.surface;
-    if(f){
+    if(f&&d>=-this.W/2){
       const q=s===undefined?{wear:f.lane(d),rough:f.laneRough(d)}:f.state(s,d), dry=this.dry||0;
       const rubber=q.wear*dry*(d<0?1:.5);
       g.grip *= 1 + .065*rubber - .028*q.rough;
@@ -158,7 +158,8 @@ export class OvalTrack {
   }
   baseGroove(d) {
     const u = d / (this.W / 2), t = this.dry || 0, c = this.cushionAmt;
-    if (d < -this.W / 2 - 0.5) return { grip: 0.72, drag: 900, dust: 0.3, zone: 'infield' };
+    if(d< -this.W/2-5)return{grip:.52,drag:1800,dust:.85,zone:'grass',rough:.65};
+    if(d< -this.W/2)return{grip:.76,drag:450,dust:1.2,zone:'apron',rough:.25};
     if (u < -0.85) return { grip: 0.9 - 0.04 * t, drag: 120, dust: 0.6, zone: 'apron' };
     if (u > 0.62) return { grip: 1.0 + 0.1 * c + 0.04 * t, drag: 240 * c, dust: 1.8, zone: 'cushion' };
     if (u > 0.22) return { grip: 0.985 + 0.05 * t, drag: 0, dust: 1.0, zone: 'top' };
@@ -303,7 +304,7 @@ export function stepCar(car, input, trk, dt) {
   if (speed < 0.5 && Math.abs(car.throttle) < 0.05 && !car.reversing) { car.vx *= 0.9; car.vz *= 0.9; car.w *= 0.8; }
   car.x += car.vx * dt; car.z += car.vz * dt; car.th = wrapAngle(car.th + car.w * dt);
   if(trk.surface && speed>4){
-    const surf=trk.surface.state(pr.s,pr.d);
+    const surf=pr.d< -trk.W/2-5?{rough:.65}:trk.surface.state(pr.s,pr.d);
     // Small, deterministic wheel deflections. Medium assist still catches them;
     // bumps are suspension motion, not an artificial spin impulse.
     const kick=surf.rough*Math.sin(pr.s*2.8+pr.d*5.2)*.028*Math.min(1,speed/24);
@@ -311,14 +312,14 @@ export function stepCar(car, input, trk, dt) {
     const targetBump=surf.rough*Math.sin(pr.s*3.9)*.018;
     car.bumpV=(car.bumpV||0)+((targetBump-(car.bump||0))*65-(car.bumpV||0)*10)*dt;
     car.bump=clamp((car.bump||0)+car.bumpV*dt,-.025,.025);
-    trk.surface.paint(pr.s,pr.d,speed*dt,car.slipR);
+    if(pr.d>=-trk.W/2)trk.surface.paint(pr.s,pr.d,speed*dt,car.slipR);
   }
 }
 
 // Split position stabilization from the contact impulse: centimeters per substep,
 // not a whole penetration-depth teleport. One capsule contact per body pair.
 function contactShift(c,x,z,dt){const n=Math.hypot(x,z),budget=c._contactBudget??(2*dt),k=n?Math.min(1,budget/n):0;c.x+=x*k;c.z+=z*k;if(c._contactBudget!==undefined)c._contactBudget=Math.max(0,budget-n*k);}
-export function wallCollide(car,trk,dt=1/120){const cs=Math.cos(car.th),sn=Math.sin(car.th);let hit=null;for(const o of[-1.7,0,1.7]){const p=trk.project(car.x+cs*o,car.z+sn*o);let pen=0,nx=0,nz=0;if(p.d+1>trk.outer){pen=p.d+1-trk.outer;nx=p.nx;nz=p.nz;}else if(p.d-1<trk.inner){pen=trk.inner-(p.d-1);nx=-p.nx;nz=-p.nz;}if(pen>0&&(!hit||pen>hit.pen))hit={o,pen,nx,nz};}if(!hit)return 0;const{o,pen,nx,nz}=hit,rx=cs*o,rz=sn*o,vn=(car.vx-car.w*rz)*nx+(car.vz+car.w*rx)*nz,cross=rx*nz-rz*nx;contactShift(car,-nx*Math.max(0,pen-.01)*.22,-nz*Math.max(0,pen-.01)*.22,dt);const bias=Math.min(1.5,Math.max(0,pen-.01)*5),j=Math.max(0,(Math.max(0,vn)*1.035+bias)/(1/car.m+cross*cross/car.I));car.vx-=j*nx/car.m;car.vz-=j*nz/car.m;car.w-=clamp(j*cross/car.I*(ASSIST[car.assist]?.contactYaw??1),-dt*8,dt*8);car.w*=Math.exp(-dt*2);car.vx*=Math.exp(-dt*.25);car.vz*=Math.exp(-dt*.25);car.contactHold=.5;if(ASSIST[car.assist]?.safe&&vn>1)car.recoverTime=.85;return Math.max(0,vn);}
+export function wallCollide(car,trk,dt=1/120){const cs=Math.cos(car.th),sn=Math.sin(car.th);let hit=null;for(const o of[-1.7,0,1.7]){const p=trk.project(car.x+cs*o,car.z+sn*o);let pen=0,nx=0,nz=0;if(p.d+1>trk.outer){pen=p.d+1-trk.outer;nx=p.nx;nz=p.nz;}if(pen>0&&(!hit||pen>hit.pen))hit={o,pen,nx,nz};}if(!hit)return 0;const{o,pen,nx,nz}=hit,rx=cs*o,rz=sn*o,vn=(car.vx-car.w*rz)*nx+(car.vz+car.w*rx)*nz,cross=rx*nz-rz*nx;contactShift(car,-nx*Math.max(0,pen-.01)*.22,-nz*Math.max(0,pen-.01)*.22,dt);const bias=Math.min(1.5,Math.max(0,pen-.01)*5),j=Math.max(0,(Math.max(0,vn)*1.035+bias)/(1/car.m+cross*cross/car.I));car.vx-=j*nx/car.m;car.vz-=j*nz/car.m;car.w-=clamp(j*cross/car.I*(ASSIST[car.assist]?.contactYaw??1),-dt*8,dt*8);car.w*=Math.exp(-dt*2);car.vx*=Math.exp(-dt*.25);car.vz*=Math.exp(-dt*.25);car.contactHold=.5;if(ASSIST[car.assist]?.safe&&vn>1)car.recoverTime=.85;return Math.max(0,vn);}
 export function carCollide(A,B,dt=1/120){if((B.x-A.x)**2+(B.z-A.z)**2>49)return 0;const ca=Math.cos(A.th),sa=Math.sin(A.th),cb=Math.cos(B.th),sb=Math.sin(B.th);let hit=null;for(const oa of[-1.6,0,1.6])for(const ob of[-1.6,0,1.6]){const dx=B.x+cb*ob-A.x-ca*oa,dz=B.z+sb*ob-A.z-sa*oa,d=Math.hypot(dx,dz),pen=1.96-d;if(pen>0&&(!hit||pen>hit.pen))hit={oa,ob,pen,nx:d>1e-5?dx/d:-sa,nz:d>1e-5?dz/d:ca};}if(!hit)return 0;const{oa,ob,pen,nx,nz}=hit,rax=ca*oa,raz=sa*oa,rbx=cb*ob,rbz=sb*ob,vn=(A.vx-A.w*raz-B.vx+B.w*rbz)*nx+(A.vz+A.w*rax-B.vz-B.w*rbx)*nz,ra=rax*nz-raz*nx,rb=rbx*nz-rbz*nx,inv=1/A.m+1/B.m+ra*ra/A.I+rb*rb/B.I,j=Math.max(0,(Math.max(0,vn)*1.025+Math.min(1.3,Math.max(0,pen-.015)*4))/inv),corr=Math.max(0,pen-.015)*.12;contactShift(A,-nx*corr,-nz*corr,dt);contactShift(B,nx*corr,nz*corr,dt);A.vx-=j*nx/A.m;A.vz-=j*nz/A.m;B.vx+=j*nx/B.m;B.vz+=j*nz/B.m;A.w-=clamp(j*ra/A.I*.3*(ASSIST[A.assist]?.contactYaw??1),-dt*6,dt*6);B.w+=clamp(j*rb/B.I*.3*(ASSIST[B.assist]?.contactYaw??1),-dt*6,dt*6);A.w*=Math.exp(-dt);B.w*=Math.exp(-dt);A.contactHold=B.contactHold=.5;if(ASSIST[A.assist]?.safe&&vn>1)A.recoverTime=.75;if(ASSIST[B.assist]?.safe&&vn>1)B.recoverTime=.75;return Math.max(0,vn);}
 
 // ---------------------------------------------------------------- AI driver
@@ -433,7 +434,7 @@ export function aiInput(car, trk, ai, others, ctx = {}) {
   let ahead = null, aDs = 99, behind = null, bhDs = 99;
   const pace = !!ctx.pace;
   for (const o of others) {
-    if (o === car || o.dnf) continue;
+    if (o === car) continue;
     const ds = sGap(o, car, P), dd = o.d - car.d, gap = o.player ? 3.0 : 2.7;
     if (ds > 0 && ds < aDs) { aDs = ds; ahead = o; }
     if (ds < 0 && -ds < bhDs) { bhDs = -ds; behind = o; }

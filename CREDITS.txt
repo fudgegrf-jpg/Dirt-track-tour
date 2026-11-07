@@ -51,6 +51,17 @@ Concrete lots reuse the existing CC0 Poly Haven Concrete scan credited above.
 Grass blade artwork, wind/LOD shader, lot paint/joints/stains and curb geometry
 are original procedural work for this game. No additional third-party assets.
 
+FAST MUSIC / HUD 2 / SEMI 2 / DRIVABLE INFIELD
+  Nitro Riffs compact intro: derived only from the owner-supplied Jayden/Suno
+  recording credited above; 15 s, 56-kbps stereo MP3, embedded text-safely.
+  HUD icons, wheel/pedal styling, wood-rim grain, cab shell, infield geometry,
+  recovery routing and diesel/horn synthesis are original procedural work.
+  Diesel is an original heavy-inline-six synthesis, not a Cummins or Detroit
+  recording/model, and uses no new third-party sound samples. Listening demos
+  are compressed MP3 embedded in their own HTML, not runtime dependencies.
+  Infield grass/visible pole-base concrete reuse the credited CC0 Poly Haven
+  scans. Existing font, texture and music licenses/credits are unchanged.
+
 STATIC GITHUB RELEASE
   OFL fonts are embedded as CSS data URLs; licenses remain in vendor/fonts.
   App icons are embedded. Unused preview WAVs are omitted; engine/effect audio is synthesized. Nitro Riffs is embedded as MP3 text chunks.
