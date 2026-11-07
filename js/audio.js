@@ -1,4 +1,3 @@
-import {MenuMusic} from './menu-music.js';
 // Engine & track audio. Everything is synthesized here (no sound files):
 //  1) At startup we "record" seamless loops of a cross-plane V8 at several RPMs, on and off throttle, by modelling the
 //     engine itself: the 1-8-4-3-6-5-7-2 firing order split onto two banks of open headers (that uneven per-bank
@@ -225,7 +224,6 @@ export class GameAudio {
     const noise = (type, f, q) => { const n = c.createBufferSource(); n.buffer = nb; n.loop = true; const fl = c.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q; const g = c.createGain(); g.gain.value = 0; n.connect(fl); fl.connect(g); g.connect(this.master); n.start(); return { fl, g }; };
     this.noiseBuffer=nb;
     this.tire = noise('bandpass', 1800, 0.8); this.roar = noise('lowpass', 220, 0.7); this.crowd = noise('bandpass', 700, 0.5);
-    this.music=new MenuMusic(this);this.music.setPhase(this.app?.paused?'pause':this.app?.phase||'title');
   }
   ensureDiesel() {
     if (this.diesel) return; const c = this.ctx, sr = c.sampleRate, mk = (arr) => { const b = c.createBuffer(1, arr.length, sr); b.copyToChannel(arr, 0); return b; };
@@ -235,9 +233,7 @@ export class GameAudio {
     this.dTone=0;
 
   }
-  unlockMusic(){if(this.live())this.music?.unlock();}
-  setMusicPhase(phase){this.music?.setPhase(phase);}
-  applyVolume() { this.music?.apply();if (this.master) this.master.gain.value = this.muted ? 0 : (this.app?.settings?.volume ?? 0.8); }
+  applyVolume() { if (this.master) this.master.gain.value = this.muted ? 0 : (this.app?.settings?.volume ?? 0.8); }
   live() { if (this.muted || !this.ensure()) return false; if (!this.offline && this.ctx.state === 'suspended') this.ctx.resume?.().catch?.(() => {}); return true; }
   pop(t, dest, gain = 0.5) {
     const c = this.ctx, s = c.createBufferSource(); s.buffer = this.pops[(Math.random() * this.pops.length) | 0]; s.playbackRate.value = 0.8 + Math.random() * 0.5;
@@ -351,7 +347,7 @@ export class GameAudio {
     for (const v of this.ai.values()) v.dispose(); this.ai.clear(); this.lPrev = null; this.gb = null;
     for (const g of [this.tire.g.gain, this.roar.g.gain, this.crowd.g.gain]) { g.cancelScheduledValues(t); g.setTargetAtTime(0, t, 0.05); }
   }
-  toggleMute() { this.muted = !this.muted; localStorage.setItem('dtt.mute', this.muted ? '1' : '0'); if (this.muted) this.stop(); this.applyVolume();if(!this.muted)this.unlockMusic(); }
+  toggleMute() { this.muted = !this.muted; localStorage.setItem('dtt.mute', this.muted ? '1' : '0'); if (this.muted) this.stop(); this.applyVolume();if(!this.muted)this.live(); }
 }
 
 // 16-bit PCM WAV from channel arrays

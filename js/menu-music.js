@@ -1,21 +1,2 @@
-// ORIGINAL composition: "Greenlight Current", 132 BPM, 16 bars. No samples,
-// quotations or transcription of any recording. KS strings, electric bass and
-// synthesized drums become ONE looping buffer (cheap on phones).
-export const MUSIC_BPM=132,MUSIC_BARS=16;
-export function synthMenuMusic(sr=22050){const beat=60/MUSIC_BPM,N=Math.round(MUSIC_BARS*4*beat*sr),out=new Float32Array(N);let seed=938341;const rand=()=>((seed=Math.imul(seed,1664525)+1013904223|0)>>>0)/4294967296;const add=(start,n,fn,gain=1)=>{const o=Math.round(start*sr);for(let i=0;i<n;i++)out[(o+i)%N]+=fn(i/sr,i)*gain;};
- const string=(at,midi,dur,gain,lead=false,bend=0)=>{const f=440*2**((midi-69)/12),delay=new Float32Array(2048);for(let i=0;i<2048;i++)delay[i]=(rand()*2-1)*.8;let w=0,low=0,phase=0;add(at,Math.floor((dur+(lead?.2:.04))*sr),(t)=>{const pitch=f*2**((bend*Math.min(1,t/.18)+(lead?.12*Math.sin(t*6.3*Math.PI*2)*Math.min(1,t*5):0))/12),d=sr/pitch,r=(w-d+8192)%2048,j=Math.floor(r),a=r-j,x=delay[j]*(1-a)+delay[(j+1)%2048]*a;low=.48*low+.52*x;delay[w]=(low*.996);w=(w+1)%2048;phase+=pitch/sr;const amp=Math.min(1,t/.003)*Math.exp(-t/(lead?dur*.85:dur*.47))*Math.min(1,Math.max(0,(dur+.04-t)/.04));return Math.tanh((low+(lead?.12*Math.sin(phase*6.283):0))*6)*amp;},gain);};
- const kick=at=>add(at,Math.floor(.28*sr),t=>(Math.sin(6.283*(48*t+5.4*(1-Math.exp(-t*40))))*Math.exp(-t*20)+(rand()*2-1)*Math.exp(-t*260)*.25)*Math.min(1,t*1500),.48);
- const snare=at=>{let p=0;add(at,Math.floor(.25*sr),t=>{const n=rand()*2-1,hi=n-p*.45;p=n;return(hi*Math.exp(-t*22)+Math.sin(6.283*182*t)*Math.exp(-t*38)*.33)*Math.min(1,t*900);},.30);};
- const hat=(at,open=false)=>{let p=0;add(at,Math.floor((open?.22:.07)*sr),t=>{const n=rand()*2-1,y=n-p;p=n;return y*Math.exp(-t*(open?22:65))*Math.min(1,t*2200);},open?.075:.045);};
- const crash=at=>{let p=0;add(at,Math.floor(1.25*sr),t=>{const n=rand()*2-1,y=n-p*.8;p=n;return(y*.6+Math.sin(t*7193)*Math.sin(t*10391)*.14)*Math.exp(-t*4.7)*Math.min(1,t*1000);},.13);};
- const roots=[40,40,43,45,40,38,47,45,40,42,48,47,40,45,38,40],leadNotes=[[76,79,83,81],[79,76,74,78],[79,83,86,83],[81,84,88,86],[83,81,79,76],[78,81,85,83],[83,86,90,88],[86,83,81,78],[76,78,83,86],[78,82,85,89],[84,88,91,88],[83,86,90,86],[88,86,83,79],[81,84,88,91],[86,83,81,78],[79,83,78,76]];
- for(let bar=0;bar<MUSIC_BARS;bar++){const t=bar*4*beat,root=roots[bar];for(const k of[0,1.5,2,2.75])kick(t+k*beat);snare(t+beat);snare(t+3*beat);for(let k=0;k<8;k++)hat(t+k*.5*beat,k===7&&bar%4===3);if(bar%4===0)crash(t);for(let k=0;k<8;k++){if(k===3&&bar%2===0)continue;const at=t+k*.5*beat,dur=(k===7?.4:.21);string(at,root,dur,.12);string(at+.007,root+7,dur,.083);string(at+.004,root+12,dur,.045);const f=440*2**((root-12-69)/12);add(at,Math.floor(.23*sr),x=>(Math.sin(6.283*f*x)+.25*Math.sin(12.566*f*x))*Math.exp(-x*9)*Math.min(1,x*500),.16);}
-  for(let k=0;k<4;k++){const dur=[1.35,.55,.8,1.05][k]*beat;string(t+[0,1.5,2,3][k]*beat,leadNotes[bar][k],dur,.17,true,k===0&&bar%2?2:0);if(k===3&&bar%4===3)for(let j=0;j<3;j++)string(t+(3.25+j*.25)*beat,leadNotes[bar][k]+[2,4,7][j],.15,.09,true);}
-  if(bar%4===3)for(let j=0;j<3;j++)add(t+(3.25+j*.25)*beat,Math.floor(.18*sr),x=>Math.sin(6.283*(125-j*22)*x)*Math.exp(-x*22),.15);
- }
- let peak=0;for(let i=0;i<N;i++){out[i]=Math.tanh(out[i]*1.35);peak=Math.max(peak,Math.abs(out[i]));}for(let i=0;i<N;i++)out[i]*=.88/peak;return{samples:out,sampleRate:sr,duration:N/sr,bpm:MUSIC_BPM,bars:MUSIC_BARS};}
-export class MenuMusic{constructor(audio){this.audio=audio;this.ctx=audio.ctx;this.gain=this.ctx.createGain();this.gain.gain.value=0;this.gain.connect(audio.master);this.unlocked=false;this.phase='title';this.active=false;}
- setPhase(phase){this.phase=phase;this.active=!['race','highway','load'].includes(phase);this.apply();}
- unlock(){this.unlocked=true;this.apply();}
- apply(){const a=this.audio,st=a.app?.settings||{},on=this.active&&this.unlocked&&!a.muted&&!st.musicMuted&&!document.hidden;this.target=on?(st.musicVolume??.35):0;if(on&&!this.source&&!this.pending){this.pending=setTimeout(()=>{this.pending=null;if(!this.active||!this.unlocked)return;const music=synthMenuMusic(),b=this.ctx.createBuffer(1,music.samples.length,music.sampleRate);b.copyToChannel(music.samples,0);this.source=this.ctx.createBufferSource();this.source.buffer=b;this.source.loop=true;this.source.connect(this.gain);this.source.start();this.apply();},0);}const t=this.ctx.currentTime,g=this.gain.gain;g.cancelScheduledValues(t);g.setValueAtTime(g.value,t);g.setTargetAtTime(this.target,t,this.target?.28:.09);}
-}
+// Retired. Kept inert for older cached imports; the game no longer imports this.
+export class MenuMusic { setPhase() {} unlock() {} apply() {} }
