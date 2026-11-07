@@ -17,6 +17,3 @@ Fonts and icons are embedded; sound is synthesized. No install/build is needed. 
 
 ### Articulated rig, cockpit and paid Fast Travel
 The highway trailer has independent world-space axle/heading state, constrained at the fifth wheel, with off-tracking, yaw inertia, a jackknife limit and loaded-mass acceleration/braking. C or touch Cam cycles the chase, woodgrain cockpit (10 live instruments), and roadside cameras. Fast Travel quotes remaining-mile fuel plus relief hauling, requires confirmation, and updates arrival/season saves once.
-
-### Original menu score
-Greenlight Current is a new 132-BPM instrumental rock composition: synthesized drums, distorted rhythm strings, bass, and a bending/vibrato lead. It loops after the first tap, with independent Music volume/mute in Settings and smooth driving/menu fades. No commercial audio or sampled riffs are included.
