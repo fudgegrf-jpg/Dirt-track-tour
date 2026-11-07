@@ -10,7 +10,7 @@ export function wrapAngle(a) { while (a > PI) a -= 2 * PI; while (a < -PI) a += 
 export class OvalTrack {
   constructor(t) {
     this.smooth = t.smooth !== false;
-    this.bankStraight=t.id==='volusia'?6:3;this.bankLow=t.id==='volusia'?18:t.bank*.75;this.bankHigh=t.bank;
+    this.bankStraight=t.id==='salina'?6:3;this.bankLow=t.id==='salina'?18:t.bank*.75;this.bankHigh=t.bank;
     this.L = t.L; this.R = t.R; this.W = t.W; this.bank = t.bank * PI / 180;
     this.P = 2 * t.L + 2 * PI * t.R;
     this.outer = t.W / 2 + 0.6;           // wall offset from centerline

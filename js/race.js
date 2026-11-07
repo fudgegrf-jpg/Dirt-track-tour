@@ -1,3 +1,5 @@
+import {buildSalina} from './salina.js';
+import {pbrMaps,pbrMaterial} from './gfx2-materials.js';
 import {foliageMap,crownGeometry,pineGeometry} from './foliage.js';
 import {groundObject,groundFoot} from './grounding.js';
 import {polishInfield} from './world-polish.js';
@@ -13,8 +15,9 @@ import { AI_DRIVERS, POINTS, PURSE, BONUS } from './data.js';
 import { makeLateModel, WHEEL_R, DRIVER_EYE, makeSky, dirtTextures, grassTexture, bannerTexture, fenceTexture, glowTexture, trailerTexture, Dust, disposeScene, srand, rnd } from './gfx.js';
 
 // per-track time of day: two dusk shows, one twilight, the rest under the lights at full night
-const SKY_PRESET = { volusia: 'dusk', eldora: 'dusk', i55: 'twilight' };
+const SKY_PRESET = { salina: 'day', eldora: 'dusk', i55: 'twilight' };
 const SKIES = {
+  day:{fog:0x9cb9cf,fogD:.0006,hemi:[0xc4d9ee,0x4d4331,.85],pool:.12,sky:{top:0x114e9a,horizon:0xb1d1e7,bottom:0x303d28,sunDir:[-.4,.75,-.5],sunColor:0xfff3d8,sunSize:.028,glow:0xffe0b0,glowAmt:.06,starAmt:0,moon:[0,-1,0]}},
   dusk: { fog: 0x2b2030, fogD: 0.0017, hemi: [0xa8a8d0, 0x3a2414, 0.75], pool: 0.22,
     sky: { top: 0x0c1636, horizon: 0x6a3e52, bottom: 0x120c0c, sunDir: [0.75, 0.015, -0.66], sunColor: 0xff7a38, sunSize: 0.09, glow: 0xff6a28, glowAmt: 1.0, starAmt: 0.45, moon: [-0.55, 0.38, 0.6] } },
   twilight: { fog: 0x17141f, fogD: 0.0019, hemi: [0x8f98c8, 0x2a1a10, 0.62], pool: 0.32,
@@ -69,7 +72,7 @@ export class RaceScene {
 
     // ground
     const gt = grassTexture('#26391b'); gt.repeat.set(220, 220);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshStandardMaterial({ map: gt, roughness: 1, color: 0x9aa890 }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshStandardMaterial({ map: gt, roughness: 1, color: 0x9aa890,polygonOffset:true,polygonOffsetFactor:2,polygonOffsetUnits:4 }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = trk.smooth ? -0.3 : -0.2; ground.receiveShadow = true; scene.add(ground);
 
     // ----- the clay oval (banked ribbon with grooves) -----
@@ -106,7 +109,7 @@ export class RaceScene {
     trk.surface.upload();
     this.surfaceTex=new THREE.DataTexture(trk.surface.bytes,trk.surface.N,trk.surface.M,THREE.RGBAFormat);
     this.surfaceTex.wrapS=THREE.RepeatWrapping;this.surfaceTex.magFilter=THREE.LinearFilter;this.surfaceTex.minFilter=THREE.LinearFilter;this.surfaceTex.needsUpdate=true;
-    const trackMat = new THREE.MeshStandardMaterial({ map: dirt.map, bumpMap: dirt.bump, normalMap: dirt.normal, normalScale:new THREE.Vector2(.14,.14), roughnessMap:dirt.roughness, bumpScale: 0.022, roughness: 0.96, metalness: 0, vertexColors: true });
+    const trackMat = new THREE.MeshStandardMaterial({ map: dirt.map, bumpMap: dirt.bump, normalMap: dirt.normal, normalScale:new THREE.Vector2(.28,.28), roughnessMap:dirt.roughness, bumpScale: 0.022, roughness: 0.96, metalness: 0, vertexColors: true });
     // light pools under each pole bank + the bottom groove going black & glossy as the track dries/rubbers in
     this.pools = Array.from({ length: 24 }, () => new THREE.Vector3(1e5, 1e5, 1));
     const dryU = this.dryU, pools = this.pools, surfaceTex=this.surfaceTex, surfaceSize=this.surfaceSize=new THREE.Vector2(trk.surface.N,trk.surface.M);
@@ -137,13 +140,13 @@ export class RaceScene {
     const tm = new THREE.Mesh(tg, trackMat); tm.receiveShadow = true; scene.add(tm);
 
     // infield (grass + dirt pit lane)
-    const inf = new THREE.Mesh(new THREE.PlaneGeometry(T.L + 2 * (T.R - T.W / 2 - 5), 2 * (T.R - T.W / 2 - 5)), new THREE.MeshStandardMaterial({ map: (() => { const t = grassTexture('#2c4420'); t.repeat.set(30, 12); return t; })(), roughness: 1 }));
+    const inf = new THREE.Mesh(new THREE.PlaneGeometry(T.L + 2 * (T.R - T.W / 2 - 5), 2 * (T.R - T.W / 2 - 5)), new THREE.MeshStandardMaterial({ map: (() => { const t = grassTexture('#2c4420'); t.repeat.set(120, 48); return t; })(), roughness: 1 }));
     inf.rotation.x = -Math.PI / 2; inf.position.y = trk.smooth ? -0.25 : -0.14; inf.receiveShadow = true; scene.add(inf);
 
     // ----- outer wall with sponsor banners + catch fence -----
     const ban = bannerTexture();
-    const wallGeo = ribbon(trk, N, s => { const h = trk.height(s, trk.outer); return [[trk.outer, h], [trk.outer, h + 1.15], [trk.outer + 0.35, h + 1.15], [trk.outer + 0.35, h - 0.1]]; }, [0, 1.15 / 18, 1.15 / 18 + 0.02, 0.1], 18);
-    const wall = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({ map: ban, roughness: 0.6 })); wall.castShadow = true; wall.receiveShadow = true; scene.add(wall);
+    const wallGeo = ribbon(trk, N, s => { const h = trk.height(s, trk.outer); return [[trk.outer, h], [trk.outer, h + 1.15], [trk.outer + 0.35, h + 1.15], [trk.outer + 0.35, h - 0.1]]; }, [0, 1, 1.05, 0], 18);
+    const wallMaps=pbrMaps('concrete',[12,1]);wallMaps.map.dispose();const wall = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({ map: ban, normalMap:wallMaps.normalMap,normalScale:new THREE.Vector2(.3,.3),roughnessMap:wallMaps.roughnessMap,roughness: .9 })); wall.castShadow = true; wall.receiveShadow = true; scene.add(wall);
     const ft = fenceTexture(); ft.repeat.set(1, 3.5);
     const fenceGeo = ribbon(trk, N, s => { const h = trk.height(s, trk.outer) + 1.15; return [[trk.outer + 0.15, h], [trk.outer + 0.15, h + 5.2]]; }, [0, 1], 1.6);
     const fence = new THREE.Mesh(fenceGeo, new THREE.MeshStandardMaterial({ map: ft, alphaTest: 0.4, transparent: false, side: THREE.DoubleSide, metalness: .15, roughness: .8, color: 0x9a9da2 }));
@@ -217,7 +220,7 @@ export class RaceScene {
       const step = new THREE.Mesh(new THREE.BoxGeometry(len, 0.5 + r * 0.55, 0.95), gsMat);
       step.position.set(0, (0.5 + r * 0.55) / 2, standZ + r * 0.95); step.receiveShadow = true; step.castShadow = r % 4 === 0; scene.add(step);
       for (let x = -len / 2 + 0.4; x < len / 2 - 0.3; x += 0.62) {
-        if (rnd() < 0.18 || rnd()>detail.crowd) continue;
+        if (rnd() < 0.18 || rnd()>detail.crowd || T.id==='salina'&&[-60,-20,20,60].some(a=>Math.abs(x-a)<1)) continue;
         mtx.makeTranslation(x + (rnd() - 0.5) * 0.15, 0.5 + r * 0.55 + 0.4, standZ + r * 0.95 - 0.1); people.setMatrixAt(pi, mtx);
         people.setColorAt(pi, new THREE.Color(shirt[Math.floor(rnd() * shirt.length)]).multiplyScalar(0.6 + rnd() * 0.5)); pi++;
       }
@@ -291,6 +294,7 @@ export class RaceScene {
     }
     scene.add(trunks, crowns);
     for(let i=0;i<treeN;i++)groundObject(this.groundSupports,trunks,()=>-.3,{kind:'tree trunk',instance:i});
+    buildSalina(this);
     // dust
     const dc = new THREE.Color(T.clay[0], T.clay[1], T.clay[2]).lerp(new THREE.Color(0xe8c8a8), 0.35);
     this.dust = new Dust(scene, 3000, dc);this.dust.setBudget(detail.dust); this.dust.mat.uniforms.uLight.value = 0.9;
@@ -439,7 +443,7 @@ export class RaceScene {
       if ((this.phase === 'race' || this.phase === 'pace') && (!c.player || this.app.autopilot) && !c.finished && !c.dnf) {
         c.stuckT = Math.hypot(c.vx, c.vz) < 2 ? (c.stuckT || 0) + h : 0;
         if (c.contactHold>0)c.stuckT=0;
-        if (c.stuckT > 2.5) { const pr = trk.project(c.x, c.z), pt = trk.point(pr.s, 0); Object.assign(c, { x: pt.x, z: pt.z, th: pt.th, vx: Math.cos(pt.th) * 6, vz: Math.sin(pt.th) * 6, w: 0, stuckT: 0 }); }
+        if (c.stuckT > 2.5 && !(c.player && (c.reversing || pin?.brake))) { const pr = trk.project(c.x, c.z), pt = trk.point(pr.s, 0); Object.assign(c, { x: pt.x, z: pt.z, th: pt.th, vx: Math.cos(pt.th) * 6, vz: Math.sin(pt.th) * 6, w: 0, stuckT: 0 }); }
       }
       const im = wallCollide(c, trk,h);
       if (im > 2.6) this.hit(c, (im - 2.2) * 2.2, 'wall');

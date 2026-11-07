@@ -14,9 +14,9 @@ export function migrateDefaultLivery(s) {
 }
 // Season data: real, well-known US dirt tracks (geometry is a stylized approximation).
 export const TRACKS = [
-  { id:'volusia', name:'Volusia Speedway Park', short:'Volusia', city:'Barberville, FL', lat:29.18, lon:-81.42,
-    size:'1/2-mile', desc:'High-banked, fast half-mile. Florida sand-clay, wide cushion.', event:'Sunshine Speedweeks',
-    L:150, R:60, W:22, bank:25, laps:6, purse:1.0, clay:[0.50,0.27,0.16], cushion:1.0 },
+  { id:'salina', name:'Salina Highbanks Speedway', short:'Salina', city:'Pryor Creek, OK', lat:36.29555, lon:-95.200245,
+    size:'3/8-mile', desc:'Narrow Oklahoma highbanks. Dark, moist clay beneath the aluminum grandstands.', event:'Highbanks Showdown',
+    L:110, R:61, W:17, bank:26, laps:6, purse:1.0, clay:[0.32,0.22,0.15], cushion:1.0 },
   { id:'batesville', name:'Batesville Motor Speedway', short:'Batesville', city:'Locust Grove, AR', lat:35.77, lon:-91.64,
     size:'3/8-mile', desc:'Tight Arkansas bullring. Slick, rough, races around the bottom.', event:'Ozark Showdown',
     L:110, R:48, W:18, bank:13, laps:8, purse:0.9, clay:[0.58,0.30,0.17], cushion:0.6 },
@@ -33,9 +33,9 @@ export const TRACKS = [
 
 // Interstate routes between rounds (waypoints lon/lat roughly along the real highways)
 export const ROUTES = [
-  { from:'volusia', to:'batesville', hwy:['I-75 N','I-10 W','I-65 N','I-22 W','US-167 N'], main:'I-65 N',
-    pts:[[-81.42,29.18],[-82.64,30.19],[-84.28,30.44],[-86.50,30.55],[-88.04,30.69],[-86.80,33.52],[-90.05,35.15],[-91.73,35.25],[-91.64,35.77]],
-    cities:['Lake City','Tallahassee','Mobile','Birmingham','Memphis','Searcy'] },
+  { from:'salina', to:'batesville', hwy:['OK-20 E','US-412 E','US-63 S','US-167 S'], main:'US-412 E',
+    pts:[[-95.200245,36.29555],[-94.8,36.17],[-94.14,36.18],[-93.72,36.08],[-93.12,36.23],[-91.48,36.31],[-91.64,35.77]],
+    cities:['Siloam Springs','Springdale','Huntsville','Harrison','Hardy'] },
   { from:'batesville', to:'i55', hwy:['US-67 N','I-55 N'], main:'US-67 N',
     pts:[[-91.64,35.77],[-90.96,36.07],[-90.39,36.76],[-90.45,37.60],[-90.40,38.28]],
     cities:['Walnut Ridge','Poplar Bluff','Fredericktown'] },
