@@ -19,7 +19,7 @@ const CONT = [['#c81d25', '#fff', 'CLAYMASTER'], ['#111', '#f2c014', 'RIDGELINE 
 const TIRE_BRAND = 'CLAYMASTER';
 const hex = c => '#' + new THREE.Color(c).getHexString();
 const cv = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-const ctex = (c, srgb = true) => { const t = new THREE.CanvasTexture(c); if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+const ctex = (c, srgb = true) => { const limit=globalThis.DTT?.quality==='high'?2048:1024;if(c.width>limit){const scaled=cv(limit,Math.round(c.height*limit/c.width));scaled.getContext('2d').drawImage(c,0,0,scaled.width,scaled.height);c=scaled;}const t = new THREE.CanvasTexture(c); if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
 function hashStr(s) { let h = 2166136261; for (const ch of String(s)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
 const lum = c => new THREE.Color(c).getHSL({}).l;
 const FONT = (px, it = true) => `${it ? 'italic ' : ''}900 ${px}px Impact, "Arial Black", "Helvetica Neue", sans-serif`;
@@ -498,12 +498,12 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
   sponsor = sponsor || SPONSORS[seed % SPONSORS.length];
   const sponsor2 = SPONSORS[(seed + 7) % SPONSORS.length] === sponsor ? SPONSORS[(seed + 8) % SPONSORS.length] : SPONSORS[(seed + 7) % SPONSORS.length];
   const L = { color, accent, num: String(num), sponsor, sponsor2, name, seed, scheme: livery.scheme ?? 4, third: livery.third };
-  const env = envTex();
+  const env = null; // use the actual scene sky/environment instead of a fixed night-only map
   const root = new THREE.Group(), hi = new THREE.Group(), lo = new THREE.Group();
   const lod = new THREE.LOD(); lod.addLevel(hi, 0); lod.addLevel(lo, 55); root.add(lod);
 
   // materials
-  const PAINT = { roughness: 0.52, metalness: 0.0, clearcoat: 0.28, clearcoatRoughness: 0.48, envMap: env, envMapIntensity: 0.22 };
+  const PAINT = { roughness: 0.4, metalness: 0.04, clearcoat: 0.4, clearcoatRoughness: 0.32, envMap: env, envMapIntensity: 0.85 };
   const SKIN = 0.84;   // canvas whites under floodlights + bloom blew out at 1.0
   const paint = new THREE.MeshPhysicalMaterial({ color, ...PAINT });
   const skinR = new THREE.MeshPhysicalMaterial({ map: ctex(liveryCanvas({ ...L, side: 1 })), ...PAINT });
@@ -515,10 +515,10 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
   const spF = new THREE.MeshPhysicalMaterial({ map: ctex(spoilerCanvas(L, false)), ...PAINT });
   const spB = new THREE.MeshPhysicalMaterial({ map: ctex(spoilerCanvas(L, true)), ...PAINT });
   const skins = [skinR, skinL, deckM, tailM, roofM, spF, spB];
-  const inner = new THREE.MeshStandardMaterial({ color: 0x6d7278, metalness: .30, roughness: .74, envMap: env, envMapIntensity:.10 });
-  const alu = new THREE.MeshStandardMaterial({ color: 0xc9ced4, metalness: 0.35, roughness: 0.65, envMap: env, envMapIntensity: 0.08 });
-  const chrome = new THREE.MeshStandardMaterial({ color: 0xa1a7ad, metalness: 0.38, roughness: 0.64, envMap: env, envMapIntensity: 0.08 });
-  const steel = new THREE.MeshStandardMaterial({ color: cageColor ?? livery.cageColor ?? (plum(accent)>.7 ? 0xc92127 : accent), metalness: 0.15, roughness: 0.7, envMap: env, envMapIntensity: 0.12 });
+  const inner = new THREE.MeshStandardMaterial({ color: 0x6d7278, metalness: .30, roughness: .74, envMap: env, envMapIntensity:.65 });
+  const alu = new THREE.MeshStandardMaterial({ color: 0xc9ced4, metalness: 0.35, roughness: 0.65, envMap: env, envMapIntensity: 0.65 });
+  const chrome = new THREE.MeshStandardMaterial({ color: 0xa1a7ad, metalness: 0.38, roughness: 0.64, envMap: env, envMapIntensity: 0.65 });
+  const steel = new THREE.MeshStandardMaterial({ color: cageColor ?? livery.cageColor ?? (plum(accent)>.7 ? 0xc92127 : accent), metalness: 0.15, roughness: 0.7, envMap: env, envMapIntensity: 0.65 });
   const chassisM = new THREE.MeshStandardMaterial({ color: new THREE.Color(accent).lerp(new THREE.Color(0x222222), 0.55), metalness: .25, roughness: .74, envMap: env, envMapIntensity:.1 });
   const springM = new THREE.MeshStandardMaterial({ color: [0xd92b2b, 0x2a62d8, 0xf2c014, 0x1f9e4a][seed % 4], metalness: 0.4, roughness: 0.4 });
   const header = new THREE.MeshStandardMaterial({ color: 0x93918a, metalness: .45, roughness: .68, envMap: env, envMapIntensity:.08 });
@@ -529,17 +529,19 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
   const BG = bodyGeos('hi'), BL = bodyGeos('lo');
   const mk = (geo, mat, shadow = true) => { const m = new THREE.Mesh(geo, mat); m.castShadow = shadow; m.receiveShadow = shadow; return m; };
   const sideR = mk(BG.sideR, skinR), sideL = mk(BG.sideL, skinL), inR = mk(BG.inR, inner, false), inL = mk(BG.inL, inner, false);
+  sideR.name='late-model-right-panel';sideL.name='late-model-left-panel';
   const nose = mk(BG.hood, deckM), noseFace = mk(BG.front, deckM), rear = mk(BG.deck, paint), tail = mk(BG.tail, tailM);
+  noseFace.name='late-model-nose-valance';
   const split = mk(BG.splitter, splitM);
   const roof = mk(BG.roof, roofM), roofU = mk(BG.roofU, black, false);
   const roofNum = roof;   // number is painted on the roof itself
   // nose trim strip along the leading edge + the lower edge of the nose sides
-  const trimM = new THREE.MeshStandardMaterial({ color: 0x5b5d60, metalness: .15, roughness: .72, envMap: env, envMapIntensity: .08 });
+  const trimM = new THREE.MeshStandardMaterial({ color: 0x5b5d60, metalness: .15, roughness: .72, envMap: env, envMapIntensity: .65 });
   const trimPts = []; for (let j = 0; j <= 16; j++) { const v = j / 16; trimPts.push(new THREE.Vector3(XN + noseBow(v) + 0.006, yTop(XN) - 0.004, edgeZ(XN, -1) + (edgeZ(XN, 1) - edgeZ(XN, -1)) * v)); }
   const trim = mk(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(trimPts), 24, 0.008, 6), trimM, false);
   const sideTrim = [-1, 1].map(s => { const pts = []; for (let i = 0; i <= 12; i++) { const x = FW.x + FW.ar + 0.02 + (XN - FW.x - FW.ar - 0.02) * i / 12; pts.push(new THREE.Vector3(noseSideX(x), yBot(x) + 0.004, sideZ(x, yBot(x), s, 0.012))); } return mk(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.007, 5), trimM, false); });
   // windshield (clear lexan with a banner across the top)
-  const wsM = new THREE.MeshPhysicalMaterial({ map: ctex(windshieldCanvas(L)), transparent: true, roughness: .65, metalness: 0, specularIntensity: .12, envMap: env, envMapIntensity: .08, side: THREE.DoubleSide, depthWrite: false });
+  const wsM = new THREE.MeshPhysicalMaterial({ map: ctex(windshieldCanvas(L)), transparent: true, roughness: .65, metalness: 0, specularIntensity: .12, envMap: env, envMapIntensity: .65, side: THREE.DoubleSide, depthWrite: false });
   const ws = new THREE.Mesh(BG.ws, wsM); ws.renderOrder = 3;
   // big angled rear spoiler with side boards
   const spA = 0.6, spH = 0.285, SD = [-Math.sin(spA), Math.cos(spA), 0];
@@ -614,7 +616,7 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
   hi.add(bake(ch));
 
   // ---- roll cage (visible through the open cockpit), seat, driver
-  const cageMat = new THREE.MeshStandardMaterial({ color: cageColor ?? livery.cageColor ?? (plum(accent)>.7 ? 0xc92127 : accent), metalness: 0.15, roughness: 0.7, envMap: env, envMapIntensity: 0.12 });
+  const cageMat = new THREE.MeshStandardMaterial({ color: cageColor ?? livery.cageColor ?? (plum(accent)>.7 ? 0xc92127 : accent), metalness: 0.15, roughness: 0.7, envMap: env, envMapIntensity: 0.65 });
   const cg = new THREE.Group();
   const CZL = RZL + 0.07, CZR = RZR - 0.07, YRF = Y_ROOF_F - 0.03, YRR = Y_ROOF_R - 0.03;
   for (const z of [CZL, CZR]) {
@@ -647,7 +649,7 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
   const hc = document.createElement('canvas'); hc.width = 256; hc.height = 128; { const x = hc.getContext('2d'); x.fillStyle = P.light ? P.acc : P.base; x.fillRect(0, 0, 256, 128); x.fillStyle = P.light ? P.base : P.acc; x.fillRect(0, 40, 256, 22); x.fillStyle = P.third; x.fillRect(0, 62, 256, 8); }
   const hm = new THREE.MeshPhysicalMaterial({ map: ctex(hc), clearcoat: .15, clearcoatRoughness: .7, roughness: .62, envMap: env, envMapIntensity: .12 });
   const shell = new THREE.Mesh(new THREE.SphereGeometry(0.13, 24, 16), hm); shell.scale.set(1.1, 1, 0.95); helmet.add(shell);
-  const visor = new THREE.Mesh(new THREE.SphereGeometry(0.133, 18, 8, -0.85, 1.7, 1.15, 0.55), new THREE.MeshStandardMaterial({ color: 0x171a1d, metalness: .1, roughness: .6, envMap: env, envMapIntensity: .08 })); visor.rotation.y = Math.PI / 2; visor.scale.set(1.1, 1, 0.95); helmet.add(visor);
+  const visor = new THREE.Mesh(new THREE.SphereGeometry(0.133, 18, 8, -0.85, 1.7, 1.15, 0.55), new THREE.MeshStandardMaterial({ color: 0x171a1d, metalness: .1, roughness: .6, envMap: env, envMapIntensity: .65 })); visor.rotation.y = Math.PI / 2; visor.scale.set(1.1, 1, 0.95); helmet.add(visor);
   const suit = new THREE.MeshStandardMaterial({ color: P.light ? 0x1a1a1a : color, roughness: 0.85 });
   const hans = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.36), black); hans.position.set(-0.08, -0.16, 0); helmet.add(hans);
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.15, 0.42, 10), suit); torso.position.set(-0.1, -0.38, 0); torso.rotation.z = -0.2; helmet.add(torso);
@@ -662,7 +664,7 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
   const swMat = new THREE.MeshStandardMaterial({ map: sidewallTex(), color: 0xffffff, roughness: 0.8 });
   const swBlack = new THREE.MeshStandardMaterial({ color: 0x1d1d1d, roughness: 0.85 });
   const loTire = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.9 });
-  const wheelM = new THREE.MeshStandardMaterial({ color: L.scheme===8?0x323a43:0xa1a7ad, metalness: 0.38, roughness: 0.64, envMap: env, envMapIntensity: 0.08, side: THREE.DoubleSide });
+  const wheelM = new THREE.MeshStandardMaterial({ color: L.scheme===8?0x323a43:0xa1a7ad, metalness: 0.38, roughness: 0.64, envMap: env, envMapIntensity: 0.65, side: THREE.DoubleSide });
   for (const [W_, wz, sz, front] of wheelsDef) {
     const R = W_.r, w = W_.w, rr = W_.rim, hw = w / 2;
     const wg = new THREE.Group(); wg.position.set(W_.x, R, wz);
@@ -676,6 +678,8 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
     const swO = lathe(part(31, 40, [], [[rr + 0.006, hw - 0.025]]), swMat); { const p = swO.geometry.attributes.position, uv = swO.geometry.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, 0.5 + p.getX(i) / (2 * R), 0.5 + p.getY(i) / (2 * R)); }
     const swI = lathe(part(0, 9, [[rr + 0.006, -hw + 0.025]]), swBlack, 32);
     inn.add(tread, swO, swI);
+    // Real, shallow rubber tread lugs; near LOD only, one draw per rotating tire.
+    const count=globalThis.DTT?.quality==='high'?56:32,blocks=new THREE.InstancedMesh(new THREE.BoxGeometry(.034,.012,w*.20),black,count*3),matrix=new THREE.Matrix4(),dummy=new THREE.Object3D();blocks.name='gfx2-tread-blocks';for(let lane=0;lane<3;lane++)for(let k=0;k<count;k++){const a=(k+(lane%2)*.5)/count*Math.PI*2;dummy.position.set(Math.cos(a)*(R-.003),Math.sin(a)*(R-.003),(lane-1)*w*.23);dummy.rotation.set(0,0,a-Math.PI/2);dummy.updateMatrix();blocks.setMatrixAt(lane*count+k,dummy.matrix);}blocks.castShadow=true;inn.add(blocks);
     // spun wheel: rolled outer lip, smooth polished barrel, center plate set deep inboard
     const dz = -hw + (front ? 0.075 : 0.065);
     const wp = [[rr + 0.016, hw - 0.03], [rr + 0.02, hw - 0.012], [rr + 0.012, hw - 0.002], [rr, hw - 0.008], [rr - 0.006, hw - 0.03], [rr - 0.008, dz + 0.03], [rr - 0.03, dz + 0.004], [0.12, dz], [0.09, dz + 0.012]].map(([r, z]) => new THREE.Vector2(r, z));
@@ -699,6 +703,13 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
     const lf = new THREE.Mesh(new THREE.CircleGeometry(rr + 0.02, 16), wheelM); lf.position.z = hw - 0.03; lw.add(lf);
     lo.add(lw); lowWheels.push(lw);
   }
+
+  // Mounted Dzus fasteners, panel seam caps and spoiler hardware: baked together.
+  const hardware=new THREE.Group(),mounts=[];hardware.name='gfx2-panel-fasteners';
+  for(const side of[-1,1])for(let i=0;i<27;i++){const x=XT+.12+i*(XN-XT-.26)/26,y=yTop(x)-.055;if(y<yBot(x)+.04)continue;const cap=new THREE.Mesh(new THREE.CylinderGeometry(.011,.011,.009,8),alu);cap.rotation.x=Math.PI/2;cap.position.set(noseSideX(x),y,sideZ(x,y,side,0)+side*.004);hardware.add(cap);mounts.push({point:cap.position.toArray(),normal:[0,0,side],panel:side>0?'late-model-right-panel':'late-model-left-panel'});}
+  for(let i=0;i<15;i++){const v=(i+.5)/15,y=Y_TIP-.04,u=(y-.115)/(yTop(XN)-.115),a=smooth((u-.8)/.2),zl=sideZ(XN,y,-1)*(1-a)+edgeZ(XN,-1)*a,zr=sideZ(XN,y,1)*(1-a)+edgeZ(XN,1)*a;const cap=new THREE.Mesh(new THREE.SphereGeometry(.01,6,4),alu);cap.position.set(XN+noseBow(v)+.01+.13*Math.sin(Math.PI*u)*Math.sin(Math.PI*v)**.4,y,zl+(zr-zl)*v);hardware.add(cap);mounts.push({point:cap.position.toArray(),normal:[1,0,0],panel:'late-model-nose-valance'});}
+  for(const z of[ZL+.12,ZC,ZR-.12]){const rod=tube([XT+.35,Y_TAIL-.04,z],[spTop.x+.015,spTop.y-.04,z],.008,chrome);hardware.add(rod);}
+  const bakedHardware=bake(hardware,false);bakedHardware.name='gfx2-panel-fasteners';bakedHardware.userData.mounts=mounts;hi.add(bakedHardware);
 
   // ---- optional cockpit (player's car, in-car camera)
   let cockpitGroup = null, wheelGrp = null, gauge = null, lexMud = null;
@@ -725,7 +736,7 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
     const sw = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.12), new THREE.MeshBasicMaterial({ map: textPanel(['IGN  FUEL  FAN'], 256, 48, '#222', '#ddd') })); basis(sw, [0, 0, 1], [0.3, 0.95, 0]); sw.position.set(0.5, 1.06, 0.33); cockpitGroup.add(sw);
     const tilt = new THREE.Group(); tilt.position.set(0.24, 1.06, -0.16); tilt.rotation.z = -0.35; cockpitGroup.add(tilt); wheelGrp = new THREE.Group(); tilt.add(wheelGrp);
     const rimW = new THREE.Mesh(new THREE.TorusGeometry(0.175, 0.02, 10, 32), new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.8 })); rimW.rotation.y = Math.PI / 2; wheelGrp.add(rimW);
-    const satin = new THREE.MeshStandardMaterial({ color: 0x6c7074, metalness: 0.7, roughness: 0.5, envMap: env, envMapIntensity: 0.35 });   // brushed, not mirror: no bloom glare in the driver's face
+    const satin = new THREE.MeshStandardMaterial({ color: 0x6c7074, metalness: 0.7, roughness: 0.5, envMap: env, envMapIntensity: 0.855 });   // brushed, not mirror: no bloom glare in the driver's face
     const fw = new THREE.Mesh(new THREE.PlaneGeometry(BW - 0.1, 0.62), dashM); fw.rotation.y = -Math.PI / 2; fw.position.set(0.86, 0.66, ZC); cockpitGroup.add(fw);   // firewall: hides the headers/engine bay from in the seat
     for (let i = 0; i < 3; i++) { const a = i * Math.PI * 2 / 3 + Math.PI / 2; const sp = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.17, 0.03), satin); sp.position.set(0, Math.sin(a) * 0.085, Math.cos(a) * 0.085); sp.rotation.x = -a + Math.PI / 2; wheelGrp.add(sp); }
     const hubW = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.06, 12), satin); hubW.rotation.z = Math.PI / 2; wheelGrp.add(hubW);
@@ -748,10 +759,10 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
     // mud 0..1, dmg 0..100: paint dulls toward clay color, overlays fade in, tires go brown
     updateLook(mud = ud.mud, dmg = ud.dmg) {
       ud.mud = mud; ud.dmg = dmg;
-      const k = 1 - dmg / 220, cc = 0.28 * (1 - mud * 0.8), ro = 0.52 + mud * 0.35;
+      const k = 1 - dmg / 220, cc = 0.38 * (1 - mud * 0.8), ro = 0.42 + mud * 0.35;
       paint.color.copy(baseColor).lerp(ud.clay, mud * 0.45).multiplyScalar(k * SKIN); paint.clearcoat = cc; paint.roughness = ro;
       for (const s of skins) { s.color.setScalar(k * SKIN).lerp(ud.clay.clone().multiplyScalar(1.6), mud * 0.25); s.clearcoat = cc; s.roughness = ro;
-        if(s===roofM||s===spF||s===spB){s.roughness=Math.max(.70,ro);s.clearcoat=.08*(1-mud*.8);s.clearcoatRoughness=.8;s.envMapIntensity=.06;} }
+        if(s===roofM||s===spF||s===spB){s.roughness=Math.max(.55,ro);s.clearcoat=.18*(1-mud*.8);s.clearcoatRoughness=.8;s.envMapIntensity=.35;} }
       for (const m of mudMats) m.opacity = Math.min(1, mud * 1.15);
       tireMat.color.copy(tireBase).lerp(ud.clay.clone().multiplyScalar(1.4), mud * 0.7); loTire.color.copy(loTireBase).lerp(ud.clay, mud * 0.6); swMat.color.setScalar(1).lerp(ud.clay, mud * 0.8);
       if (lexMud) lexMud.opacity = Math.min(0.78, ud.lexanMud);
@@ -779,6 +790,6 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
       gauge.tex.needsUpdate = true;
     },
   };
-  root.userData = ud; ud.updateLook(0, 0);
+  ud.detailVersion=2;ud.modelFeatures={wedge:true,panels:true,spoiler:true,rollCage:true,treadBlocks:true,offsetWheels:true,fasteners:true};root.userData = ud; ud.updateLook(0, 0);
   return root;
 }

@@ -1,3 +1,4 @@
+import {detailEnvironment} from './details.js';
 import { DEFAULT_DRIVER, DEFAULT_PROFILE } from './data.js';
 import { ContactShadow } from './contact.js';
 // Background 3D scene behind the 2D shop / results / arrival overlays: your rig in the pits at dusk.
@@ -7,7 +8,7 @@ import { makeLateModel, makeSemi, makeSky, dirtTextures, grassTexture, glowTextu
 export class ShowroomScene {
   constructor(app, opts = {}) {
     this.app = app; const st = app.state || {};
-    const s = this.scene = new THREE.Scene();
+    const s = this.scene = new THREE.Scene();detailEnvironment(s,.65);
     if (opts.hero || app.phase === 'shop') { this.studio=true; this.setupStudio(opts.profile || app.state || app.profile || {}); return; }
     this.camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 5000);
     s.fog = new THREE.Fog(0xb2a08f, 65, 250);
