@@ -13,6 +13,7 @@ export class MobileControls {
       <button id="touch-clear" data-phase="race" title="Clear muddy windshield">Clear</button>
       <button id="touch-reset" data-phase="race" title="Recover car to the track">Reset</button>
       <button id="touch-cruise" data-phase="highway" aria-pressed="false" title="Toggle cruise control">Cruise</button>
+      <button id="touch-jake" data-phase="highway" aria-pressed="true" title="Toggle engine brake">Jake</button>
       <button id="touch-exit" data-phase="highway" title="Take a signed truck-stop exit: keep right and slow down">Exit</button>
       <button id="touch-winch" data-phase="load" title="Crew winch costs $300 of in-game money">Winch $300</button>
       <button id="touch-fullscreen" title="Toggle fullscreen" aria-label="Toggle fullscreen">⛶</button>
@@ -24,9 +25,9 @@ export class MobileControls {
     const $=id=>this.root.querySelector('#touch-'+id);
     const action=(id,f)=>$(id).addEventListener('click',f);
     const key=(id,code)=>action(id,()=>{this.app.pressed.add(code);});
-    key('camera','KeyC');key('clear','KeyT');key('reset','KeyR');key('cruise','KeyQ');key('winch','KeyX');
+    key('camera','KeyC');key('clear','KeyT');key('reset','KeyR');key('cruise','KeyQ');key('jake','KeyJ');key('winch','KeyX');
     action('pause',()=>{this.app.togglePause();this.sync();});
-    action('exit',()=>{const m=app.mode;if(m?.exits?.some(e=>m.t.S>e.S-200&&m.t.S<e.S+40))app.pressed.add('KeyE');else app.toast('Tap Exit near a truck-stop sign; keep right and slow down.');});
+    action('exit',()=>{const m=app.mode;if(m?.fuelAutopilot||m?.exits?.some(e=>m.t.S>e.S-200&&m.t.S<e.S+40))app.pressed.add('KeyE');else app.toast('Tap Exit near a truck-stop sign; keep right and slow down.');});
     action('tilt',()=>this.toggleTilt());action('fullscreen',()=>this.fullscreen());
     const hold=(el,set)=>{
       el.addEventListener('pointerdown',e=>{if(!this.driving)return;e.preventDefault();set.add(e.pointerId);el.setPointerCapture(e.pointerId);el.classList.add('held');});
@@ -72,6 +73,7 @@ export class MobileControls {
     this.root.querySelector('#touch-driving').hidden=!driving;
     for(const el of this.root.querySelectorAll('[data-driving]'))el.hidden=!driving;
     for(const el of this.root.querySelectorAll('[data-phase]'))el.hidden=!driving||el.dataset.phase!==phase;
+    this.root.querySelector('#touch-jake').setAttribute('aria-pressed',String(a.mode?.jakeEnabled!==false));
     this.root.querySelector('#touch-cruise').setAttribute('aria-pressed',String(!!(phase==='highway'&&a.mode?.t?.cruise)));
     this.root.querySelector('#touch-exit').classList.toggle('available',phase==='highway'&&!!a.mode?.exits?.some(e=>a.mode.t.S>e.S-200&&a.mode.t.S<e.S+40));
   }

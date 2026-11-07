@@ -79,7 +79,7 @@ export class HighwayScene {
   }
   // ---------------------------------------------------------------- world
   buildWorld() {
-    const s = this.scene, Lend = this.Lg + 700;
+    const s = this.scene, Lend = this.Lg + 700;const fuelN=1,fuelSites=[this.Lg*.5];const fuelLand=(S,lat)=>lat>10&&lat<125&&fuelSites.some(e=>S>e-230&&S<e+520);
     this.sky = makeSky({ top: 0x2a5fb0, horizon: 0xbfd6e8, bottom: 0x40403a, sunDir: [0.3, 0.4, -1], sunColor: 0xfff0d0, sunSize: 0.03, stars: true, moon: [-0.4, 0.5, 0.7] }); s.add(this.sky);
     this.skyU = this.sky.children[0].material.uniforms; this.stars = this.sky.userData.stars;
     s.fog = new THREE.Fog(0xbfd6e8, 120, 1500);
@@ -92,10 +92,10 @@ export class HighwayScene {
     this.roadMat = roadMat;
     // regional look per leg: Deep South pines -> Ozark hardwoods -> Missouri/Iowa prairie -> Corn Belt
     const BIOMES = [
-      { name: 'Gulf Coast pines', grass: '#587a34', pine: 0.7, trees: 2800, windy: 0.3 },
-      { name: 'Ozark hills', grass: '#4a6a2c', pine: 0.35, trees: 3400, windy: 0.35 },
-      { name: 'Prairie', grass: '#7a8040', pine: 0.08, trees: 1300, windy: 0.85 },
-      { name: 'Corn Belt', grass: '#62783a', pine: 0.04, trees: 1500, windy: 0.7 },
+      { name: 'Gulf Coast pines', grass: '#526d3c', pine: 0.7, trees: 2800, windy: 0.3 },
+      { name: 'Ozark hills', grass: '#4b6238', pine: 0.35, trees: 3400, windy: 0.35 },
+      { name: 'Prairie', grass: '#747b47', pine: 0.08, trees: 1300, windy: 0.85 },
+      { name: 'Corn Belt', grass: '#5d703e', pine: 0.04, trees: 1500, windy: 0.7 },
     ];
     const bio = this.biome = BIOMES[Math.min(this.app.state.round, BIOMES.length - 1)] || BIOMES[0];
     this.windy = bio.windy;
@@ -111,7 +111,7 @@ export class HighwayScene {
       const ours = new THREE.Mesh(this.ribbon(S0, S1, [-1, 3.7, 7.4, 11.4], (S) => this.at(S).y, (S, lat) => [(lat + 1) / 12.4, S / 12]), roadMat); ours.receiveShadow = true; s.add(ours);
       const theirs = new THREE.Mesh(this.ribbon(S0, S1, [-MEDIAN - 12.4, -MEDIAN - 7.4, -MEDIAN - 3.7, -MEDIAN + 1], (S) => this.at(S).y, (S, lat) => [(-MEDIAN - lat + 1) / 12.4, -S / 12]), roadMat); theirs.receiveShadow = true; s.add(theirs);
       s.add(Object.assign(new THREE.Mesh(this.ribbon(S0, S1, medL, tY, (S, lat) => [lat / 8, S / 8], field), terrMat), { receiveShadow: true }));
-      s.add(Object.assign(new THREE.Mesh(this.ribbon(S0, S1, terrR, tY, (S, lat) => [lat / 8, S / 8], field), terrMat), { receiveShadow: true }));
+      const roadside=new THREE.Mesh(this.ribbon(S0,S1,terrR,tY,(S,lat)=>[lat/8,S/8],field),terrMat);roadside.receiveShadow=true;roadside.userData.roadside={S0,lats:terrR};s.add(roadside);
       s.add(Object.assign(new THREE.Mesh(this.ribbon(S0, S1, terrL, tY, (S, lat) => [lat / 8, S / 8], field), terrMat), { receiveShadow: true }));
     }
     // guardrail (right) + median cable barrier
@@ -120,30 +120,31 @@ export class HighwayScene {
       const g = this.ribbon(S0, S0 + 400, [0, 1], (S, k) => this.at(S).y + 0.45 + k * 0.33, (S, k) => [S / 4, k], null);
       // ribbon() places lats: hack — rebuild positions at fixed lat 10.9
       const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const r = Math.floor(i / 2), S = Math.min(S0 + 400, S0 + r * 4), c = this.at(S); p.setXYZ(i, c.x - Math.sin(c.th) * 10.9, c.y + 0.45 + (i % 2) * 0.33, c.z + Math.cos(c.th) * 10.9); }
-      g.computeVertexNormals(); s.add(Object.assign(new THREE.Mesh(g, steel), { castShadow: true }));
+      g.computeVertexNormals();const rail=new THREE.Mesh(g,steel);rail.userData.railS=S0;rail.castShadow=true;s.add(rail);
       for (const h of [0.55, 0.8]) { const cg = this.ribbon(S0, S0 + 400, [-7.5, -7.47], (S) => this.at(S).y + h - 0.6, () => [0, 0], null); s.add(new THREE.Mesh(cg, steel)); }
     }
     const nP = Math.floor((Lend - this.S0) / 4);
     const posts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 1.0, 0.12), new THREE.MeshStandardMaterial({ color: 0x8a8e92, metalness: 0.6, roughness: 0.5 }), nP * 2);
     const mt = new THREE.Matrix4(), q = new THREE.Quaternion(), v3 = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
-    for (let i = 0; i < nP; i++) { const S = this.S0 + i * 4; mt.makeTranslation(this.pt(S, 11.05, 0.4)); posts.setMatrixAt(i * 2, mt); mt.makeTranslation(this.pt(S, -7.5, -0.2)); posts.setMatrixAt(i * 2 + 1, mt); }
+    for (let i = 0; i < nP; i++) { const S = this.S0 + i * 4; mt.makeTranslation(this.pt(S,11.05,fuelLand(S,11.05)?-100:.4)); posts.setMatrixAt(i * 2, mt); mt.makeTranslation(this.pt(S, -7.5, -0.2)); posts.setMatrixAt(i * 2 + 1, mt); }
     s.add(posts);
     // trees: broadleaf + pines, in lines along field edges and woodlots
     const NT = Math.round(bio.trees*qualityPreset(this.app.quality).trees);
     const pines = new THREE.InstancedMesh(new THREE.ConeGeometry(2.2, 9, 7), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 }), NT);
     let nPine = 0; const hide = new THREE.Matrix4().makeScale(0, 0, 0);
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.4, 4, 5), new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 1 }), NT);
-    const crowns = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 1), new THREE.MeshStandardMaterial({ color: 0x3d5a26, roughness: 0.95 }), NT);
+    const crowns = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 }), NT);
     const tc = new THREE.Color();
     for (let i = 0; i < NT; i++) {
       const S = this.S0 + rnd() * (Lend - this.S0); const side = rnd() < 0.55 ? 1 : -1;
       const lot = Math.sin(S / 140) > 0.2 ? 0 : 1;
       let lat = 24 + Math.pow(rnd(), 1.5) * (lot ? 260 : 90); lat = side > 0 ? lat : -MEDIAN - 12.4 - lat;
       if (rnd() < 0.3) lat = side > 0 ? 18 + rnd() * 8 : -MEDIAN - 12.4 - 18 - rnd() * 8;
+      if(fuelLand(S,lat))lat=150+rnd()*100;
       const p = this.pt(S, lat); p.y = this.terrainY(S, lat); const sc = 0.7 + rnd() * 0.9;
       mt.compose(v3.set(p.x, p.y + 2 * sc, p.z), q.identity(), v3.clone().set(sc, sc, sc)); trunks.setMatrixAt(i, mt);
       q.setFromEuler(new THREE.Euler(rnd() * 3, rnd() * 3, 0)); mt.compose(v3.set(p.x, p.y + 5.2 * sc, p.z), q, new THREE.Vector3(sc * (1 + rnd() * 0.3), sc * (1.1 + rnd() * 0.4), sc)); crowns.setMatrixAt(i, mt);
-      crowns.setColorAt(i, tc.setHSL(0.2 + rnd() * 0.1, 0.4 + rnd() * 0.25, 0.3 + rnd() * 0.14));
+      crowns.setColorAt(i, tc.setHSL(0.25 + rnd() * 0.065, 0.32 + rnd() * 0.19, 0.23 + rnd() * 0.12));
       if (rnd() < bio.pine) { // swap the broadleaf crown for a tall pine
         crowns.setMatrixAt(i, hide);
         mt.compose(v3.set(p.x, p.y + 7.5 * sc, p.z), q.identity(), new THREE.Vector3(sc, sc * (1 + rnd() * 0.5), sc)); pines.setMatrixAt(nPine, mt);
@@ -170,15 +171,15 @@ export class HighwayScene {
     this.sign(140, 13.5, signTexture(['SPEED LIMIT', String(LIMIT), 'TRUCKS ' + String(LIMIT)], '#f4f4f4', '#111', 256, 340), 1.6, 2.1, 1.4);
     const cities = this.route.cities;
     let exitNo = 40 + Math.floor(rnd() * 150);
-    const nEx = Math.max(2, Math.round(this.Lg / 1500));
+    const nEx = 1;
     for (let k = 0; k < nEx; k++) {
-      const S = (k + 0.62) * this.Lg / nEx; exitNo += 14 + Math.floor(rnd() * 40);
+      const S = this.Lg * .5; exitNo += 14 + Math.floor(rnd() * 40);
       const town = cities[Math.min(cities.length - 1, Math.floor(S / this.Lg * cities.length))];
       const brand = ["PILOT", "LOVE'S", "TA", "FLYING J", "PETRO"][k % 5];
       this.exits.push({ S, no: exitNo, town, brand });
-      this.sign(S - 420, 13.6, signTexture([`EXIT ${exitNo}`, `${town}`, `${brand} TRUCK STOP • 1 MILE`, 'DIESEL • FOOD • SHOWERS'], '#0b6b3a', '#fff', 640, 360), 6, 3.4);
+      this.sign(S - 420, 13.6, signTexture([`EXIT ${exitNo}`, `${town}`, `${brand} TRUCK STOP • 1 MILE`, 'FUEL / DIESEL • PUMP BAY'], '#0b6b3a', '#fff', 640, 360), 6, 3.4);
       this.sign(S - 60, 12.4, signTexture(['EXIT', String(exitNo)], '#0b6b3a', '#fff', 256, 200), 1.8, 1.4);
-      this.truckStop(S + 60, brand);
+      this.truckStop(S + 120, brand);
       this.waterTower(S + 160, 70 + rnd() * 60, town);
       if (k % 2 === 0) { const rem = cities.slice(Math.floor(S / this.Lg * cities.length) + 1); const lines = rem.slice(0, 2).map((c, i) => `${c}   ${Math.round((this.Lg - S) * this.mpm * (i + 1) / (rem.length || 1))}`); lines.push(`${this.to.city.split(',')[0]}   ${Math.round((this.Lg - S - 300) * this.mpm)}`); this.sign(S + 380, 13.6, signTexture(lines, '#0b6b3a', '#fff', 640, 300), 5.4, 2.6); }
     }
@@ -189,7 +190,22 @@ export class HighwayScene {
     // destination: track glow + sign
     this.sign(this.Lg - 260, 13.6, signTexture([`${this.to.name}`, `${this.to.event}`, 'RACERS EXIT HERE ▶'], '#7a1d10', '#fff', 640, 300), 6, 2.8);
     this.dest = this.pt(this.Lg + 120, 140);
-    const glow = glowTexture();
+    const glow = glowTexture();this.buildFuelAccess();
+  }
+  buildFuelAccess(){
+    const pavement=new THREE.MeshStandardMaterial({color:0x515960,roughness:.98}),mark=new THREE.MeshBasicMaterial({color:0xd2f77f,transparent:true,opacity:.16,depthWrite:false}),edge=new THREE.MeshBasicMaterial({color:0xd2f77f});
+    const surface=(start,end,latFn,width,mat)=>{const geo=this.ribbon(start,end,[-width/2,width/2],S=>this.at(S).y+.035,(S,l)=>[S/8,l/8]),p=geo.attributes.position;for(let i=0;i<p.count;i++){const S=Math.min(end,start+Math.floor(i/2)*4),lat=latFn(S)+(i%2?width/2:-width/2),v=this.pt(S,lat,mat===pavement?.035:mat===mark?.075:.1);p.setXYZ(i,v.x,v.y,v.z);}geo.computeVertexNormals();this.scene.add(new THREE.Mesh(geo,mat));};
+    for(const ex of this.exits){
+      surface(ex.S-200,ex.S+70,S=>lerp(8,50,smooth(ex.S-200,ex.S+70,S)),11,pavement);
+      surface(ex.S+45,ex.S+225,()=>56,56,pavement);
+      surface(ex.S+200,ex.S+490,S=>lerp(50,5.5,smooth(ex.S+200,ex.S+490,S)),11,pavement);
+      surface(ex.S+100,ex.S+143,()=>51,9,mark);for(const lat of[46.5,55.5])surface(ex.S+100,ex.S+143,()=>lat,.2,edge);for(const s of[100,142.8])surface(ex.S+s,ex.S+s+.2,()=>51,9.2,edge);ex.pump={S:ex.S+128,lat:51};
+      for(const [lat,label]of[[66,'REST BAY'],[79,'ROAD SERVICE']]){for(const l of[lat-4,lat+4])surface(ex.S+164,ex.S+204,()=>l,.15,edge);for(const z of[164,203.8])surface(ex.S+z,ex.S+z+.2,()=>lat,8.2,edge);this.sign(ex.S+204,lat,signTexture([label,lat===66?'PARK / REST':'PARK / REPAIR'],'#142027','#d2f77f',512,200),4,1.6,2);}
+      this.sign(ex.S+98,44,signTexture(['DIESEL BAY','PARK / FILL'],'#142027','#d2f77f',512,200),4,1.6,2);this.sign(ex.S+230,60,signTexture(['HIGHWAY →','ON RAMP'],'#142027','#d2f77f',512,200),6,2,3);
+    }
+    this.scene.traverse(o=>{const d=o.userData.roadside;if(d){const p=o.geometry.attributes.position,M=d.lats.length;for(let i=0;i<p.count;i++){const S=d.S0+Math.floor(i/M)*4,lat=d.lats[i%M];if(lat<120&&this.exits.some(e=>S>e.S-220&&S<e.S+510))p.setY(i,this.at(S).y-.12);}p.needsUpdate=true;o.geometry.computeVertexNormals();}
+      if(o.userData.railS!==undefined){const p=o.geometry.attributes.position,idx=[];for(let i=0;i<p.count-2;i+=2){const S=o.userData.railS+Math.floor(i/2)*4;if(this.exits.some(e=>S>e.S-220&&S<e.S+510))continue;idx.push(i,i+2,i+1,i+1,i+2,i+3);}o.geometry.setIndex(idx);}
+    });
   }
   waterTower(S, lat, town) {
     const g = new THREE.Group(), p = this.pt(S, lat); p.y = this.terrainY(S, lat); g.position.copy(p); this.scene.add(g);
@@ -212,11 +228,12 @@ export class HighwayScene {
     return g;
   }
   truckStop(S, brand) {
-    const s = this.scene, lat = 58, base = this.pt(S, lat); base.y = this.terrainY(S, 20) + 0.05;
+    const s = this.scene, lat = 58, base = this.pt(S, lat); base.y = this.at(S).y + 0.05;
     const g = new THREE.Group(); g.position.copy(base); g.rotation.y = -this.at(S).th; s.add(g);
-    const lot = new THREE.Mesh(new THREE.PlaneGeometry(140, 70), new THREE.MeshStandardMaterial({ color: 0x55565a, roughness: 0.9 })); lot.rotation.x = -Math.PI / 2; lot.position.y = 0.2; lot.receiveShadow = true; g.add(lot);
+    const lot = new THREE.Mesh(new THREE.PlaneGeometry(140, 70), new THREE.MeshStandardMaterial({ color: 0x55565a, roughness: 0.9 })); lot.rotation.x = -Math.PI / 2; lot.position.y = 0.2; lot.receiveShadow = true; // Paved surface follows the graded highway coordinates below.
     const col = { "PILOT": 0xd81e05, "LOVE'S": 0xffd400, "TA": 0x1c3f94, "FLYING J": 0xd81e05, "PETRO": 0x1c3f94 }[brand] || 0xd81e05;
     const canopy = new THREE.Mesh(new THREE.BoxGeometry(46, 1.2, 18), new THREE.MeshStandardMaterial({ color: 0xf4f4f4, roughness: 0.5 })); canopy.position.set(0, 7, 0); canopy.castShadow = true; g.add(canopy);
+    for(const x of[-20,20])for(const z of[-7,7]){const post=new THREE.Mesh(new THREE.BoxGeometry(.3,6.8,.3),new THREE.MeshStandardMaterial({color:0x9ba5ab,roughness:.7}));post.position.set(x,3.4,z);g.add(post);}
     const band = new THREE.Mesh(new THREE.BoxGeometry(46.2, 0.5, 18.2), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.6 })); band.position.set(0, 7.3, 0); g.add(band);
     const under = new THREE.Mesh(new THREE.PlaneGeometry(44, 16), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff6e0, emissiveIntensity: 1.0 })); under.rotation.x = Math.PI / 2; under.position.y = 6.38; g.add(under); this.lamps = (this.lamps || []).concat(under.material);
     for (let i = 0; i < 5; i++) { const pump = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.8, 0.8), new THREE.MeshStandardMaterial({ color: col })); pump.position.set(-18 + i * 9, 1.1, 0); g.add(pump); }
@@ -237,7 +254,7 @@ export class HighwayScene {
     const deck = new THREE.Mesh(new THREE.BoxGeometry(12, 1.4, 64), mat); deck.position.set(0, 7.6, 0); deck.castShadow = true; deck.receiveShadow = true; g.add(deck);
     for (const z of [-31.5, 31.5]) { const wall = new THREE.Mesh(new THREE.BoxGeometry(12, 1, 0.4), mat); wall.position.set(0, 8.8, z); g.add(wall); }
     for (const sz of [-1, 1]) { const par = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.0, 64), mat); par.position.set(sz * 5.8, 8.8, 0); g.add(par); }
-    for (const z of [-2 - 5 + 0, 8.5, -22]) for (const x of [-3.5, 3.5]) { const pier = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 7, 12), mat); pier.position.set(x, 3.5, z); pier.castShadow = true; g.add(pier); }
+    for (const z of [-28, -6, 16]) for (const x of [-3.5, 3.5]) { const pier = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 7, 12), mat); pier.position.set(x, 3.5, z);pier.userData.overpassPier=true;pier.userData.lateral=-MEDIAN/2+5+z; pier.castShadow = true; g.add(pier); }
     // embankments
     for (const z of [-34, 34]) { const e = new THREE.Mesh(new THREE.BoxGeometry(14, 8, 12), new THREE.MeshStandardMaterial({ color: 0x6a7a4a, roughness: 1 })); e.position.set(0, 3.2, z + Math.sign(z) * 4); g.add(e); }
   }
@@ -259,7 +276,7 @@ export class HighwayScene {
   // ---------------------------------------------------------------- truck
   buildTruck() {
     const st = this.app.state;
-    this.semi = makeSemi({ team: st.team, num: st.num, color: st.color, accent: st.accent, cabColor: 0x1a1a1e });
+    this.semi = makeSemi({ team: st.team, num: st.num, color: st.color, accent: st.accent, cabColor:st.scheme===8?st.accent:0x1a1a1e,scheme:st.scheme });
     this.contact=new ContactShadow(this.scene,this.semi,true);
     this.semi.rotation.order = 'YXZ'; this.scene.add(this.semi);
     const u = this.semi.userData;
@@ -394,7 +411,7 @@ export class HighwayScene {
         <div class="lbl">FATIGUE</div><div class="bar" style="width:180px"><i id="hw-fat"></i></div>
         <div class="lbl">RIG DAMAGE</div><div class="bar" style="width:180px"><i id="hw-dmg"></i></div></div>
       <div id="center-msg" style="font-size:54px"></div><div id="sub-msg"></div>
-      <div class="hint">W/↑ throttle • S/↓ brake • A/D ←/→ steer • Q cruise • E take the truck-stop exit (right lane, near the EXIT sign) • C camera • P pause</div>`;
+      <div class="hint">W/↑ throttle • S/↓ brake • A/D ←/→ steer • Q cruise • E exit assist · park in the pump bay to fuel · J engine brake • C camera • P pause</div>`;
     this.app.ui.appendChild(h);
     const q = id => h.querySelector(id);
     this.hud = { clock: q('#hw-clock'), el: q('#hw-el'), miles: q('#hw-miles'), exit: q('#hw-exit'), spd: q('#hw-spd'), cruise: q('#hw-cruise'), fuel: q('#hw-fuel'), fat: q('#hw-fat'), dmg: q('#hw-dmg'), msg: q('#center-msg'), sub: q('#sub-msg') };
@@ -439,9 +456,13 @@ export class HighwayScene {
     if (this.menu || this.ended) { this.updateCamera(dt); return; }
     if (this.paused) return;
     this.time += dt;
+    if(app.tap('KeyJ')){this.jakeEnabled=this.jakeEnabled===false;this.flash('ENGINE BRAKE '+(this.jakeEnabled?'ON':'OFF'),'#d2f77f',1);}
     if (app.tap('KeyC')) this.camMode = (this.camMode + 1) % 3;
     if (app.tap('KeyQ')) { T.cruise = T.cruise ? 0 : Math.max(20, T.v); this.flash(T.cruise ? `CRUISE ${Math.round(T.cruise * 2.237)} MPH` : 'CRUISE OFF', '#fff', 1); }
-    const inp = app.input();
+    let inp=app.input();if(this.fuelAutopilot&&(app.tap('KeyE')||Math.abs(inp.steer)>.2||inp.brake)){this.fuelAutopilot=false;this.flash('EXIT ASSIST OFF — you have control','#d2f77f',1.5);}const fuelZone=this.exits.find(e=>T.S>e.S-220&&T.S<e.S+510);
+    if(this.fuelAutopilot&&fuelZone){const e=fuelZone;let targetLat,targetSpeed;if(!this.fuelFilled&&T.S<e.pump.S){targetLat=lerp(5.55,51,smooth(e.S-200,e.S+70,T.S));targetSpeed=Math.min(12,Math.sqrt(Math.max(0,e.pump.S-T.S)*3));}else if(!this.fuelFilled){targetLat=51;targetSpeed=0;if(this.fuel>.999||app.state.money<.01){this.fuelFilled=true;this.flash(this.fuel>.999?'TANKS FULL — follow the on-ramp':'PUMP LIMIT — follow the on-ramp','#d2f77f',2);}}else{targetLat=lerp(51,5.55,smooth(e.S+200,e.S+490,T.S));targetSpeed=12;}
+      const want=clamp((targetLat-T.lat)*.055,-.65,.65);inp={steer:clamp((want-T.yaw)*7,-1,1),throttle:T.v<targetSpeed?1:0,brake:T.v>targetSpeed+.1?1:0};if(this.fuelFilled&&T.S>e.S+485&&T.lat<8){this.fuelAutopilot=false;this.fuelRejoined=true;}}
+
     if (inp.brake) T.cruise = 0;
     // longitudinal: heavy truck
     const grade = this.grade(T.S);
@@ -454,7 +475,7 @@ export class HighwayScene {
     T.v = clamp(T.v + acc * dt, 0, 38);
     // steering (sluggish, speed sensitive) + fatigue drift
     T.steer += clamp(inp.steer - T.steer, -1.6 * dt, 1.6 * dt);
-    const maxA = 0.45 / (1 + T.v / 5);
+    const maxA = (fuelZone&&T.lat>12?.75:.45) / (1 + T.v / 5);
     this.drowsy = this.fatigue > 0.75 ? (this.fatigue - 0.75) * 4 : 0;
     const drift = this.drowsy * 0.012 * Math.sin(this.time * 0.7) * Math.sin(this.time * 0.23 + 1);
     T.yaw += (T.v * Math.tan(T.steer * maxA) / 6.2 - T.v * this.curvature(T.S) * (inp.steer ? 1 : 0.12) + drift) * dt;
@@ -479,8 +500,8 @@ export class HighwayScene {
     T.rollV += ((-latA * 0.012 - T.roll) * 14 - T.rollV * 3.2) * dt; T.roll += T.rollV * dt;
     // barriers
     this.hitCool -= dt;
-    if (T.lat > 9.6 || T.lat < 1.3) {
-      const into = T.lat > 9.6 ? 1 : -1; T.lat = into > 0 ? 9.6 : 1.3; const hit = Math.abs(Math.sin(T.yaw)) * T.v;
+    if (T.lat > (fuelZone?84:9.6) || T.lat < 1.3) {
+      const into = T.lat > 9.6 ? 1 : -1; T.lat = into > 0 ? (fuelZone?84:9.6) : 1.3; const hit = Math.abs(Math.sin(T.yaw)) * T.v;
       T.yaw *= -0.3; T.v *= 0.97;
       if (this.hitCool <= 0 && hit > 0.4) { this.damage(1 + hit * 2.2, into > 0 ? 'GUARDRAIL!' : 'MEDIAN BARRIER!'); }
     }
@@ -496,11 +517,11 @@ export class HighwayScene {
       }
     }
     // clock / fuel / fatigue
-    const realSec = dt * this.timeScale * (T.v < 3 ? 0.4 : 1), hrs = realSec / 3600;
+    const rest=this.exits.some(e=>T.S>e.S+164&&T.S<e.S+204)&&T.v<.7&&Math.abs(T.lat-66)<4&&Math.abs(T.yaw)<.22;this.resting=rest;const realSec = dt * this.timeScale * (T.v < 3 ? 0.4 : 1), hrs = rest?dt*.05:realSec / 3600;
     this.hours += hrs;
     const milesNow = T.v * dt * this.mpm;
     this.fuel = Math.max(0, this.fuel - milesNow / 900 - hrs * 0.004);
-    this.fatigue = clamp(this.fatigue + hrs / 11 * (this.co ? 1 - 0.12 * this.co.skill : 1), 0, 1);
+    this.fatigue = rest?Math.max(0,this.fatigue-dt*.03):clamp(this.fatigue + hrs / 11 * (this.co ? 1 - 0.12 * this.co.skill : 1), 0, 1);
     if (this.fuel <= 0) { this.tows++; this.hours += 3; this.app.state.money -= 650; this.spent += 650; this.fuel = 0.22; T.v = 0; this.flash('OUT OF DIESEL — towed! -$650, +3h', '#ff5a4a', 3); }
     // speed traps
     for (const tr of this.troopers) {
@@ -515,6 +536,8 @@ export class HighwayScene {
     if (ex && app.tap('KeyE')) {
       if (T.lat > 3.7 && T.v < 29) this.openStop(ex); else this.flash(T.lat <= 3.7 ? 'Get in the right lane to exit' : 'Slow down to take the exit', '#ffc83d', 1.4);
     }
+    this.pumpFuel(dt);if(this.resting)this.hud.sub.textContent=`RESTING · fatigue ${Math.round(this.fatigue*100)}% · clock running`;else if(this.hud.sub.textContent.startsWith('RESTING'))this.hud.sub.textContent='';
+    const service=this.exits.some(e=>T.S>e.S+164&&T.S<e.S+204)&&T.v<.7&&Math.abs(T.lat-79)<4&&Math.abs(T.yaw)<.22,st=app.state;if(service&&st.haulerDmg>0&&st.money>0){const repair=Math.min(st.haulerDmg,dt*4,st.money/(UI.HAULER_PER_PT*.8)),cost=repair*UI.HAULER_PER_PT*.8;st.haulerDmg-=repair;st.money-=cost;this.spent+=cost;this.serviceCost=(this.serviceCost||0)+cost;this.hours+=repair/Math.max(this.serviceStartDmg||0,st.haulerDmg+repair);this.serviceStartDmg=this.serviceStartDmg||st.haulerDmg+repair;this.hud.sub.textContent=`ROAD SERVICE · rig ${Math.round(st.haulerDmg)}% damage · $${this.serviceCost.toFixed(2)} total`;this.serviceNotice=3;}else if(this.hud.sub.textContent.startsWith('ROAD SERVICE')&&(this.serviceNotice-=dt)<=0)this.hud.sub.textContent='';if(!service){this.serviceStartDmg=0;this.serviceCost=0;}
     // arrival
     if (T.S >= this.Lg) { this.arrive(); }
     if (Math.floor(this.time * 2) !== this.lastTod) { this.lastTod = Math.floor(this.time * 2); this.applyTimeOfDay(); }
@@ -523,7 +546,7 @@ export class HighwayScene {
     this.updateCamera(dt);
     this.updateHud(ex);
     document.getElementById('vignette').style.opacity = clamp(this.drowsy * 0.9 + (this.drowsy > 0 ? 0.25 * Math.sin(this.time * 1.3) : 0), 0, 0.95);
-    app.audio.truck?.({ dt, speed: T.v, throttle: thr ? 1 : 0, brake: inp.brake ? 1 : 0, cam: this.camMode === 1 ? 'cab' : 'out' }); this.jake = !thr && T.v > 8 ? 1 : 0;
+    app.audio.truck?.({ dt, bump:this.rumble||0, jakeOn:this.jakeEnabled!==false, speed: T.v, throttle: thr ? 1 : 0, brake: inp.brake ? 1 : 0, cam: this.camMode === 1 ? 'cab' : 'out' }); this.jake = this.jakeEnabled!==false&&!thr && T.v > 8 ? 1 : 0;
   }
   damage(d, msg) {
     this.hitCool = 0.8; this.rigDmg += d; this.carDmg += d * 0.4; this.shake = Math.min(1.2, d * 0.1);
@@ -533,7 +556,7 @@ export class HighwayScene {
   placeTruck(dt) {
     const T = this.t, p = this.pt(T.S, T.lat), a = this.at(T.S), th = a.th + T.yaw;
     const m = this.semi; m.position.copy(p);
-    m.rotation.y = -th; m.rotation.z = Math.atan(this.grade(T.S)); m.rotation.x = clamp(T.roll || 0, -0.05, 0.05) + (this.rumble > 0 ? Math.sin(this.time * 47) * 0.003 : 0);
+    m.rotation.y = -th; m.rotation.z = Math.atan(this.grade(T.S)); m.rotation.x = Math.sin(this.time*34)*.0015/(1+T.v)+clamp(T.roll || 0, -0.05, 0.05) + (this.rumble > 0 ? Math.sin(this.time * 47) * 0.003 : 0);
     // trailer pitches with the road under its own axles (crests / sags), relative to the tractor
     const tr = m.userData.trailer; tr.rotation.order = 'YXZ'; tr.rotation.y = -T.trailer;
     tr.rotation.z = lerp(tr.rotation.z, Math.atan(this.grade(T.S - 9)) - Math.atan(this.grade(T.S)), 1 - Math.exp(-dt * 8));
@@ -578,23 +601,13 @@ export class HighwayScene {
     h.fuel.style.width = (this.fuel * 100) + '%'; h.fat.style.width = (this.fatigue * 100) + '%'; h.dmg.style.width = this.app.state.haulerDmg + '%';
     if (this.fuel < 0.12 && Math.floor(this.time) % 4 === 0) h.sub.textContent = 'LOW FUEL — take the next exit!'; else if (this.drowsy > 0.2) h.sub.textContent = 'You\'re getting drowsy… pull over and rest'; else if (h.sub.textContent.startsWith('LOW') || h.sub.textContent.startsWith('You\'re')) h.sub.textContent = '';
   }
-  // ---------------------------------------------------------------- truck stop menu
-  openStop(ex) {
-    const st = this.app.state, T = this.t; T.v = 0; T.cruise = 0;
-    this.menu = document.createElement('div'); this.menu.className = 'screen';
-    const render = () => {
-      const gal = Math.round((1 - this.fuel) * 150), fc = Math.round(gal * 4.09), rc = Math.round(st.haulerDmg * UI.HAULER_PER_PT * 0.8);
-      this.menu.innerHTML=`<div class="panel stop-menu" style="width:560px"><div class="stop-head"><div><div class="kicker">EXIT ${ex.no} · ${ex.town}</div><h2 style="margin:7px 0">${ex.brand} Travel Center</h2></div><span class="pill ${this.deadline-this.hours<2?'warn':'ok'}">${(this.deadline-this.hours).toFixed(1)} H LEFT</span></div><div class="muted">${this.clockStr()} · ${this.hours.toFixed(1)} h driven · ${this.deadline.toFixed(1)} h to the drivers’ meeting</div>
-      <div class="stop-stats"><div><span>DIESEL</span><b>${Math.round(this.fuel*100)}%</b><div class="bar"><i style="width:${this.fuel*100}%"></i></div></div><div><span>FATIGUE</span><b>${Math.round(this.fatigue*100)}%</b><div class="bar"><i style="width:${this.fatigue*100}%"></i></div></div><div><span>RIG DAMAGE</span><b>${Math.round(st.haulerDmg)}%</b><div class="bar"><i style="width:${st.haulerDmg}%"></i></div></div></div>
-      <div class="stop-actions"><button id="f" ${gal<2||st.money<fc?'disabled':''}>Fill the diesel tanks · $${fc}<small>${gal} gallons at $4.09 · 20 minutes</small></button><button id="r" class="alt">Coffee & a short break<small>30 minutes · removes 30 percentage points of fatigue</small></button><button id="s" class="alt">Sleep in the bunk<small>8 hours · full fatigue recovery${this.hours+8>this.deadline?' · WILL MISS THE DRIVERS’ MEETING':''}</small></button><button id="m" class="alt" ${!st.haulerDmg||st.money<rc?'disabled':''}>Road service · $${rc}<small>1 hour · repairs the hauler, not the race car</small></button></div><div class="journey-footer"><span class="money">$${Math.round(st.money).toLocaleString()}</span><button id="x">Back on the road →</button></div></div>`;
-      const q = id => this.menu.querySelector(id);
-      q('#f').onclick = () => { st.money -= fc; this.spent += fc; this.fuel = 1; this.hours += 0.33; render(); };
-      q('#r').onclick = () => { this.fatigue = Math.max(0, this.fatigue - 0.3); this.hours += 0.5; render(); };
-      q('#s').onclick = () => { this.fatigue = 0; this.hours += 8; render(); };
-      q('#m').onclick = () => { st.money -= rc; this.spent += rc; st.haulerDmg = 0; this.hours += 1; render(); };
-      q('#x').onclick = () => { this.menu.remove(); this.menu = null; T.S = ex.S + 60; T.lat = LANES[1]; T.yaw = 0; T.v = 12; this.applyTimeOfDay(); };
-    };
-    render(); this.app.ui.appendChild(this.menu);
+  // No modal refuelling: E simply guides the truck toward the physical exit lane.
+  openStop(ex){this.fuelAutopilot=true;this.fuelFilled=false;this.flash('FUEL EXIT — steer toward the highlighted pump bay','#d2f77f',2);}
+  pumpFuel(dt){
+    const T=this.t,ex=this.exits.find(e=>T.S>e.S+101&&T.S<e.S+145&&Math.abs(T.lat-51)<4.5);
+    this.filling=!!(ex&&T.v<.7&&Math.abs(T.yaw)<.22&&this.fuel<1&&this.app.state.money>0);
+    if(this.filling){const add=Math.min(1-this.fuel,dt*.10,this.app.state.money/(150*4.09)),cost=add*150*4.09;this.fuel+=add;this.spent+=cost;this.app.state.money-=cost;this.pumpCost=(this.pumpCost||0)+cost;this.hud.sub.textContent=`DIESEL ${Math.round(this.fuel*100)}% · $${(this.pumpCost||0).toFixed(2)} · leave bay to stop`;if((this.pumpTick=(this.pumpTick||0)+dt)>.8){this.pumpTick=0;this.app.audio.air?.(.025,.05);}}
+    else if(this.hud.sub.textContent.startsWith('DIESEL')){this.hud.sub.textContent='PUMP STOPPED · follow the on-ramp';this.pumpNotice=4;}else if(this.hud.sub.textContent.startsWith('PUMP STOPPED')&&(this.pumpNotice-=dt)<=0)this.hud.sub.textContent='';
   }
   arrive() {
     if (this.ended) return; this.ended = true;

@@ -115,9 +115,10 @@ export function fenceTexture() {
   const t = tex(c); return t;
 }
 
-export function trailerTexture(team, num, color, accent) {
+export function trailerTexture(team, num, color, accent, scheme) {
   const W = 2048, H = 512, c = canvas(W, H), g = c.getContext('2d');
   const col = '#' + new THREE.Color(color).getHexString(), acc = '#' + new THREE.Color(accent).getHexString();
+  if(scheme===8){g.fillStyle=col;g.fillRect(0,0,W,H);g.fillStyle=acc;g.fillRect(0,0,460,H);g.fillStyle='#c5f12c';g.fillRect(0,H-28,W,28);g.font='italic 900 320px Impact,Arial Black';g.textBaseline='middle';g.textAlign='center';g.strokeStyle=acc;g.lineWidth=24;g.strokeText(num,540,250);g.fillStyle='#f7ef23';g.fillText(num,540,250);g.font='italic 900 100px Arial';g.fillStyle=acc;g.fillText(team.toUpperCase(),1340,190,1250);g.font='600 46px Arial';g.fillText('CLASSIC '+num+' / DIRT TRACK TOUR',1340,325,1200);return tex(c,false);}
   const gr = g.createLinearGradient(0, 0, W, 0); gr.addColorStop(0, '#101010'); gr.addColorStop(0.35, col); gr.addColorStop(1, col);
   g.fillStyle = gr; g.fillRect(0, 0, W, H);
   // swooshes
@@ -215,7 +216,7 @@ export function makeSky({ top, horizon, bottom, sunDir, sunColor, sunSize = 0.03
 export { makeLateModel, WHEEL_R, DRIVER_EYE, loadCarFonts } from './models.js';
 
 // ---------- Semi tractor + enclosed race hauler ----------
-export function makeSemi({ team = 'Your Racing', num = '1', color = 0xc81d25, accent = 0xffffff, cabColor } = {}) {
+export function makeSemi({ team = 'Your Racing', num = '1', color = 0xc81d25, accent = 0xffffff, cabColor, scheme } = {}) {
   const root = new THREE.Group();
   const tractor = new THREE.Group(); root.add(tractor);
   const paint = new THREE.MeshPhysicalMaterial({ color: cabColor ?? color, metalness: 0.35, roughness: 0.55, clearcoat: 0.25, clearcoatRoughness: 0.5 });
@@ -262,7 +263,7 @@ export function makeSemi({ team = 'Your Racing', num = '1', color = 0xc81d25, ac
   // ---- trailer (pivot at kingpin, x=-2.6 on tractor) ----
   const trailer = new THREE.Group(); trailer.position.set(-2.6, 0, 0); root.add(trailer);
   const TL = 16, TH = 2.95, TW = 2.6, floorY = 1.25;
-  const tt = trailerTexture(team, num, color, accent);
+  const tt = trailerTexture(team, num, color, accent, scheme);
   const sideMat = new THREE.MeshPhysicalMaterial({ map: tt, metalness: 0.02, roughness: 0.9, clearcoat: 0.0 });
   const white = new THREE.MeshStandardMaterial({ color: 0xd5d5d2, metalness: 0.05, roughness: 0.85 });
   const shell = new THREE.Group(); trailer.add(shell);

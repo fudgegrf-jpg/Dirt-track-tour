@@ -10,7 +10,7 @@
 // The same code runs in an OfflineAudioContext to render the WAV checks in /audio-samples.
 const TAU = Math.PI * 2;
 export const V8 = { idle: 1050, limit: 8400, rpms: [850, 1500, 2400, 3500, 4800, 6200, 7600, 9000] };
-export const DIESEL = { idle: 650, rpms: [550, 800, 1100, 1450, 1850, 2300] };
+export const DIESEL = { idle: 650, rpms: [600, 800, 1100, 1450, 1800, 2100] };
 
 function rng(seed) { let s = (seed >>> 0) || 1; return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296); }
 // RBJ biquad, run over an array (in place)
@@ -110,13 +110,13 @@ export function synthDiesel(sr, rpm, mode, seed = 3) {
   const nz = rng(seed + 99), noise = new Float32Array(N); for (let i = 0; i < N; i++) noise[i] = nz() * 2 - 1;
   const y = new Float32Array(T); for (let i = 1; i < T; i++) y[i] = (fl[i] - fl[i - 1]) * sr / 2000;
   pipe(y, sr, 2.6, jake ? 0.5 : 0.35, 0.35);
-  if (!jake) { bq(y, 'lp', 520, 0.8, sr); bq(y, 'pk', 70, 1, sr, 6); }                             // big muffler, stack
+  if (!jake) { bq(y, 'lp', on?1800:700, 0.8, sr); bq(y, 'pk', 70, 1, sr, 7);bq(y,'pk',165,.9,sr,on?4:1); }                             // big muffler, stack
   else { bq(y, 'lp', 2600, 0.7, sr); bq(y, 'pk', 180, 1, sr, 5); }
   const kn = new Float32Array(T); for (let i = 0; i < T; i++) kn[i] = noise[i % N] * knock[i];
   bq(kn, 'bp', 3200, 1.1, sr); bq(kn, 'pk', 1500, 1.5, sr, 4);
   const hs = new Float32Array(T); for (let i = 0; i < T; i++) hs[i] = noise[(i * 5 + 17) % N] * hiss[i];
   bq(hs, 'hp', jake ? 900 : 1600, 0.7, sr);
-  const ry = rms(y), ka = (jake ? 0 : on ? 0.32 : 0.22) * ry / Math.max(1e-6, rms(kn)), ha = (jake ? 0.5 : 0.08) * ry / Math.max(1e-6, rms(hs));
+  const ry = rms(y), ka = (jake ? 0 : on ? 0.40 : 0.24) * ry / Math.max(1e-6, rms(kn)), ha = (jake ? 0.5 : 0.08) * ry / Math.max(1e-6, rms(hs));
   const out = new Float32Array(N), base = T - N;
   // turbo whistle: rides on boost (on-throttle), pitched with RPM via playbackRate later
   const tf = 2200 + rpm * 1.6, ta = on ? 0.05 : 0.015;
@@ -222,13 +222,16 @@ export class GameAudio {
     const nb = c.createBuffer(1, sr * 2, sr), ch = nb.getChannelData(0); let last = 0; const r = rng(5);
     for (let i = 0; i < ch.length; i++) { const w = r() * 2 - 1; last = (last + 0.02 * w) / 1.02; ch[i] = w * 0.6 + last * 3; }
     const noise = (type, f, q) => { const n = c.createBufferSource(); n.buffer = nb; n.loop = true; const fl = c.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q; const g = c.createGain(); g.gain.value = 0; n.connect(fl); fl.connect(g); g.connect(this.master); n.start(); return { fl, g }; };
+    this.noiseBuffer=nb;
     this.tire = noise('bandpass', 1800, 0.8); this.roar = noise('lowpass', 220, 0.7); this.crowd = noise('bandpass', 700, 0.5);
   }
   ensureDiesel() {
     if (this.diesel) return; const c = this.ctx, sr = c.sampleRate, mk = (arr) => { const b = c.createBuffer(1, arr.length, sr); b.copyToChannel(arr, 0); return b; };
     const set = { rpms: DIESEL.rpms, bufs: { on: DIESEL.rpms.map((r, i) => mk(synthDiesel(sr, r, 'on', 3 + i))), off: DIESEL.rpms.map((r, i) => mk(synthDiesel(sr, r, 'off', 9 + i))), jake: DIESEL.rpms.map((r, i) => mk(synthDiesel(sr, r, 'jake', 17 + i))) } };
     this.diesel = new Voice(this, set); this.diesel.connect(this.engineBus);
-    this.dTone = 0;
+    this.turbo=c.createOscillator();this.turbo.type='sine';this.turbo.frequency.value=1200;this.turboGain=c.createGain();this.turboGain.gain.value=0;this.turbo.connect(this.turboGain);this.turboGain.connect(this.engineBus);this.turbo.start();
+    this.dTone=0;
+
   }
   applyVolume() { if (this.master) this.master.gain.value = this.muted ? 0 : (this.app?.settings?.volume ?? 0.8); }
   live() { if (this.muted || !this.ensure()) return false; if (!this.offline && this.ctx.state === 'suspended') this.ctx.resume?.().catch?.(() => {}); return true; }
@@ -287,25 +290,39 @@ export class GameAudio {
   // highway semi. f = { dt, speed (m/s), throttle 0/1, brake 0/1, cam }
   truck(f, t) {
     if (!this.live()) return; t = t ?? this.now(); this.ensureDiesel(); const dt = f.dt || 1 / 60;
-    const ratio = n => 48 * Math.pow(1.36, 9 - n);
+    const ratio = n => 48 * Math.pow(1.33, 10 - n);
     let initialGear=1;while(initialGear<10&&f.speed*ratio(initialGear)>1700)initialGear++;
-    const g = this.gb || (this.gb = { gear:initialGear, rpm:Math.max(DIESEL.idle,Math.min(2300,f.speed*ratio(initialGear))), shiftT: 0, load: 0, jake: 0 });                                                    // 10-speed, ~1450 rpm @ 65 mph in top
+    const g = this.gb || (this.gb = { gear:initialGear, rpm:Math.max(DIESEL.idle,Math.min(2100,f.speed*ratio(initialGear))), shiftT: 0, load: 0, jake: 0 });                                                    // 10-speed, ~1450 rpm @ 65 mph in top
     let rpm = f.speed * ratio(g.gear);
-    if (g.shiftT <= 0) { if (rpm > 1850 && g.gear < 10) { g.gear++; g.shiftT = 0.45; } else if (rpm < 1050 && g.gear > 1) { g.gear--; g.shiftT = 0.35; } }
+    if (g.shiftT <= 0) { if (rpm > 1850 && g.gear < 10) { g.gear++; g.shiftT = 0.45;this.air(.09,.10,t,1100); } else if (rpm < 1050 && g.gear > 1) { g.gear--; g.shiftT = 0.35;this.air(.055,.08,t,1000); } }
     g.shiftT -= dt; rpm = Math.max(DIESEL.idle + (f.throttle ? 250 : 0), f.speed * ratio(g.gear));
-    if (f.speed < 2.5) rpm = DIESEL.idle + f.throttle * 700;rpm=Math.min(2300,rpm);
+    if (f.speed < 2.5) rpm = DIESEL.idle + f.throttle * 700;rpm=Math.min(2100,rpm);
     g.rpm += (rpm - g.rpm) * (1 - Math.exp(-dt / (g.shiftT > 0 ? 0.12 : 0.25)));
     const thr = g.shiftT > 0 ? 0 : f.throttle;
     g.load += (thr - g.load) * (1 - Math.exp(-dt / 0.15));
-    const wantJake = !f.throttle && f.speed > 8 && g.rpm > 1000 ? (f.brake ? 1 : 0.75) : 0;
+    const wantJake = f.jakeOn!==false&&!f.throttle && f.speed > 8 && g.rpm > 1000 ? (f.brake ? 1 : 0.75) : 0;
     g.jake += (wantJake - g.jake) * (1 - Math.exp(-dt / 0.06));
-    this.truckJake = g.jake;
+    this.truckJake=g.jake;
+    g.boost=(g.boost||0)+(g.load-(g.boost||0))*(1-Math.exp(-dt/.6));
+    const cab=f.cam==='cab';this.turbo.frequency.setTargetAtTime(1000+g.boost*2400+g.rpm*.3,t,.15);this.turboGain.gain.setTargetAtTime((.001+g.boost*.012)*(cab?.65:1),t,.12);
+    if((g.prevThrottle||0)>.6&&f.throttle<.2&&g.boost>.25)this.air(.13*g.boost,.3,t,2300);
+    if((g.prevBrake||0)<.2&&f.brake>.5)this.air(cab?.035:.08,.4,t,1700);
+    if((g.prevSpeed||0)>.55&&f.speed<.55)this.air(cab?.065:.12,.55,t,2000);
+    if(f.bump>.1&&(g.rattleT||0)<t){this.air(cab?.025:.012,.10,t,720);g.rattleT=t+.2;}
+    g.prevThrottle=f.throttle;g.prevBrake=f.brake;g.prevSpeed=f.speed;
+    this.tire.fl.frequency.setTargetAtTime(250+f.speed*18,t,.2);this.tire.g.gain.setTargetAtTime(Math.min(.038,f.speed*.001)*(cab?.65:1),t,.2);
+    this.roar.fl.frequency.setTargetAtTime(400+f.speed*28,t,.2);this.roar.g.gain.setTargetAtTime(Math.min(.025,f.speed*f.speed*.00002)*(cab?.35:1),t,.2);
+
     const w = { on: g.load * (1 - g.jake), off: (1 - g.load) * (1 - g.jake), jake: g.jake };
     const inCab = f.cam === 'cab';
     this.diesel.tone.frequency.setTargetAtTime(inCab ? 2400 : 8000, t, 0.1); this.diesel.body.gain.setTargetAtTime(inCab ? 5 : 0, t, 0.1);
     this.diesel.update(t, g.rpm, w, (0.25 + 0.3 * g.load + 0.35 * g.jake) * (0.6 + 0.4 * g.rpm / 2000), 1, 0.04);
     this.player.update(t, V8.idle, { on: 0, off: 1 }, 0, 1, 0.05);
     this.rpm = g.rpm;
+  }
+  // Short filtered pneumatic transients; one shared noise buffer, no worklet per cylinder.
+  air(gain=.08,length=.3,t,freq=1800){
+    if(!this.ctx||this.muted)return;const c=this.ctx;t=t??c.currentTime;const n=c.createBufferSource(),f=c.createBiquadFilter(),g=c.createGain();n.buffer=this.noiseBuffer;f.type='bandpass';f.frequency.value=freq;f.Q.value=.6;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+length);n.connect(f);f.connect(g);g.connect(this.engineBus);n.start(t);n.stop(t+length+.02);n.onended=()=>{n.disconnect();f.disconnect();g.disconnect();};
   }
   surface(slide, speed01, cushion = 0, t) {
     if (this.muted || !this.ctx) return; t = t ?? this.now();
@@ -325,6 +342,7 @@ export class GameAudio {
   stop() {
     if (!this.ctx) return; const t = this.now();
     this.player.out.gain.cancelScheduledValues(t); this.player.out.gain.setTargetAtTime(0, t, 0.05);
+    if(this.turboGain){this.turboGain.gain.cancelScheduledValues(t);this.turboGain.gain.setTargetAtTime(0,t,.05);}
     if (this.diesel) { this.diesel.out.gain.cancelScheduledValues(t); this.diesel.out.gain.setTargetAtTime(0, t, 0.05); }
     for (const v of this.ai.values()) v.dispose(); this.ai.clear(); this.lPrev = null; this.gb = null;
     for (const g of [this.tire.g.gain, this.roar.g.gain, this.crowd.g.gain]) { g.cancelScheduledValues(t); g.setTargetAtTime(0, t, 0.05); }
