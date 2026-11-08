@@ -146,11 +146,12 @@ export class RaceScene {
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
           float rutBump=surface.g*(surface.a*0.04 + sin(vWPos.x*22.0+vWPos.z*15.0)*0.003);
           normal = perturbNormalArb(-vViewPosition,normal,vec2(dFdx(rutBump),dFdy(rutBump)),faceDirection);`)
-        .replace('#include <opaque_fragment>', `outgoingLight += diffuseColor.rgb * vec3(1.0, 0.92, 0.78) * uPoolAmt * min(vLightPool, 1.5);
+        .replace('#include <opaque_fragment>', `outgoingLight += diffuseColor.rgb * vec3(1.0, 0.92, 0.78) * uPoolAmt * min(vLightPool, 1.5) * (0.20 + 0.80 * getShadowMask());
           #include <opaque_fragment>`);
+      sh.fragmentShader=sh.fragmentShader.replace('#include <shadowmap_pars_fragment>','#include <shadowmap_pars_fragment>\n#include <shadowmask_pars_fragment>');
       matteClayShader(sh);
     };
-    trackMat.customProgramCacheKey=()=>'dusty-clay-vertex-pools-v2';this.trackMaterial=trackMat;trackMat.color.setRGB(1.24,1.22,1.19);trackMat.userData.night7ClayLift=1.22;
+    trackMat.customProgramCacheKey=()=>'dusty-clay-shadowed-pools-v3';this.trackMaterial=trackMat;trackMat.color.setRGB(1.24,1.22,1.19);trackMat.userData.night7ClayLift=1.22;
     const tm = new THREE.Mesh(tg, trackMat);tm.name='matte-clay-track'; tm.receiveShadow = true; scene.add(tm);
 
     buildDrivableInfield(this);
@@ -725,7 +726,7 @@ export class RaceScene {
     dust.update(dt);this.nightArt?.particles.update(dt);this.nightArt?.atmosphere.update(dt);
     // shadow light follows the focus car
     this.nightArt?.refreshShadow(dt);
-    const f = this.player; this.key.position.set(f.x + 30, 90, f.z + 40); this.key.target.position.set(f.x, this.trk.height(f.s,f.d)+0.6, f.z);
+    // NightShadows fits and snaps the existing key immediately before render.
   }
   // engine audio: every car is its own V8 voice; listener rides the camera
   updateAudio(dt) {

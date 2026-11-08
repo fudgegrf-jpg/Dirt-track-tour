@@ -116,6 +116,11 @@ NIGHT9 / V8 V7 — DEEPER ORIGINAL PROCEDURAL EXHAUST
   No recordings, samples, extracted traces or reference analysis included.
   Existing PCM lengths, persistent graph and independent diesel are preserved.
 
+NIGHT10 / ORIGINAL STADIUM SHADOWS
+  One existing soft-PCF stadium key, texel-stabilized local shadow volume,
+  original instanced car silhouettes and conforming low-tier contact shadows.
+  No downloaded art, game assets, reference images or new audio.
+
 STATIC GITHUB RELEASE
   OFL fonts are embedded as CSS data URLs; licenses remain in vendor/fonts.
   App icons are embedded. Unused preview WAVs are omitted; engine/effect audio is synthesized. Nitro Riffs is embedded as MP3 text chunks.
