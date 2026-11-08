@@ -34,13 +34,13 @@ export const ROUTES = [
 // skill = raw pace, aggr = how hard they push/pass/follow, cons = consistency (fewer mistakes), lane = favorite groove
 // (-1 bottom .. +1 cushion), adapt = how quickly they move up as the track slicks off.
 export const AI_DRIVERS = [
-  { name:'Cody Strickland', kind:'veteran', num:'7S', color:0x1e5fd8, accent:0xffffff, skill:0.958, aggr:0.55, cons:0.96, lane:0.55, adapt:0.3, style:'Cushion king',       sponsor:'CLAYMASTER TIRES', livery:{ scheme:2, third:0xf2c014 } },
-  { name:'Jared McCrary', kind:'slider',   num:'99', color:0xf2c014, accent:0x111111, skill:0.95,aggr:0.8,  cons:0.9,  lane:-0.4, adapt:0.8, style:'Slider artist',      sponsor:'RED DIRT OIL', livery:{ scheme:1, third:0xffffff } },
-  { name:'Bo Tillman', kind:'veteran',      num:'18', color:0x1f9e4a, accent:0xffffff, skill:0.944, aggr:0.45, cons:0.95, lane:0.1,  adapt:0.6, style:'Smooth veteran',     sponsor:'BIG E FEED & SEED', livery:{ scheme:7, third:0x111214 } },
-  { name:'Tanner Haskins', kind:'slider',  num:'44', color:0xe8e8e8, accent:0xc81d25, skill:0.935,aggr:0.9,  cons:0.82, lane:0.68, adapt:0.2, style:'Wall-banger',        sponsor:'BACKROADS DIESEL', livery:{ scheme:6, third:0x111214 } },
-  { name:'Ricky Pruitt', kind:'bottom',    num:'3P', color:0x7a2bd1, accent:0xffd400, skill:0.93,aggr:0.35, cons:0.93, lane:-0.15,adapt:0.5, style:'Points racer',       sponsor:'NIGHT SHIFT ENERGY', livery:{ scheme:3, third:0xffffff } },
-  { name:'Wade Kimbrough', kind:'bottom',  num:'1K', color:0xff6a00, accent:0x111111, skill:0.925,aggr:0.7,  cons:0.85, lane:-0.55,adapt:0.7, style:'Bottom feeder',      sponsor:"HAULIN' HOGS BBQ", livery:{ scheme:5, third:0xffffff } },
-  { name:'Shane Dupree', kind:'rookie',    num:'57', color:0x111214, accent:0xffffff, skill:0.918,aggr:0.6,  cons:0.8,  lane:0.3,  adapt:0.5, style:'Rookie hotshoe',     sponsor:'SLICK TRACK BREWING', livery:{ scheme:0, third:0x8a2be2 } },
+  { id:'ai.cody-strickland', name:'Cody Strickland', kind:'veteran', num:'7S', color:0x1e5fd8, accent:0xffffff, skill:0.958, aggr:0.55, cons:0.96, lane:0.55, adapt:0.3, style:'Cushion king',       sponsor:'CLAYMASTER TIRES', livery:{ scheme:2, third:0xf2c014 } },
+  { id:'ai.jared-mccrary', name:'Jared McCrary', kind:'slider',   num:'99', color:0xf2c014, accent:0x111111, skill:0.95,aggr:0.8,  cons:0.9,  lane:-0.4, adapt:0.8, style:'Slider artist',      sponsor:'RED DIRT OIL', livery:{ scheme:1, third:0xffffff } },
+  { id:'ai.bo-tillman', name:'Bo Tillman', kind:'veteran',      num:'18', color:0x1f9e4a, accent:0xffffff, skill:0.944, aggr:0.45, cons:0.95, lane:0.1,  adapt:0.6, style:'Smooth veteran',     sponsor:'BIG E FEED & SEED', livery:{ scheme:7, third:0x111214 } },
+  { id:'ai.tanner-haskins', name:'Tanner Haskins', kind:'slider',  num:'44', color:0xe8e8e8, accent:0xc81d25, skill:0.935,aggr:0.9,  cons:0.82, lane:0.68, adapt:0.2, style:'Wall-banger',        sponsor:'BACKROADS DIESEL', livery:{ scheme:6, third:0x111214 } },
+  { id:'ai.ricky-pruitt', name:'Ricky Pruitt', kind:'bottom',    num:'3P', color:0x7a2bd1, accent:0xffd400, skill:0.93,aggr:0.35, cons:0.93, lane:-0.15,adapt:0.5, style:'Points racer',       sponsor:'NIGHT SHIFT ENERGY', livery:{ scheme:3, third:0xffffff } },
+  { id:'ai.wade-kimbrough', name:'Wade Kimbrough', kind:'bottom',  num:'1K', color:0xff6a00, accent:0x111111, skill:0.925,aggr:0.7,  cons:0.85, lane:-0.55,adapt:0.7, style:'Bottom feeder',      sponsor:"HAULIN' HOGS BBQ", livery:{ scheme:5, third:0xffffff } },
+  { id:'ai.shane-dupree', name:'Shane Dupree', kind:'rookie',    num:'57', color:0x111214, accent:0xffffff, skill:0.918,aggr:0.6,  cons:0.8,  lane:0.3,  adapt:0.5, style:'Rookie hotshoe',     sponsor:'SLICK TRACK BREWING', livery:{ scheme:0, third:0x8a2be2 } },
 ];
 
 export const POINTS = [50, 44, 40, 37, 35, 33, 31, 29];

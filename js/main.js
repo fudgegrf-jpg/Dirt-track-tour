@@ -1,3 +1,4 @@
+import {PLAYER_ID,DRIVER_IDENTITY_VERSION} from './driver-identity.js';
 import {storage} from './storage.js';
 import {migrateSeasonSave,SEASON_TRACK_VERSION} from './season.js';
 import {GraphicsFinishPass} from './gfx2-post.js';
@@ -157,9 +158,9 @@ class App {
   }
   // ---------- state ----------
   newState(opts = {}) {
-    const standings = {}; for (const d of AI_DRIVERS) standings[d.name] = 0;
-    const driver = opts.driver?.trim() || DEFAULT_DRIVER; standings[driver] = 0;
-    return { v: 1, driver, team: opts.team || 'Red Clay Racing', num: opts.num || DEFAULT_PROFILE.num, color: opts.color ?? DEFAULT_PROFILE.color, accent: opts.accent ?? DEFAULT_PROFILE.accent, cageColor:opts.cageColor??DEFAULT_PROFILE.cageColor, scheme:opts.scheme??DEFAULT_PROFILE.scheme, liveryDefaultsVersion:2,
+    const standings = {}; for (const d of AI_DRIVERS) standings[d.id] = 0;
+    const driver = opts.driver?.trim() || DEFAULT_DRIVER; standings[PLAYER_ID] = 0;
+    return { v: 1, driverId:PLAYER_ID,driverIdentityVersion:DRIVER_IDENTITY_VERSION,driver, team: opts.team || 'Red Clay Racing', num: opts.num || DEFAULT_PROFILE.num, color: opts.color ?? DEFAULT_PROFILE.color, accent: opts.accent ?? DEFAULT_PROFILE.accent, cageColor:opts.cageColor??DEFAULT_PROFILE.cageColor, scheme:opts.scheme??DEFAULT_PROFILE.scheme, liveryDefaultsVersion:2,
       seasonTrackVersion:SEASON_TRACK_VERSION,seasonTrackIds:TRACKS.map(t=>t.id),round: 0, money: 15000, carDmg: 0, haulerDmg: 0, fuel: 0.7, fatigue: 0, up: { engine: 0, tires: 0, shocks: 0 }, crew: ['m2'],
       standings, results: [], phase: 'shop', late: false, slackBonus: 0, arrival: null, earnings: 0, log: [] };
   }
@@ -171,10 +172,10 @@ class App {
         if(!s.salinaLayoutVersion){if(s.results?.[0]?.track==='Volusia')s.results[0].track='Salina';if(s.round===0&&s.pitPose?.c&&(Math.abs(s.pitPose.c.x)>75||s.pitPose.c.z< -51||s.pitPose.c.z>41))delete s.pitPose;s.salinaLayoutVersion=1;storage.setItem(SAVE_KEY,JSON.stringify(s));}
         if (!s.driver?.trim() || (s.driver === 'Dale Rhodes' && paintMigrated)) {
           const old = s.driver ?? ''; s.driver = DEFAULT_DRIVER; s.standings ||= {};
-          if (old !== DEFAULT_DRIVER && Object.hasOwn(s.standings, old)) {
+          if (!s.driverIdentityVersion && old !== DEFAULT_DRIVER && Object.hasOwn(s.standings, old)) {
             s.standings[DEFAULT_DRIVER] = (s.standings[DEFAULT_DRIVER] || 0) + (s.standings[old] || 0);
             delete s.standings[old];
-          } else s.standings[DEFAULT_DRIVER] ??= 0;
+          } else if(!s.driverIdentityVersion)s.standings[DEFAULT_DRIVER] ??= 0;
           // Historical result/player records may also contain the previous default.
           const rename = o => { if (!o || typeof o !== 'object') return;
             for (const k of Object.keys(o)) { if ((k === 'name' || k === 'driver') && o[k] === old) o[k] = DEFAULT_DRIVER; else rename(o[k]); }

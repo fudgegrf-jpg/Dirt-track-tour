@@ -1,3 +1,4 @@
+import {PLAYER_ID} from './driver-identity.js';
 import {stadiumTowers} from './stadium-lights.js';
 import {batchNightStatic,nightRaceArt} from './night-race.js';
 import {buildDrivableInfield,buildInfieldObstacles,collideInfield,retireAI,updateRetirements,updateInfieldProgress,updateRetirementVisuals} from './infield.js';
@@ -328,9 +329,9 @@ export class RaceScene {
     const round = st ? st.round : 2;
     const DF = DIFFICULTY[app.settings?.diff] || DIFFICULTY.normal;
     const drivers = AI_DRIVERS.map(d => ({ ...d }));
-    const entries = drivers.map(d => ({ name: d.name, num: d.num, color: d.color, accent: d.accent, sponsor: d.sponsor, livery: d.livery, ai: { lane: d.lane, skill: d.skill + round * 0.003 + DF.skill, aggr: Math.min(1, d.aggr * DF.aggr), cons: d.cons, adapt: d.adapt, style: d.style, kind: d.kind, mist: DF.mist, read: DF.read, curLane: d.lane }, power: 1 + 0.035 * round, grip: 1 + 0.012 * round, stab: 0.3 }));
+    const entries = drivers.map(d => ({ driverId:d.id, name: d.name, num: d.num, color: d.color, accent: d.accent, sponsor: d.sponsor, livery: d.livery, ai: { lane: d.lane, skill: d.skill + round * 0.003 + DF.skill, aggr: Math.min(1, d.aggr * DF.aggr), cons: d.cons, adapt: d.adapt, style: d.style, kind: d.kind, mist: DF.mist, read: DF.read, curLane: d.lane }, power: 1 + 0.035 * round, grip: 1 + 0.012 * round, stab: 0.3 }));
     const pp = st ? app.carParams() : { power: 1, grip: 1, stab: 0.3, damage: 0 };
-    const me = { name: st ? st.driver : DEFAULT_DRIVER, num: st?.num || DEFAULT_PROFILE.num, color: st?.color ?? DEFAULT_PROFILE.color, accent: st?.accent ?? DEFAULT_PROFILE.accent, player: !this.attract, power: pp.power, grip: pp.grip, stab: pp.stab, damage: Math.min(90, pp.damage) };  // junk car gets zip-tied together to start
+    const me = { driverId: PLAYER_ID, name: st ? st.driver : DEFAULT_DRIVER, num: st?.num || DEFAULT_PROFILE.num, color: st?.color ?? DEFAULT_PROFILE.color, accent: st?.accent ?? DEFAULT_PROFILE.accent, player: !this.attract, power: pp.power, grip: pp.grip, stab: pp.stab, damage: Math.min(90, pp.damage) };  // junk car gets zip-tied together to start
     me.livery={scheme:st?.scheme??DEFAULT_PROFILE.scheme,cageColor:st?.cageColor??DEFAULT_PROFILE.cageColor};
     me.sponsor = st?.sponsor || 'RED CLAY RACING';
     if (this.attract) me.ai = { lane: 0.3, skill: 0.95, aggr: 0.6, cons: 0.95, adapt: 0.5, curLane: 0.3 };
@@ -342,7 +343,7 @@ export class RaceScene {
       const p = trk.point(trk.s3 - 14 - row * 9, side * Math.min(3.2, T.W * 0.18));
       const v0 = this.attract ? 20 : this.paceSpeed();
       const car = makeCar({ x: p.x, z: p.z, th: p.th, vx: Math.cos(p.th) * v0, vz: Math.sin(p.th) * v0, power: e.power, grip: e.grip, stab: e.stab });
-      car.damage = e.damage || 0; car.startDmg = car.damage; car.name = e.name; car.num = e.num; car.ai = e.ai; car.player = !!e.player;
+      car.damage = e.damage || 0; car.startDmg = car.damage; car.driverId = e.driverId; car.name = e.name; car.num = e.num; car.ai = e.ai; car.player = !!e.player;
       car.paceLane = side < 0 ? -0.32 : 0.26; car.led = 0; car.mud = 0; car.lexanMud = 0; car.lookT = Math.random() * 0.5;
       car.prevS = trk.project(car.x, car.z).s; car.s = car.prevS; car.lap = 0; car.dist = 0;
       car.mesh = makeLateModel({ color: e.color, accent: e.accent, num: e.num, sponsor: e.sponsor, name: e.name, livery: e.livery, cockpit: !!e.player && !this.attract });
@@ -592,7 +593,7 @@ export class RaceScene {
     const dnf = rest.filter(c => c.dnf), run = rest.filter(c => !c.dnf);
     final.push(...run, ...dnf);
     const pm = v => Math.round(v * this.T.purse / 50) * 50;
-    const res = final.map((c, i) => ({ name: c.name, num: c.num, pos: i + 1, start: c.startPos + 1, gain: c.startPos - i, led: c.led || 0, pts: POINTS[i] || 30, purse: pm(PURSE[i] || 1200), player: c.player, best: c.bestLap, dmg: c.damage, dnf: !!c.dnf }));
+    const res = final.map((c, i) => ({ driverId:c.driverId, name: c.name, num: c.num, pos: i + 1, start: c.startPos + 1, gain: c.startPos - i, led: c.led || 0, pts: POINTS[i] || 30, purse: pm(PURSE[i] || 1200), player: c.player, best: c.bestLap, dmg: c.damage, dnf: !!c.dnf }));
     // bonus money for the player: laps led, hard charger (most spots gained), clean race, contingency top 5
     const me = res.find(r => r.player);
     if (me) {
