@@ -1,12 +1,16 @@
-import {cammedV8,v4IdleBank,V8_VOICE_SCALE} from './v8-engine.js';
 import {MenuMusic} from './menu-music.js';
-// Original big-cam cross-plane V8: circular smooth combustion/header/rasp
-// synthesis in v8-engine.js. Two continuous, phase-locked loops per voice;
-// a bounded persistent AI pool, smoothed RPM/tone/load and no race node churn.
-// Musical lift-off accents automate the existing off-throttle layer only.
-// The semi's independent inline-six bank/gearbox/effects are unchanged.
+// Engine & track audio. Everything is synthesized here (no sound files):
+//  1) At startup we "record" seamless loops of a cross-plane V8 at several RPMs, on and off throttle, by modelling the
+//     engine itself: the 1-8-4-3-6-5-7-2 firing order split onto two banks of open headers (that uneven per-bank
+//     spacing is the V8 burble), each exhaust blowdown pulse, header-pipe reflections, exhaust rasp, carb induction
+//     roar, valvetrain clatter and saturation at load. A big cam gives the idle its lope.
+//  2) At run time each car plays those loops the way sample-based racing games do: crossfade the two nearest RPM
+//     loops and pitch-shift them to the exact RPM, crossfade on-/off-throttle sets, add lift-off crackle and pops and
+//     the rev limiter. AI cars are 3D-positioned (PannerNode) with distance falloff, air absorption and doppler.
+//  3) The semi gets an inline-6 turbo diesel the same way, with a jake brake.
+// The same code runs in an OfflineAudioContext to render the WAV checks in /audio-samples.
 const TAU = Math.PI * 2;
-export const V8 = { idle: 870, limit: 8400, rpms: [850, 1500, 2400, 3500, 4800, 6200, 7600, 9000] };
+export const V8 = { idle: 1050, limit: 8400, rpms: [850, 1500, 2400, 3500, 4800, 6200, 7600, 9000] };
 export const DIESEL = { idle: 650, rpms: [600, 800, 1100, 1450, 1800, 2100] };
 
 function rng(seed) { let s = (seed >>> 0) || 1; return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296); }
@@ -147,37 +151,22 @@ export class RevModel {
 
 // A periodic, band-limited 720-degree combustion waveform. There are no
 // per-firing resets, noise-envelope edges, or RPM-bank phase crossfades.
-export function smoothV8(sr,rpm=3500,load=1){return cammedV8(sr,rpm,load);}
+
+// A periodic, band-limited 720-degree combustion waveform. There are no
+// per-firing resets, noise-envelope edges, or RPM-bank phase crossfades.
+export function smoothV8(sr,rpm=3500,load=1){
+  const n=Math.round(sr*120/rpm),a=new Float32Array(n),amps=[1,.72,.93,.65,1.02,.78,.9,.68];
+  for(let h=1;h<=48;h++){let re=0,im=0;for(let k=0;k<8;k++){const phase=2*Math.PI*h*k/8;re+=amps[k]*Math.cos(phase);im-=amps[k]*Math.sin(phase);}
+    const roll=1/(1+(h/(load?24:12))**3),gain=roll/Math.pow(h,.78);for(let j=0;j<n;j++){const phase=2*Math.PI*h*j/n+.22*h/(h+3);a[j]+=gain*(re*Math.cos(phase)-im*Math.sin(phase));}}
+  const g=.2/rms(a);for(let j=0;j<n;j++)a[j]*=g;return a;
+}
 class RoadVoice{
- // Reuse the existing body/tone pair for RPM/load-dependent cleanup.
- // No live filter-type changes, extra voices or per-firing graph work.
- constructor(au,{panned=false,offset=0}={}){const c=this.c=au.ctx;this.au=au;this.isAI=panned;this.airCutoff=12000;this.mix=c.createGain();this.body=c.createBiquadFilter();this.body.type='highpass';this.body.frequency.value=25*V8_VOICE_SCALE;this.body.Q.value=.65;this.body.gain.value=0;this.tone=c.createBiquadFilter();this.tone.type='lowpass';this.tone.frequency.value=8000;this.tone.Q.value=.45;this.out=c.createGain();this.out.gain.value=0;this.mix.connect(this.body);this.body.connect(this.tone);this.tone.connect(this.out);this.node=this.out;if(panned){this.pan=c.createStereoPanner();this.out.connect(this.pan);this.node=this.pan;}this.layers=[];const startAt=au.offline?0:c.currentTime+.025;
- for(const name of['on','off']){const source=c.createBufferSource(),g=c.createGain();source.buffer=au.cleanV8[name];source.loop=true;const nominal=name==='off'?au.offBaseRPM:au.cleanBaseRPM;source.playbackRate.value=V8.idle/nominal*V8_VOICE_SCALE;g.gain.value=0;source.connect(g);g.connect(this.mix);source.start(startAt,(offset*au.cleanBaseRPM/nominal)%source.buffer.duration);this.layers.push({name,s:source,g,rpm:nominal,target:0});}this.rev=new RevModel();}
+ constructor(au,{panned=false,offset=0}={}){const c=this.c=au.ctx;this.au=au;this.mix=c.createGain();this.body=c.createBiquadFilter();this.body.type='lowshelf';this.body.frequency.value=160;this.body.gain.value=0;this.tone=c.createBiquadFilter();this.tone.type='lowpass';this.tone.frequency.value=8000;this.tone.Q.value=.45;this.out=c.createGain();this.out.gain.value=0;this.mix.connect(this.body);this.body.connect(this.tone);this.tone.connect(this.out);this.node=this.out;if(panned){this.pan=c.createStereoPanner();this.out.connect(this.pan);this.node=this.pan;}this.layers=[];const startAt=au.offline?0:c.currentTime+.025;
+ for(const name of['on','off']){const source=c.createBufferSource(),g=c.createGain();source.buffer=au.cleanV8[name];source.loop=true;g.gain.value=0;source.connect(g);g.connect(this.mix);source.start(startAt,offset%source.buffer.duration);this.layers.push({name,s:source,g,rpm:au.cleanBaseRPM,target:0});}this.rev=new RevModel();}
  connect(n){this.node.connect(n);}
- update(t,rpm,w,vol,pitch=1,tau=.06){
-  rpm=Number.isFinite(rpm)?clampAudio(rpm,650,9500):V8.idle;const load=clampAudio(w.on||0,0,1);
-  if(load>.65)this.loadedAt=t;
-  const lift=load<.34&&t-(this.loadedAt??-10)<.35&&rpm>3300&&t>(this.nextPopAt??-1)&&vol>.005;
-  for(const l of this.layers){const gain=w[l.name]||0,rate=clampAudio(rpm/l.rpm*pitch,.2,l.name==='off'?16:2.8)*V8_VOICE_SCALE;
-   if(l.name==='off'&&lift){
-    l.g.gain.cancelAndHoldAtTime(t);l.g.gain.setTargetAtTime(gain,t,.025);
-    for(const[delay,accent]of(this.isAI?[[.025,.10]]:[[.025,.20],[.14,.12],[.29,.07]])){
-     l.g.gain.setTargetAtTime(gain+accent,t+delay,.008);l.g.gain.setTargetAtTime(gain,t+delay+.027,.026);
-    }
-    this.popUntil=t+(this.isAI?.14:.43);this.nextPopAt=t+.95;l.target=gain;this.au.stats.intentionalPops=(this.au.stats.intentionalPops||0)+1;
-   }else if(!(l.name==='off'&&t<(this.popUntil??0))&&(Math.abs(gain-l.target)>.003||gain===0&&l.target!==0)){l.g.gain.setTargetAtTime(gain,t,Math.max(.035,tau));l.target=gain;}
-   if(Math.abs((l.rate??-1)-rate)>.002*V8_VOICE_SCALE){l.s.playbackRate.setTargetAtTime(rate,t,.028);l.rate=rate;}
-  }
-  // The same two existing filters open into loaded roar / airy overrun,
-  // rather than pitching an old bright-idle EQ unchanged through every state.
-  const high=clampAudio((rpm-4300)/3500,0,1),overrun=(1-load)*clampAudio((rpm-2200)/2000,0,1);
-  const cut=Math.min(this.inCar?1700:this.airCutoff,load*(1700+rpm*.55)+(1-load)*(600+rpm*.25)+overrun*9000)*V8_VOICE_SCALE,bodyHz=(25+load*440*Math.pow(high,1.5))*V8_VOICE_SCALE;
-  if(Math.abs((this.bodyHz??0)-bodyHz)>5){this.body.frequency.setTargetAtTime(bodyHz,t,.07);this.bodyHz=bodyHz;}
-  if(Math.abs((this.cutoff??0)-cut)>35){this.tone.frequency.setTargetAtTime(cut,t,.07);this.cutoff=cut;}
-  this.out.gain.setTargetAtTime(vol,t,tau);
- }
+ update(t,rpm,w,vol,pitch=1,tau=.075){const rate=clampAudio(rpm/this.au.cleanBaseRPM*pitch,.2,2.8);for(const l of this.layers){const gain=w[l.name]||0;if(Math.abs(gain-l.target)>.003||gain===0&&l.target!==0){l.g.gain.setTargetAtTime(gain,t,tau);l.target=gain;}if(Math.abs((l.rate??-1)-rate)>.002){l.s.playbackRate.setTargetAtTime(rate,t,.09);l.rate=rate;}}this.out.gain.setTargetAtTime(vol,t,tau);}
  place(t,x,y,z,L){if(!this.pan)return;const dx=x-L.x,dz=z-L.z,d=Math.hypot(dx,dz)||1,side=(-L.fz*dx+L.fx*dz)/d;this.pan.pan.setTargetAtTime(clampAudio(side,-.95,.95),t,.1);this.distanceGain=1/(1+d/14);}
- retire(t){this.out.gain.setTargetAtTime(0,t,.04);for(const l of this.layers){l.g.gain.cancelAndHoldAtTime(t);l.g.gain.setTargetAtTime(0,t,.04);l.target=0;}this.popUntil=0;this.loadedAt=-10;}
+ retire(t){this.out.gain.setTargetAtTime(0,t,.04);}
 }
 const clampAudio=(x,a,b)=>Math.min(b,Math.max(a,x));
 
@@ -238,7 +227,7 @@ export class GameAudio {
     this.aiTone = c.createBiquadFilter(); this.aiTone.type = 'lowpass'; this.aiTone.frequency.value = 12000; this.aiBus = c.createGain(); this.aiBus.gain.value = 0.7; this.aiBus.connect(this.aiTone); this.aiTone.connect(this.master);
     const mk = (arr) => { const b = c.createBuffer(1, arr.length, sr); b.copyToChannel(arr, 0); return b; };
     const t0 = performance?.now?.() ?? 0;
-    this.cleanBaseRPM=3500;const idle=v4IdleBank(sr);this.offBaseRPM=idle.rpm;const off=c.createBuffer(2,idle.left.length,sr);off.copyToChannel(idle.left,0);off.copyToChannel(idle.right,1);this.cleanV8={on:mk(smoothV8(sr,this.cleanBaseRPM,1)),off};
+    this.cleanBaseRPM=3500;this.cleanV8={on:mk(smoothV8(sr,this.cleanBaseRPM,1)),off:mk(smoothV8(sr,this.cleanBaseRPM,0))};
     this.pops=[0,1].map(i=>mk(synthPop(sr,i+1)));this.synthMs=(performance?.now?.()??0)-t0;
     this.player=new RoadVoice(this);this.player.connect(this.engineBus);this.playerRev=new RevModel();
     this.aiPool=Array.from({length:this.voiceLimit},(_,i)=>{const v=new RoadVoice(this,{panned:true,offset:i*.017});v.connect(this.aiBus);return v;});
@@ -268,8 +257,6 @@ export class GameAudio {
     const c = this.ctx, s = c.createBufferSource(); s.buffer = this.pops[(Math.random() * this.pops.length) | 0]; s.playbackRate.value = 0.8 + Math.random() * 0.5;
     const g = c.createGain(); g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(gain,t+.006);g.gain.setTargetAtTime(0,t+.07,.035);s.connect(g); g.connect(dest); s.start(t); s.onended = () => { s.disconnect(); g.disconnect(); };
   }
-  // Reuse the allocated air/rumble buses: quiet mechanical floor, not new voices.
-  v8Floor(t,active=true){if(!this.v8Active&&active){this.roar.fl.frequency.setTargetAtTime(220*V8_VOICE_SCALE,t,.1);this.tire.fl.frequency.setTargetAtTime(1800*V8_VOICE_SCALE,t,.1);}this.v8Active=active;const p=this.playerRev,overrun=(1-p.load)*clampAudio((p.rpm-2200)/2000,0,1);this.v8RumbleFloor=active?.0025+.0025*overrun:0;this.v8AirFloor=active?.004:0;this.roar.g.gain.setTargetAtTime(Math.hypot(this.fieldLevel||0,this.v8RumbleFloor),t,.1);this.tire.g.gain.setTargetAtTime(Math.hypot(this.surfaceLevel||0,this.v8AirFloor),t,.1);}
   // generic single engine (loading the car onto the hauler, menus): rpm01 0..1
   set(rpm01, load = 0.5, vol = 0.12, t) {
     if (!this.live()) return; t = t ?? this.now();
@@ -277,18 +264,17 @@ export class GameAudio {
     this.player.update(t, rpm, { on: load, off: 1 - load }, vol * 2.2 * v8Vol(rpm, load), 1, 0.06);
     this.cam(t, 'chase');
   }
-  // Paddock/staging uses the SAME crank/load model, not a speed-only fake RPM.
   paddock(f,t){
     if(!this.live())return;t=t??this.now();const interval=this.app?.isMobile ? .05 : 1/30;
     if(this.nextPadT!==undefined&&t+1e-6<this.nextPadT)return;
     const dt=this.lastPadT===undefined?(f.dt||.016):clampAudio(t-this.lastPadT,.001,.15);this.lastPadT=t;this.nextPadT=t+interval;
     const p=this.playerRev.step(dt,f.speed||0,0,f.throttle||0,!!f.freeRev);
-    this.player.update(t,p.rpm,{on:p.load,off:1-p.load},.26*v8Vol(p.rpm,p.load),1,.06);this.rpm=p.rpm;this.v8Floor(t);this.cam(t,'chase');
+    this.player.update(t,p.rpm,{on:p.load,off:1-p.load},.26*v8Vol(p.rpm,p.load),1,.06);this.rpm=p.rpm;this.cam(t,'chase');
   }
   cam(t, mode) {
     // in-car: firewall + helmet -> muffled, more low-end rumble; chase: open, bright headers
     const inCar=mode==='incar';if(this.cabTone===inCar)return;this.cabTone=inCar;
-    this.player.inCar=inCar;
+    this.player.tone.frequency.setTargetAtTime(inCar ? 1500 : 9500, t, 0.1); this.player.body.gain.setTargetAtTime(inCar ? 5 : 0, t, 0.1);
     this.aiTone.frequency.setTargetAtTime(inCar ? 1900 : 12000, t, 0.1);
   }
   // per-frame race update. f = { dt, cam:'chase'|'incar'|'tv', L:{x,y,z,fx,fy,fz}, player:{speed,wheelSpin,throttle,x,y,z}|null, cars:[{id,x,y,z,vx,vz,speed,wheelSpin,throttle}] }
@@ -298,14 +284,13 @@ export class GameAudio {
     // here: a bounded persistent voice pool is faded/rebound, never recreated.
     const interval=this.app?.isMobile ? .05 : 1/30;if(this.nextRaceT!==undefined&&t+1e-6<this.nextRaceT)return;
     const elapsed=this.lastRaceT===undefined?dt:clampAudio(t-this.lastRaceT,.001,.15);this.lastRaceT=t;this.nextRaceT=(this.nextRaceT??t)+interval;if(this.nextRaceT<t)this.nextRaceT=t+interval;this.stats.controlUpdates++;
-    this.v8Floor(t,!!f.player);
     const L=f.L,lv=this.lPrev?{x:clampAudio((L.x-this.lPrev.x)/elapsed,-75,75),z:clampAudio((L.z-this.lPrev.z)/elapsed,-75,75)}:{x:0,z:0};this.lPrev={x:L.x,z:L.z};this.cam(t,f.cam);
-    if(f.player){const p=f.player,pr=this.playerRev.step(elapsed,p.speed,p.wheelSpin,p.throttle,!!p.freeRev),vol=.55*v8Vol(pr.rpm,pr.load)*(pr.cut>0?.86:1);this.player.update(t,pr.rpm,{on:pr.load,off:1-pr.load},vol,1,.075);this.rpm=pr.rpm;}else this.player.update(t,V8.idle,{on:0,off:1},0);
+    if(f.player){const p=f.player,pr=this.playerRev.step(elapsed,p.speed,p.wheelSpin,p.throttle,p.freeRev),vol=.55*v8Vol(pr.rpm,pr.load)*(pr.cut>0?.86:1);this.player.update(t,pr.rpm,{on:pr.load,off:1-pr.load},vol,1,.075);this.rpm=pr.rpm;}else this.player.update(t,V8.idle,{on:0,off:1},0);
     if(this.rankAt===undefined||t>=this.rankAt){this.rankAt=t+.4;this.audible=[...f.cars].filter(a=>(a.x-L.x)**2+(a.z-L.z)**2<90**2).sort((a,b)=>((a.x-L.x)**2+(a.z-L.z)**2)*(this.ai.has(a.id)?.72:1)-((b.x-L.x)**2+(b.z-L.z)**2)*(this.ai.has(b.id)?.72:1)).slice(0,this.voiceLimit).map(a=>a.id);}
     const wanted=new Set(this.audible||[]);
     for(const[id,v]of this.ai)if(!wanted.has(id)||!f.cars.some(c=>c.id===id)){v.retire(t);v.availableAt=t+.16;this.ai.delete(id);}
     for(const id of wanted)if(!this.ai.has(id)){const v=this.aiPool.find(v=>![...this.ai.values()].includes(v)&&t>=(v.availableAt??-1));if(v){v.rev=new RevModel();const car=f.cars.find(a=>a.id===id);if(car){v.rev.rpm=clampAudio(Math.abs(car.speed)*196,V8.idle,V8.limit);v.rev.load=car.throttle||0;}v.dop=1;this.ai.set(id,v);this.stats.poolRebinds++;}}
-    for(const[id,v]of this.ai){const a=f.cars.find(c=>c.id===id);if(!a)continue;const r=v.rev.step(elapsed,a.speed,a.wheelSpin,a.throttle),dx=a.x-L.x,dz=a.z-L.z,dist=Math.hypot(dx,dz)||1,radial=((a.vx-lv.x)*dx+(a.vz-lv.z)*dz)/dist;v.dop+=(clampAudio(343/(343+radial),.94,1.06)-v.dop)*(1-Math.exp(-elapsed*3));v.place(t,a.x,a.y+.6,a.z,L);v.airCutoff=Math.min(c.sampleRate*.45,Math.max(900,8000/(1+dist/35)));v.update(t,r.rpm,{on:r.load,off:1-r.load},.42*v8Vol(r.rpm,r.load)*v.distanceGain,v.dop,.1);}
+    for(const[id,v]of this.ai){const a=f.cars.find(c=>c.id===id);if(!a)continue;const r=v.rev.step(elapsed,a.speed,a.wheelSpin,a.throttle),dx=a.x-L.x,dz=a.z-L.z,dist=Math.hypot(dx,dz)||1,radial=((a.vx-lv.x)*dx+(a.vz-lv.z)*dz)/dist;v.dop+=(clampAudio(343/(343+radial),.94,1.06)-v.dop)*(1-Math.exp(-elapsed*3));v.place(t,a.x,a.y+.6,a.z,L);v.tone.frequency.setTargetAtTime(Math.min(c.sampleRate*.45,Math.max(900,8000/(1+dist/35))),t,.12);v.update(t,r.rpm,{on:r.load,off:1-r.load},.42*v8Vol(r.rpm,r.load)*v.distanceGain,v.dop,.1);}
   }
   // highway semi. f = { dt, speed (m/s), throttle 0/1, brake 0/1, cam }
   truck(f, t) {
@@ -349,12 +334,12 @@ export class GameAudio {
     if (this.muted || !this.ctx||!this.engineBuilt) return; t = t ?? this.now();
     const v = Math.min(1, speed01) * (0.012 + Math.min(1, slide) * 0.035 + cushion * 0.018);
     if(this.nextSurfaceT!==undefined&&t<this.nextSurfaceT)return;this.nextSurfaceT=t+.05;
-    this.surfaceLevel=v;this.tire.g.gain.setTargetAtTime(!this.diesel&&this.v8AirFloor?Math.hypot(v,this.v8AirFloor):v, t, 0.08); this.tire.fl.frequency.setTargetAtTime(900 + speed01 * 1600 - cushion * 400, t, 0.1);
+    this.tire.g.gain.setTargetAtTime(v, t, 0.08); this.tire.fl.frequency.setTargetAtTime(900 + speed01 * 1600 - cushion * 400, t, 0.1);
   }
   field(near, excite = 0, t) {
     if (this.muted || !this.ctx||!this.engineBuilt) return; t = t ?? this.now(); const k = this.app?.settings?.crowd ?? 1;
     if(this.nextFieldT!==undefined&&t<this.nextFieldT)return;this.nextFieldT=t+.05;
-    this.fieldLevel=k*(0.004+Math.min(1,near)*0.012);this.roar.g.gain.setTargetAtTime(!this.diesel&&this.v8RumbleFloor?Math.hypot(this.fieldLevel,this.v8RumbleFloor):this.fieldLevel, t, 0.15);          // the AI engines are real voices now; this is just rumble
+    this.roar.g.gain.setTargetAtTime(k * (0.004 + Math.min(1, near) * 0.012), t, 0.15);          // the AI engines are real voices now; this is just rumble
     this.aiBus.gain.setTargetAtTime(0.7 * (0.35 + 0.65 * k), t, 0.2);
     this.crowd.g.gain.setTargetAtTime(k * (0.004 + Math.min(1, excite) * 0.03), t, 0.3);
   }
@@ -369,7 +354,6 @@ export class GameAudio {
     if (this.diesel) { this.diesel.out.gain.cancelScheduledValues(t); this.diesel.out.gain.setTargetAtTime(0, t, 0.05); }
     for(const v of this.aiPool||[])v.retire(t);this.ai.clear();this.audible=[];this.rankAt=undefined;this.nextRaceT=undefined;this.lastRaceT=undefined;this.nextSurfaceT=undefined;this.nextFieldT=undefined;this.lPrev=null;this.gb=null;
     if(this.diesel){this.diesel.retire(t);this.diesel=null;if(this.turbo){const o=this.turbo,g=this.turboGain;o.stop(t+.2);o.onended=()=>{o.disconnect();g.disconnect();};this.turbo=null;this.turboGain=null;}}
-    this.v8Active=false;this.v8RumbleFloor=0;this.v8AirFloor=0;this.surfaceLevel=0;this.fieldLevel=0;
     for (const g of [this.tire.g.gain, this.roar.g.gain, this.crowd.g.gain]) { g.cancelScheduledValues(t); g.setTargetAtTime(0, t, 0.05); }
   }
   toggleMute() { this.muted = !this.muted; localStorage.setItem('dtt.mute', this.muted ? '1' : '0'); if (this.muted) this.stop(); this.applyVolume();if(!this.muted)this.unlockMusic(); }
