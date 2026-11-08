@@ -323,7 +323,73 @@ export function stepCar(car, input, trk, dt) {
 // Split position stabilization from the contact impulse: centimeters per substep,
 // not a whole penetration-depth teleport. One capsule contact per body pair.
 function contactShift(c,x,z,dt){const n=Math.hypot(x,z),budget=c._contactBudget??(2*dt),k=n?Math.min(1,budget/n):0;c.x+=x*k;c.z+=z*k;if(c._contactBudget!==undefined)c._contactBudget=Math.max(0,budget-n*k);}
-export function wallCollide(car,trk,dt=1/120){const cs=Math.cos(car.th),sn=Math.sin(car.th);let hit=null;for(const o of[-1.7,0,1.7]){const p=trk.project(car.x+cs*o,car.z+sn*o);let pen=0,nx=0,nz=0;if(p.d+1>trk.outer&&!inPitGate(trk,p.s)){pen=p.d+1-trk.outer;nx=p.nx;nz=p.nz;}if(pen>0&&(!hit||pen>hit.pen))hit={o,pen,nx,nz};}if(!hit)return 0;const{o,pen,nx,nz}=hit,rx=cs*o,rz=sn*o,vn=(car.vx-car.w*rz)*nx+(car.vz+car.w*rx)*nz,cross=rx*nz-rz*nx;contactShift(car,-nx*Math.max(0,pen-.01)*.22,-nz*Math.max(0,pen-.01)*.22,dt);const bias=Math.min(1.5,Math.max(0,pen-.01)*5),j=Math.max(0,(Math.max(0,vn)*1.035+bias)/(1/car.m+cross*cross/car.I));car.vx-=j*nx/car.m;car.vz-=j*nz/car.m;car.w-=clamp(j*cross/car.I*(ASSIST[car.assist]?.contactYaw??1),-dt*8,dt*8);car.w*=Math.exp(-dt*2);car.vx*=Math.exp(-dt*.25);car.vz*=Math.exp(-dt*.25);car.w=clamp(car.w,-1.8,1.8);car.contactHold=.85;if(ASSIST[car.assist]?.safe&&vn>1)car.recoverTime=.85;return Math.max(0,vn);}
+// Use the same full coachwork envelope as the retained pit-return car. The old
+// three-circle wall capsule missed the long nose/rear corners at the handoff.
+const WALL_HULL = [[2.85,-1.10],[2.85,1.10],[-2.65,-1.10],[-2.65,1.10],[0,-1.10],[0,1.10]];
+function wallContact(car,trk){
+  const q=trk.project(car.x,car.z);if(q.d<trk.outer-3.3)return null;
+  const cs=Math.cos(car.th),sn=Math.sin(car.th);let hit=null;
+  for(const [x,z] of WALL_HULL){const rx=cs*x-sn*z,rz=sn*x+cs*z,p=trk.project(car.x+rx,car.z+rz),pen=p.d-trk.outer;
+    if(pen>0&&!inPitGate(trk,p.s)&&(!hit||pen>hit.pen))hit={pen,nx:p.nx,nz:p.nz,rx,rz};
+  }return hit;
+}
+// Non-penetration is a hard constraint, NOT part of the shared 2 m/s cosmetic
+// contact-shift budget. Car/car contacts can consume that entire budget first.
+export function resolveWallPenetration(car,trk){
+  let moved=0;
+  for(let i=0;i<6;i++){const hit=wallContact(car,trk);if(!hit)break;const {pen,nx,nz}=hit,shift=pen+.006;
+    car.x-=nx*shift;car.z-=nz*shift;moved+=shift;
+    const outward=car.vx*nx+car.vz*nz;if(outward>0){car.vx-=outward*nx;car.vz-=outward*nz;}
+  }
+  if(moved){const q=trk.project(car.x,car.z);car.s=q.s;car.d=q.d;car.speed=Math.hypot(car.vx,car.vz);}
+  return moved;
+}
+export function wallCollide(car,trk,dt=1/120){
+  const hit=wallContact(car,trk);if(!hit)return 0;
+  const {pen,nx,nz,rx,rz}=hit,vn=(car.vx-car.w*rz)*nx+(car.vz+car.w*rx)*nz,cross=rx*nz-rz*nx;
+  const bias=Math.min(1.5,Math.max(0,pen-.01)*5),j=Math.max(0,(Math.max(0,vn)*1.035+bias)/(1/car.m+cross*cross/car.I));
+  car.vx-=j*nx/car.m;car.vz-=j*nz/car.m;car.w-=clamp(j*cross/car.I*(ASSIST[car.assist]?.contactYaw??1),-dt*8,dt*8);
+  car.w=clamp(car.w*Math.exp(-dt*4),-1.8,1.8);car.vx*=Math.exp(-dt*.25);car.vz*=Math.exp(-dt*.25);
+  resolveWallPenetration(car,trk);car.contactHold=.85;if(ASSIST[car.assist]?.safe&&vn>1)car.recoverTime=.85;return Math.max(0,vn);
+}
+// Four tire contact patches must ALL clear the visible clay apron, plus 0.85 m.
+// A parked/spinning car gains no lap advantage. Separate brushes never add up.
+export function allWheelsOffClay(c,trk,q=trk.project(c.x,c.z)){
+  const edge=-trk.W/2-5;if(q.d>=edge-.5)return false;
+  const cs=Math.cos(c.th),sn=Math.sin(c.th);
+  return [[1.32,-.86],[1.32,.70],[-1.36,-.85],[-1.36,.91]].every(([x,z])=>trk.project(c.x+cs*x-sn*z,c.z+sn*x+cs*z).d<edge-.85);
+}
+export function updateTrackLimits(c,trk,h,active=true){
+  const q=trk.project(c.x,c.z);
+  let ds=q.s-(c.infieldLastS??q.s);if(ds>trk.P/2)ds-=trk.P;if(ds< -trk.P/2)ds+=trk.P;c.infieldLastS=q.s;
+  const allOff=active&&!c.dnf&&!c.finished&&allWheelsOffClay(c,trk,q);
+  if(allOff){c.infieldTime=(c.infieldTime||0)+h;c.infieldAdvance=(c.infieldAdvance||0)+Math.max(0,ds);
+    if((c.infieldTime>=1.25&&c.infieldAdvance>=18)||c.infieldAdvance>=40)c.lapInvalid=true;
+  }else{c.infieldTime=0;c.infieldAdvance=0;}
+  return q;
+}
+// Persisted, fully specified pace driver: unlike the old finished-player path,
+// retain steering state AND use its throttle/brake plan, not fixed 25% gas.
+export function cooldownInput(c,trk,others,h){
+  const q=trk.project(c.x,c.z);c.s=q.s;c.d=q.d;c.speed=Math.hypot(c.vx,c.vz);c.reversing=false;c.reverseHold=0;
+  c.cooldownAI ||= {lane:-.15,curLane:clamp(q.d/(trk.W/2),-.7,.65),skill:.8,aggr:.15,cons:1,adapt:0,fixed:true};
+  return aiInput(c,trk,c.cooldownAI,others,{dt:h,pace:true,paceSpeed:12,paceLane:-.15});
+}
+// Contact must NOT suppress this watchdog. It is precisely sustained wall
+// contact under drive demand (including a finished player) that needs recovery.
+export function recoverWallStuck(c,trk,h,others=[],automatic=false){
+  if(c.dnf)return false;const q=trk.project(c.x,c.z),speed=Math.hypot(c.vx,c.vz),heading=wrapAngle(c.th-trk.center(q.s).th);
+  const trapped=q.d>trk.outer-3.8&&(speed<3||Math.abs(heading)>1.1)&&(c.throttle>.08||automatic||c.finished);
+  c.wallStuckTime=trapped?(c.wallStuckTime||0)+h:0;if(c.wallStuckTime<(c.finished?1.1:1.8))return false;
+  for(const back of[0,8,16,24])for(const lane of[clamp(q.d,-trk.W/2+3,trk.outer-4),0,-trk.W/2+3]){
+    if(back>q.s)continue; // never wrap backward into an apparent extra lap
+    const p=trk.point(q.s-back,lane);if(others.some(o=>o!==c&&Math.hypot(p.x-o.x,p.z-o.z)<6))continue;
+    // Never award forward progress for recovery. Keep lap/scoring untouched.
+    Object.assign(c,{x:p.x,z:p.z,th:p.th,vx:Math.cos(p.th)*3,vz:Math.sin(p.th)*3,speed:3,w:0,steer:0,s:((q.s-back)%trk.P+trk.P)%trk.P,d:lane,wallStuckTime:0,reversing:false,reverseHold:0,stuck:0,stuckT:0});
+    c.prevS=c.s;c.infieldLastS=c.s;delete c.cooldownAI;delete c.formationArc;
+    if(c.previousPose)Object.assign(c.previousPose,{x:c.x,z:c.z,th:c.th});c.wallRecoveries=(c.wallRecoveries||0)+1;return true;
+  }return false;
+}
 export function carCollide(A,B,dt=1/120){if((B.x-A.x)**2+(B.z-A.z)**2>49)return 0;const ca=Math.cos(A.th),sa=Math.sin(A.th),cb=Math.cos(B.th),sb=Math.sin(B.th);let hit=null;for(const oa of[-1.6,0,1.6])for(const ob of[-1.6,0,1.6]){const dx=B.x+cb*ob-A.x-ca*oa,dz=B.z+sb*ob-A.z-sa*oa,d=Math.hypot(dx,dz),pen=1.96-d;if(pen>0&&(!hit||pen>hit.pen))hit={oa,ob,pen,nx:d>1e-5?dx/d:-sa,nz:d>1e-5?dz/d:ca};}if(!hit)return 0;const{oa,ob,pen,nx,nz}=hit,rax=ca*oa,raz=sa*oa,rbx=cb*ob,rbz=sb*ob,vn=(A.vx-A.w*raz-B.vx+B.w*rbz)*nx+(A.vz+A.w*rax-B.vz-B.w*rbx)*nz,ra=rax*nz-raz*nx,rb=rbx*nz-rbz*nx,inv=1/A.m+1/B.m+ra*ra/A.I+rb*rb/B.I,j=Math.max(0,(Math.max(0,vn)*1.025+Math.min(1.3,Math.max(0,pen-.015)*4))/inv),corr=Math.max(0,pen-.015)*.12;contactShift(A,-nx*corr,-nz*corr,dt);contactShift(B,nx*corr,nz*corr,dt);A.vx-=j*nx/A.m;A.vz-=j*nz/A.m;B.vx+=j*nx/B.m;B.vz+=j*nz/B.m;A.w-=clamp(j*ra/A.I*.3*(ASSIST[A.assist]?.contactYaw??1),-dt*6,dt*6);B.w+=clamp(j*rb/B.I*.3*(ASSIST[B.assist]?.contactYaw??1),-dt*6,dt*6);A.w*=Math.exp(-dt);B.w*=Math.exp(-dt);A.w=clamp(A.w,-1.8,1.8);B.w=clamp(B.w,-1.8,1.8);A.contactHold=B.contactHold=.85;if(ASSIST[A.assist]?.safe&&vn>1)A.recoverTime=.75;if(ASSIST[B.assist]?.safe&&vn>1)B.recoverTime=.75;return Math.max(0,vn);}
 
 // ---------------------------------------------------------------- AI driver

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {pbrMaterial} from './gfx2-materials.js';
 import {groundObject} from './grounding.js';
-import {clamp,wrapAngle} from './physics.js';
+import {clamp,wrapAngle,updateTrackLimits} from './physics.js';
 // One non-overlapping capsule mesh shares every boundary vertex with the clay apron.
 export function buildDrivableInfield(r){
  const t=r.trk,N=r.trackN,outer=-t.W/2-5,inner=outer-3,positions=[],uv=[],colors=[],indices=[],rings=[];
@@ -46,6 +46,6 @@ export function retireAI(r,c,reason='mechanical failure'){
  if(!r.attract&&r.phase==='race'&&r.flag!=='yellow'&&r.flag!=='checkered'&&q.d> -t.W/2-5)r.throwCaution(c);return true;
 }
 export function updateRetirements(r,h){for(const c of r.cars){if(!c.player&&!c.dnf&&!c.finished){c.engineStress=(c.engineStress||0)+(c.damage>78?h:-h*.8);c.engineStress=Math.max(0,c.engineStress);if(c.damage>=100||c.mechanicalFailure||c.engineStress>22)retireAI(r,c,c.damage>=100?'wreck damage':'mechanical failure');}const d=c.retirement;if(!d)continue;c.bump=(c.bump||0)*Math.exp(-h*8);c.wheelSpin=(c.wheelSpin||0)*Math.exp(-h*6);c.slipR=(c.slipR||0)*Math.exp(-h*6);if(d.parked){c.vx=c.vz=c.speed=c.w=0;continue;}const target=d.waypoints[d.index],dx=target.x-c.x,dz=target.z-c.z,length=Math.hypot(dx,dz),speed=(d.mode==='recovery push'?2.6:4.2)*(d.index===d.waypoints.length-1?Math.min(1,Math.max(.05,length/3)):1),step=Math.min(length,speed*h);if(length>.02){const angle=Math.atan2(dz,dx),turn=wrapAngle(angle-c.th)*Math.min(1,h*4);c.th+=turn;c.w=turn/h;c.vx=dx/length*speed;c.vz=dz/length*speed;c.x+=dx/length*step;c.z+=dz/length*step;c.speed=speed;c.throttle=d.mode==='limping'?.12:0;c.steer=clamp(wrapAngle(angle-c.th),-.5,.5);}if(length<.10){d.index++;if(d.index>=d.waypoints.length){d.parked=true;c.vx=c.vz=c.speed=c.w=c.throttle=0;}}const p=r.trk.project(c.x,c.z);c.s=p.s;c.d=p.d;c.prevS=p.s;}}
-export function updateInfieldProgress(r,c,h){const q=r.trk.project(c.x,c.z);if(c.dnf)return;c.infieldTime=q.d< -r.T.W/2-5?(c.infieldTime||0)+h:0;let ds=q.s-(c.infieldLastS??q.s);if(ds>r.trk.P/2)ds-=r.trk.P;if(ds< -r.trk.P/2)ds+=r.trk.P;c.infieldLastS=q.s;if(q.d< -r.T.W/2-5)c.infieldAdvance=(c.infieldAdvance||0)+Math.max(0,ds);if(c.infieldTime>1.25||c.infieldAdvance>12)c.lapInvalid=true;
+export function updateInfieldProgress(r,c,h){if(c.dnf)return;const q=updateTrackLimits(c,r.trk,h,r.phase==='race'&&(r.flag==='green'||r.flag==='white'||r.flag==='checkered'));
  if(c.player&&!r.attract&&q.d< -r.T.W/2-3){r.hud.sub.textContent=c.lapInvalid?'INFIELD · LAP INVALID · REJOIN THE CLAY (R to recover)':'INFIELD · LOW GRIP · REJOIN THE CLAY (R to recover)';c.infieldPrompt=true;}else if(c.player&&c.infieldPrompt){if(r.hud.sub.textContent.startsWith('INFIELD'))r.hud.sub.textContent=c.lapInvalid?'LAP INVALID · next crossing will not count':'';c.infieldPrompt=false;}}
 export function updateRetirementVisuals(r){for(const c of r.cars)if(c.retirement)c.retirement.hazards.visible=Math.floor(r.time*2.5)%2===0;}

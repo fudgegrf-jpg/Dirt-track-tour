@@ -3,7 +3,7 @@ import { ContactShadow, seatWheels } from './contact.js';
 // Hauler loading mini-game: drive the late model up the ramp into the enclosed trailer and park it.
 import * as THREE from 'three';
 import { makeLateModel, makeSemi, makeSky, dirtTextures, glowTexture, trailerTexture, disposeScene } from './gfx.js';
-import { clamp, lerp, wrapAngle } from './physics.js';
+import { clamp, lerp, wrapAngle, resolveWallPenetration } from './physics.js';
 import * as UI from './ui.js';
 
 const RAMP_LEN = 4.6, FLOOR = 1.25, RAMP_HALF = 1.22, IN_HALF = 1.25, FRONT_X = -15.4;
@@ -15,6 +15,16 @@ export class LoadScene {
     this.c={x:p.x-this.offset.x,z:p.z-this.offset.z,th:p.th,v:Math.min(11.18,p.speed||0),steer:0};
     if(st.pitPose?.round===st.round&&st.pitPose.layout!==2){const old=st.pitPose.c;if(!old||Math.abs(old.x)>72||old.z< -43||old.z>39)st.pitPose.c={...this.c};if(st.pitPose.session){st.pitPose.session.pathIndex=0;st.pitPose.session.exitStarted=false;}st.pitPose.layout=2;}
     if(st.pitPose?.round===st.round)Object.assign(this.c,st.pitPose.c);
+    // Sanitize retained OR saved inside-track coachwork before the wall's
+    // crossing-only pit collision takes over; never pull a paddock car inward.
+    const world={x:this.c.x+this.offset.x,z:this.c.z+this.offset.z,th:this.c.th,vx:0,vz:0};
+    const spawn=race.trk.project(world.x,world.z);let wallShift=0;
+    if(spawn.d<race.trk.outer)wallShift=resolveWallPenetration(world,race.trk);
+    else if(spawn.d<race.trk.outer+3.4){
+      // Saved cars already outside stay outside: clear the opposite wall face.
+      for(let i=0;i<6;i++){let hit=null;for(const corner of this.corners({x:world.x,z:world.z,th:world.th})){const q=race.trk.project(corner.x,corner.z),pen=race.trk.outer+.36-q.d;if(pen>0&&!inPitGate(race.trk,q.s)&&(!hit||pen>hit.pen))hit={...q,pen};}if(!hit)break;world.x+=hit.nx*(hit.pen+.006);world.z+=hit.nz*(hit.pen+.006);wallShift+=hit.pen+.006;}
+    }
+    if(wallShift){this.c.x=world.x-this.offset.x;this.c.z=world.z-this.offset.z;this.c.v=0;}
     this.contact=p.contactShadow;this.rigContact=new ContactShadow(this.scene,this.semi,true);this.rigContact.update(()=>0);
     race.cars.filter(c=>!c.player).forEach((c,i)=>{const b=this.pits.bays[i%this.pits.bays.length];c.mesh.position.set(this.offset.x+b.x,0,this.offset.z+b.z+Math.floor(i/this.pits.bays.length)*4);c.mesh.rotation.set(0,Math.PI,0);c.mesh.traverse(o=>{if(o.isLOD){o.autoUpdate=false;o.levels[0].object.visible=false;o.levels[1].object.visible=true;}});c.contactShadow.update(()=>0);});
     this.goal=new THREE.Mesh(new THREE.PlaneGeometry(2.3,2.2),new THREE.MeshStandardMaterial({color:0xd2f77f,emissive:0x799f33,emissiveIntensity:.25,transparent:true,opacity:.65}));this.goal.rotation.x=-Math.PI/2;this.goal.position.set(-11.65,FLOOR+.02,0);this.pits.root.add(this.goal);
@@ -113,6 +123,18 @@ export class LoadScene {
         if(this.winch&&this.loading){this.winch=false;c.v=0;this.hud.sub.textContent='Winch paused at obstruction · reverse to back out, or R / Re-align';}
         if (this.cool <= 0 && sp > 0.35) { const d = 1 + sp * 2.6; this.dmg += d; this.hits++; this.cool = 0.6; this.shake = 0.5; this.flash(b==='front'?'BANG! Hit the cabinets':b==='trailer'?'SCRAPED THE TRAILER WALL':b==='trackwall'?'CONTACT — TRACK WALL':'CONTACT — PADDOCK OBJECT', '#ff5a4a'); }
       }
+      // Repeated wall bounces at the same spot must not survive the results
+      // handoff forever. Independent of hit cooldown and winch reverse cycles.
+      if(b==='trackwall')this.lastWallContact=this.t;
+      const driving=!!(inp.throttle||inp.brake||this.winch),anchor=this.wallAnchor;
+      if(!anchor||Math.hypot(c.x-anchor.x,c.z-anchor.z)>1.5||!driving||this.t-(this.lastWallContact??-99)>.5){this.wallAnchor={x:c.x,z:c.z};this.wallTrapTime=0;}
+      else this.wallTrapTime=(this.wallTrapTime||0)+dt;
+      if(this.wallTrapTime>2.5){
+        const q=this.race.trk.project(c.x+this.offset.x,c.z+this.offset.z);
+        if(q.d<this.race.trk.outer){const p=this.race.trk.point(q.s,this.race.trk.outer-4);Object.assign(c,{x:p.x-this.offset.x,z:p.z-this.offset.z,th:p.th,v:0,steer:0});this.autoProgress=null;}
+        else this.recoverWinch();
+        this.wallTrapTime=0;this.wallAnchor=null;this.wallRecoveries=(this.wallRecoveries||0)+1;this.hud.sub.textContent='Crew freed the car from the wall · continue to Bay '+this.app.state.num;
+      }
       // falling off the ramp edge
       const hs = this.wheelPts(c).map(w => this.height(w.x, w.z));
       if (Math.max(Math.abs(hs[0] - hs[1]), Math.abs(hs[2] - hs[3])) > 0.4 && c.x > -1 && c.x<5&&Math.abs(c.z)<2 && !this.falling) {
@@ -153,7 +175,7 @@ export class LoadScene {
     this.app.audio.paddock?.({dt,speed:c.v,throttle:this.done?0:this.audioThrottle||0,freeRev:this.audioFree||Math.abs(c.v)<1});
   }
   recoverWinch(){
-    Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0,wr:0});this.winch=false;this.loading=true;this.exitStarted=true;this.pathIndex=this.pits.road.drive.length-1;this.falling=0;this.hold=0;this.autoProgress=null;
+    Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0,wr:0});this.winch=false;this.loading=true;this.exitStarted=true;this.pathIndex=this.pits.road.drive.length-1;this.falling=0;this.hold=0;this.autoProgress=null;this.wallTrapTime=0;this.wallAnchor=null;
     this.wheelH=this.wheelPts(this.c).map(w=>this.height(w.x,w.z));
     if(this.hud)this.hud.sub.textContent='Crew re-aligned at ramp · drive or X / Winch to retry';
   }

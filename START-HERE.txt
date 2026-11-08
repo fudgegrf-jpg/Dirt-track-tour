@@ -88,7 +88,7 @@ REFERENCE-2 CAR AND FORGIVING KEYBOARD UPDATE
   no longer instantly puts the car in reverse.
 
 WHOLE-TOUR POLISH
-- All five ovals have smooth easements and progressive turn banking suited to
+- Both active ovals have smooth easements and progressive turn banking suited to
   their character. Salina Highbanks remains 6 degrees straight / 18-26 degrees in turns.
 - Graphics: Auto / Low / Medium / High. Auto selects Low on phones and Medium on desktop.
   G cycles them. Geometry/scenery updates at the next stage; pixel ratio,
@@ -248,7 +248,7 @@ motion before driving forward. Fuel use never becomes negative while backing.
 The race car and pit car also support brake-to-reverse.
 
 CONCRETE PADDOCKS / DUSTY CLAY / 3D GRASS
-All five tracks now have concrete hauler lots: CC0 concrete PBR maps tiled every
+Both active tracks now have concrete hauler lots: CC0 concrete PBR maps tiled every
 5 meters, expansion joints, white/yellow stalls, ramp guides, faint oil/tire marks
 and 15cm perimeter curbs with an open road entrance. The lot stays at the existing
 flat loading datum; the corner pit road ends flush, with a graded terrain apron.
@@ -279,7 +279,7 @@ FAST MUSIC / HUD 2 / SEMI 2 / INFIELD UPDATE
   engine recording. Eight compact listening demos: audio-samples/semi-demos.html.
 - Closed cab: ribbed floor, firewall, lower dash, door/bulkhead/sill panels and
   supported pedals. The steering rim is polished warm wood with metal spokes.
-- All five infields are drivable. Low tires mark the inside; there is no hidden
+- Both active infields are drivable. Low tires mark the inside; there is no hidden
   inside collision ring. Grass is slippery, slower, dusty and bumpy. Visible
   equipment and pole bases are solid. Rejoin the clay; a deep infield shortcut
   invalidates the next lap crossing. R does not grant a cut lap.

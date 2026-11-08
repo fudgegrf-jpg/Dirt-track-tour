@@ -1,3 +1,4 @@
+import {migrateSeasonSave,SEASON_TRACK_VERSION} from './season.js';
 import {GraphicsFinishPass} from './gfx2-post.js';
 import {upgradeScanMaterials} from './gfx2-materials.js';
 import { MobileControls, isTouchDevice } from './mobile.js';
@@ -158,7 +159,7 @@ class App {
     const standings = {}; for (const d of AI_DRIVERS) standings[d.name] = 0;
     const driver = opts.driver?.trim() || DEFAULT_DRIVER; standings[driver] = 0;
     return { v: 1, driver, team: opts.team || 'Red Clay Racing', num: opts.num || DEFAULT_PROFILE.num, color: opts.color ?? DEFAULT_PROFILE.color, accent: opts.accent ?? DEFAULT_PROFILE.accent, cageColor:opts.cageColor??DEFAULT_PROFILE.cageColor, scheme:opts.scheme??DEFAULT_PROFILE.scheme, liveryDefaultsVersion:2,
-      round: 0, money: 15000, carDmg: 0, haulerDmg: 0, fuel: 0.7, fatigue: 0, up: { engine: 0, tires: 0, shocks: 0 }, crew: ['m2'],
+      seasonTrackVersion:SEASON_TRACK_VERSION,seasonTrackIds:TRACKS.map(t=>t.id),round: 0, money: 15000, carDmg: 0, haulerDmg: 0, fuel: 0.7, fatigue: 0, up: { engine: 0, tires: 0, shocks: 0 }, crew: ['m2'],
       standings, results: [], phase: 'shop', late: false, slackBonus: 0, arrival: null, earnings: 0, log: [] };
   }
   load() {
@@ -179,15 +180,15 @@ class App {
           }; rename(s.results); rename(s.log);
           localStorage.setItem(SAVE_KEY, JSON.stringify(s));
         }
-        if(paintMigrated)localStorage.setItem(SAVE_KEY,JSON.stringify(s));
+        if(migrateSeasonSave(s)||paintMigrated)localStorage.setItem(SAVE_KEY,JSON.stringify(s));
         return s;
       }
     } catch (e) {} return null;
   }
   save() { if (this.state) localStorage.setItem(SAVE_KEY, JSON.stringify(this.state)); }
   clearSave() { localStorage.removeItem(SAVE_KEY); }
-  get track() { return TRACKS[Math.min(this.state.round, TRACKS.length - 1)]; }
-  get route() { return ROUTES[this.state.round]; }
+  get track() { return TRACKS[Math.max(0,Math.min(Number.isInteger(this.state?.round)?this.state.round:0,TRACKS.length-1))]; }
+  get route() { return ROUTES[this.state?.round??0]; }
   crew(role) { return (this.state?.crew || []).map(id => CREW_POOL.find(c => c.id === id)).find(c => c && c.role === role); }
   carParams() {
     const s = this.state, chief = this.crew('Crew Chief'), tire = this.crew('Tire Guy');
@@ -195,6 +196,8 @@ class App {
   }
   // ---------- flow ----------
   goto(phase, params = {}) {
+    if(this.state&&migrateSeasonSave(this.state))this.save();
+    if(['highway','map'].includes(phase)&&!this.route)phase=this.state?.results?.length>=TRACKS.length?'season':'shop';
     if(phase==='race'&&!this.manual&&!params.warmed)return this.loadRace();
     if(!params.warmed){this.transitionToken=(this.transitionToken||0)+1;this.warming=false;this.transitioning=false;document.getElementById('race-loading')?.remove();}
     this.mobile?.reset();

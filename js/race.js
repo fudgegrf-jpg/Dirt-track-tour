@@ -14,10 +14,10 @@ import { DEFAULT_DRIVER, DEFAULT_PROFILE } from './data.js';
 import {qualityPreset} from './quality.js';
 import { ContactShadow } from './contact.js';
 import * as THREE from 'three';
-import { OvalTrack, makeCar, stepCar, wallCollide, carCollide, aiInput, checkStuck, computeDraft, grooveTimes, DIFFICULTY, clamp, lerp, wrapAngle } from './physics.js';
+import { OvalTrack, makeCar, stepCar, wallCollide, resolveWallPenetration, recoverWallStuck, cooldownInput, allWheelsOffClay, carCollide, aiInput, checkStuck, computeDraft, grooveTimes, DIFFICULTY, clamp, lerp, wrapAngle } from './physics.js';
 const _vContact = new THREE.Vector3();
 const _vF = new THREE.Vector3(), _vR = new THREE.Vector3(), _vU = new THREE.Vector3(), _mB = new THREE.Matrix4(), _qS = new THREE.Quaternion(), _qB = new THREE.Quaternion(), _eB = new THREE.Euler();
-import { AI_DRIVERS, POINTS, PURSE, BONUS } from './data.js';
+import { TRACKS, AI_DRIVERS, POINTS, PURSE, BONUS } from './data.js';
 import { makeLateModel, WHEEL_R, DRIVER_EYE, makeSky, dirtTextures, grassTexture, bannerTexture, fenceTexture, glowTexture, trailerTexture, Dust, disposeScene, srand, rnd } from './gfx.js';
 
 // Every championship show is now run under the lights. Highway time remains independent.
@@ -34,6 +34,7 @@ const SKIES = {
 
 export class RaceScene {
   constructor(app, { track, attract = false, startBack = false }) {
+    track=TRACKS.find(t=>t.id===track?.id)||TRACKS[0]; // archived/unknown quick-race inputs cannot load disabled venues
     this.app = app; this.T = track; this.attract = attract;
     this.trk = new OvalTrack({ ...track, surfaceQuality: app.quality || 'high' }); grooveTimes(this.trk);   // AI 'track reading' table (~0.1 s, once per track)
     this.scene = new THREE.Scene();this.groundSupports=[];
@@ -404,7 +405,7 @@ export class RaceScene {
         if (this.tearOffs > 0 && p.lexanMud > 0.04) { this.tearOffs--; p.lexanMud = 0; p.mesh.userData.lexanMud = 0; p.mesh.userData.updateLook?.(p.mud, p.damage); this.flash(`TEAR-OFF (${this.tearOffs} left)`, 0.9, '#9fd6ff'); }
         else if (!this.tearOffs) this.flash('OUT OF TEAR-OFFS', 0.9, '#ff9a4a');
       }
-      if (app.tap('KeyR') && this.phase === 'race') { const p = this.player, pr = trk.project(p.x, p.z), pt = trk.point(pr.s, 0);if(pr.d< -trk.W/2-2)p.lapInvalid=true;delete p.formationArc; Object.assign(p, { x: pt.x, z: pt.z, th: pt.th, vx: 0, vz: 0, w: 0,steer:0,reversing:false,reverseHold:0,yawCatch:0,recoverTime:0 }); this.flash('RESET', 1); }
+      if (app.tap('KeyR') && this.phase === 'race') { const p = this.player, pr = trk.project(p.x, p.z), pt = trk.point(pr.s, 0);if(allWheelsOffClay(p,trk,pr))p.lapInvalid=true;delete p.formationArc; Object.assign(p, { x: pt.x, z: pt.z, th: pt.th, vx: 0, vz: 0, w: 0,steer:0,reversing:false,reverseHold:0,yawCatch:0,recoverTime:0 }); this.flash('RESET', 1); }
     }
     if(this.player?.dnf&&!this.ended&&this.phase!=='cooldown')this.retire();
     this.updateFlags(dt);
@@ -449,19 +450,19 @@ export class RaceScene {
       let inp;
       const ps = this.paceSpeed() * (this.flag === 'yellow' ? 0.88 : 1);
       const ctx = { dt: h, green, pace, paceSpeed: c === leader ? ps : ps + 4, paceLane: this.flag === 'pace' ? c.paceLane : -0.1, hold: green ? (4 - (this.greenT || 0)) / 2 : 0 };
-      c.human = c.player && !!pin && !this.app.autopilot; c.assist = c.human ? (this.app.settings.assist || 'high') : null;
+      c.human = c.player && !!pin && !this.app.autopilot && !c.finished; c.assist = c.human ? (this.app.settings.assist || 'high') : null;
       if (c.player && pin) {
         inp = this.app.autopilot ? aiInput(c, trk, (c.ai ||= { lane: 0.3, skill: 0.9, aggr: 0.6, cons: 0.97, adapt: 0.5, curLane: 0.3 }), this.cars, ctx) : { ...pin };
         if(this.handover>0&&!this.app.autopilot){const a=1-this.handover/.3,prev=this.releaseInput||{steer:0,throttle:.25,brake:0};for(const k of ['steer','throttle','brake'])inp[k]=lerp(prev[k],inp[k],a);}
         if (pace && !this.app.autopilot && c.speed > ctx.paceSpeed + 2) { inp.throttle *= 0.15; }
-        if (c.finished) inp = { steer: aiInput(c, trk, { lane: 0.2, skill: 0.7 }, [], { dt: h }).steer, throttle: 0.25, brake: 0 };
+        if (c.finished) inp = cooldownInput(c,trk,this.cars,h);
         if (c.damage >= 100) inp = { steer: 0, throttle: 0, brake: 0.3 };
-      } else if (c.finished) inp = { ...aiInput(c, trk, c.ai, this.cars, { dt: h, pace: true, paceSpeed: 16, paceLane: 0.2 }) };
+      } else if (c.finished) inp = cooldownInput(c,trk,this.cars,h);
       else inp = aiInput(c, trk, c.ai, this.cars, ctx);
       if (!racing) inp = { steer: 0, throttle: 0, brake: 1 };
       // A brake stomp in a corner must not suddenly select reverse. Stop,
       // then deliberately keep holding brake for 0.7 s to back out of trouble.
-      if(c.player && racing && pin && !this.app.autopilot){
+      if(c.player && !c.finished && racing && pin && !this.app.autopilot){
         const fwd=c.vx*Math.cos(c.th)+c.vz*Math.sin(c.th),v=Math.hypot(c.vx,c.vz);
         if(pin.brake && !pin.throttle && (v<1.2 || c.reversing) && fwd<.8){
           c.reverseHold=(c.reverseHold||0)+h;
@@ -483,9 +484,12 @@ export class RaceScene {
       const im = carCollide(this.cars[i], this.cars[j],h);
       if (im > 3) { this.hit(this.cars[i], (im - 2.6) * 1.1, 'car'); this.hit(this.cars[j], (im - 2.6) * 1.1, 'car'); }
     }
+    // Last operation after ALL car/car impulses: no neighbor can leave a car
+    // embedded again. Recover wall-bound humans/finishers despite contactHold.
+    for(const c of this.cars){resolveWallPenetration(c,trk);recoverWallStuck(c,trk,h,this.cars,this.app.autopilot||!c.player||c.finished);}
     // lap counting
     for (const c of this.cars) {
-      const pr=trk.project(c.x,c.z),s=pr.s;c.s=s;if(c.dnf||pr.d< -trk.W/2-2){c.prevS=s;continue;}
+      const pr=trk.project(c.x,c.z),s=pr.s;c.s=s;if(c.dnf||c.finished||pr.d< -trk.W/2-8){c.prevS=s;continue;}
       if (c.prevS > trk.P * 0.75 && s < trk.P * 0.25) this.crossLine(c);
       else if (c.prevS < trk.P * 0.25 && s > trk.P * 0.75) c.lap--;
       c.prevS = s;
@@ -562,7 +566,7 @@ export class RaceScene {
   }
   flash(t, sec = 1.2, color = '#fff') { if (!this.hud) return; this.hud.msg.textContent = t; this.hud.msg.style.color = color; this.msgT = sec; }
   crossLine(c) {
-    if(c.dnf)return;
+    if(c.dnf||c.finished)return;
     if(c.lapInvalid){c.lapInvalid=false;c.invalidLaps=(c.invalidLaps||0)+1;c.infieldAdvance=0;c.infieldTime=0;c.lapStart=this.time;if(c.player)this.flash('LAP NOT COUNTED — INFIELD CUT',2,'#ffc780');return;}
     c.infieldAdvance=0;c.lap++;
     if (this.attract) return;
@@ -580,6 +584,7 @@ export class RaceScene {
   }
   endRace() {
     if (this.ended) return; this.ended = true;
+    for(const c of this.cars)resolveWallPenetration(c,this.trk);
     const final = [...this.finishOrder];
     const rest = this.cars.filter(c => !c.finished).sort((a, b) => b.dist - a.dist);
     // a DNF'd player drops behind running cars
