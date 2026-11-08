@@ -1,3 +1,4 @@
+import {batchNightStatic,nightRaceArt} from './night-race.js';
 import {buildDrivableInfield,buildInfieldObstacles,collideInfield,retireAI,updateRetirements,updateInfieldProgress,updateRetirementVisuals} from './infield.js';
 import {pitGateS,pitGateHalfArc,inPitGate} from './pit-gate.js';
 import {raceGrass} from './grass-3d.js';
@@ -18,16 +19,16 @@ const _vF = new THREE.Vector3(), _vR = new THREE.Vector3(), _vU = new THREE.Vect
 import { AI_DRIVERS, POINTS, PURSE, BONUS } from './data.js';
 import { makeLateModel, WHEEL_R, DRIVER_EYE, makeSky, dirtTextures, grassTexture, bannerTexture, fenceTexture, glowTexture, trailerTexture, Dust, disposeScene, srand, rnd } from './gfx.js';
 
-// per-track time of day: two dusk shows, one twilight, the rest under the lights at full night
-const SKY_PRESET = { salina: 'day', eldora: 'dusk', i55: 'twilight' };
+// Every championship show is now run under the lights. Highway time remains independent.
+const SKY_PRESET = {salina:'night',eldora:'night',i55:'night',knoxville:'night',charlotte:'night'};
 const SKIES = {
   day:{fog:0x9cb9cf,fogD:.0006,hemi:[0xc4d9ee,0x4d4331,.85],pool:.12,sky:{top:0x114e9a,horizon:0xb1d1e7,bottom:0x303d28,sunDir:[-.4,.75,-.5],sunColor:0xfff3d8,sunSize:.028,glow:0xffe0b0,glowAmt:.06,starAmt:0,moon:[0,-1,0]}},
   dusk: { fog: 0x2b2030, fogD: 0.0017, hemi: [0xa8a8d0, 0x3a2414, 0.75], pool: 0.22,
     sky: { top: 0x0c1636, horizon: 0x6a3e52, bottom: 0x120c0c, sunDir: [0.75, 0.015, -0.66], sunColor: 0xff7a38, sunSize: 0.09, glow: 0xff6a28, glowAmt: 1.0, starAmt: 0.45, moon: [-0.55, 0.38, 0.6] } },
   twilight: { fog: 0x17141f, fogD: 0.0019, hemi: [0x8f98c8, 0x2a1a10, 0.62], pool: 0.32,
     sky: { top: 0x050a1e, horizon: 0x3a2a4a, bottom: 0x08060a, sunDir: [0.7, -0.04, -0.7], sunColor: 0x7a3a50, sunSize: 0.0, glow: 0xc05a40, glowAmt: 0.55, starAmt: 0.8, moon: [-0.5, 0.45, 0.55] } },
-  night: { fog: 0x0d0f18, fogD: 0.0021, hemi: [0x8a9cc8, 0x2a1a10, 0.55], pool: 0.42,
-    sky: { top: 0x02040b, horizon: 0x1e1c2c, bottom: 0x07060a, sunDir: [0.4, 0.35, -0.8], sunColor: 0x000000, sunSize: 0.0, glow: 0x40304a, glowAmt: 0.35, starAmt: 1, moon: [-0.45, 0.5, 0.6] } },
+  night: { fog: 0x080c16, fogD: 0.0019, hemi: [0x8293b8, 0x241a12, 0.38], pool: 0.72,
+    sky: { top: 0x02040b, horizon: 0x101827, bottom: 0x07060a, sunDir: [0.4, 0.35, -0.8], sunColor: 0x000000, sunSize: 0.0, glow: 0x40304a, glowAmt: 0.10, starAmt: 0.8, moon: [-0.45, 0.5, 0.6] } },
 };
 
 export class RaceScene {
@@ -46,6 +47,7 @@ export class RaceScene {
     srand(track.id.length * 977 + 13);
     this.buildWorld();
     this.buildCars(startBack);
+    this.nightArt=nightRaceArt(this);
     if (!attract) this.buildHud();
     this.orbit=0;this.order=[...this.cars];
     for(const c of this.cars){c.speed=Math.hypot(c.vx,c.vz);c.previousPose={x:c.x,z:c.z,th:c.th};c.renderPose={x:c.x,z:c.z,th:c.th};}
@@ -67,14 +69,14 @@ export class RaceScene {
     const haze=new THREE.Color(SK.sky.horizon).add(new THREE.Color(SK.sky.glow).multiplyScalar(SK.sky.glowAmt*.30));
     scene.fog = new THREE.FogExp2(haze, SK.fogD * 1.12);
     this.sky = makeSky({ ...SK.sky, horizon:haze, stars: true }); scene.add(this.sky);
-    scene.add(new THREE.HemisphereLight(SK.hemi[0], 0x706358, SK.hemi[2] + 0.25));
-    scene.add(new THREE.AmbientLight(0xb6ab9b, 0.28));
+    scene.add(new THREE.HemisphereLight(SK.hemi[0], 0x706358, SK.hemi[2]));
+    scene.add(new THREE.AmbientLight(0x8392ad, 0.07));
     // main "stadium light" key light with shadows (follows the player)
-    const key = new THREE.DirectionalLight(0xfff0d8, 2.4); key.castShadow = true;
+    const key = new THREE.DirectionalLight(0xffefd5, 2.3); key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048); const sc = key.shadow.camera; sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70; sc.near = 1; sc.far = 300;
     key.shadow.bias = -0.00002; key.shadow.normalBias = 0.006;
     scene.add(key); scene.add(key.target); this.key = key;
-    const fill = new THREE.DirectionalLight(0xc8d4ff, 0.6); fill.position.set(-80, 60, 120); scene.add(fill);
+    const fill = new THREE.DirectionalLight(0xc8d4ff, 0.4); fill.position.set(-80, 60, 120); scene.add(fill);
 
     // ground
     const gt = grassTexture('#26391b'); gt.repeat.set(220, 220);
@@ -133,7 +135,12 @@ export class RaceScene {
           float cush = smoothstep(0.55, 0.8, vLane);
           diffuseColor.rgb *= (1.0 - uDry * 0.30 * grv)*(1.0-rubber*0.62);
           diffuseColor.rgb *= 1.0 + surface.g * sin(vWPos.x*18.0+vWPos.z*13.0)*0.14;
-          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.12, 1.04, 0.96), cush * uDry);`)
+          // Fine longitudinal comb marks and a warm dusty cushion; the darker
+          // worked-in line evolves with surface.r, but stays physically matte.
+          float comb=.5+.5*sin(vLane*540.0+sin(vSurfaceUv.x*490.0)*.7);
+          diffuseColor.rgb*=vec3(.93,.97,1.02)*(1.0-comb*grv*.065);
+          diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.86,.83,.77),grv*(1.0-uDry)*.24);
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.18, 1.09, .99), cush * (.35+uDry*.65));`)
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n roughnessFactor = clamp(0.99 - 0.025 * (1.0-uDry) * grv, 0.965, 1.0);')
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
           float rutBump=surface.g*(surface.a*0.04 + sin(vWPos.x*22.0+vWPos.z*15.0)*0.003);
@@ -245,18 +252,21 @@ export class RaceScene {
     for(const o of standGroup.children){if(o.geometry?.type==='BoxGeometry'&&o.geometry.parameters?.depth===.95)groundObject(this.groundSupports,o,()=>-.3,{kind:'grandstand footing'});}
     // ----- light poles with glowing heads (+ a few real point lights) -----
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x55595e, metalness: 0.6, roughness: 0.5 });
-    const lampMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2d0, emissiveIntensity: 1.4 });
+    const lampMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2d0, emissiveIntensity: 2.0 });
+    const towerGroup=new THREE.Group();towerGroup.name='night-towers';scene.add(towerGroup);
     const nPoles = Math.max(10, Math.round(trk.P / 55));
     for (let i = 0; i < nPoles; i++) {
       const s = (i + 0.5) / nPoles * trk.P;if(Math.abs(s-(trk.s2-Math.min(25,trk.R*.35)))<42)continue;const p = trk.point(s, trk.outer + 9), h = trk.smooth ? outsideHeight(trk, s, 9) : trk.height(s, trk.outer) * 0.4;
       const H = 26;
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, H, 8), poleMat); pole.position.set(p.x, h + H / 2, p.z); pole.castShadow = true; scene.add(pole);groundObject(this.groundSupports,pole,(x,z)=>this.terrainHeight(x,z),{kind:"stadium pole"});
-      const head = new THREE.Group(); head.position.set(p.x, h + H, p.z); head.rotation.y = -p.th; scene.add(head);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, H, 8), poleMat); pole.position.set(p.x, h + H / 2, p.z); pole.castShadow = false; towerGroup.add(pole);groundObject(this.groundSupports,pole,(x,z)=>this.terrainHeight(x,z),{kind:"stadium pole"});
+      const head = new THREE.Group(); head.position.set(p.x, h + H, p.z); head.rotation.y = -p.th+Math.PI/2; towerGroup.add(head);
       const frame = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.2, 4.6), poleMat); frame.position.z = -0.6; head.add(frame);
       for (let a = 0; a < 3; a++) for (let b = 0; b < 2; b++) { const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.8, 1.2), lampMat); lamp.position.set(0, -0.5 + b * 1.0, -2 + a * 1.4 - 0.6); lamp.rotation.x = 0; head.add(lamp); }
-      if (i % Math.ceil(nPoles / 4) === 0) { const pl = new THREE.PointLight(0xffe2b8, 1400, 160, 1.6); pl.position.set(p.x, h + H - 2, p.z); scene.add(pl); }
+      // Stadium pools are evaluated once per track vertex, not four inverse-square
+      // point lights in every grass/car/track pixel. Lamps remain emissive at all tiers.
       if (i < 24) { const c = trk.point(s, T.W * 0.18); this.pools[i].set(c.x, c.z, 15 + T.W * 0.35); }
     }
+    batchNightStatic(towerGroup,true);
     // ----- scoreboard outside turn 2 (live running order)
     { const sbC = document.createElement('canvas'); sbC.width = 512; sbC.height = 320; this.sbC = sbC;
       const sbT = new THREE.CanvasTexture(sbC); sbT.colorSpace = THREE.SRGBColorSpace; this.sbT = sbT;
@@ -360,7 +370,7 @@ export class RaceScene {
   }
   buildHud() {
     const T = this.T;
-    const h = document.createElement('div'); h.id = 'hud';
+    const h = document.createElement('div'); h.id = 'hud';h.className='night-race-hud';
     h.innerHTML = `
       <div class="hud-box" style="left:16px;top:16px"><div class="lbl">POSITION</div><div class="big"><span id="h-pos">-</span><span style="font-size:22px">/${this.cars.length}</span></div></div>
       <div class="hud-box" style="left:130px;top:16px"><div class="lbl">LAP</div><div class="big"><span id="h-lap">1</span><span style="font-size:22px">/<span id="h-laps">${T.laps}</span></span></div></div>
@@ -592,7 +602,7 @@ export class RaceScene {
       this.surfaceSize.set(f.N,f.M);this.surfaceTex.needsUpdate=true;force=true;
     }
     const f=this.trk.surface;this.surfaceAcc=(this.surfaceAcc||0)+dt;
-    if(!force && (f.version===f.uploaded || this.surfaceAcc<.16))return;
+    if(!force && (f.version===f.uploaded || this.surfaceAcc<.24))return;
     this.surfaceAcc=0;f.upload();this.surfaceTex.needsUpdate=true;
     const pos=this.trackGeo.attributes.position,ds=this.trackD,M=ds.length,N=this.trackN;
     let cache=this.rutMeshCache;
@@ -709,8 +719,9 @@ export class RaceScene {
       for (let i = 0; i < pos.count; i++) { const x = f.base[i * 3]; pos.array[i * 3 + 2] = Math.sin(this.time * 9 + x * 6) * 0.08 * (x + 0.45); }
       pos.needsUpdate = true;
     }
-    dust.update(dt);
+    dust.update(dt);this.nightArt?.particles.update(dt);
     // shadow light follows the focus car
+    this.nightArt?.refreshShadow(dt);
     const f = this.player; this.key.position.set(f.x + 30, 90, f.z + 40); this.key.target.position.set(f.x, this.trk.height(f.s,f.d)+0.6, f.z);
   }
   // engine audio: every car is its own V8 voice; listener rides the camera
@@ -754,8 +765,8 @@ export class RaceScene {
       let occ = 0;
       for (const o of this.cars) { if (o === c || o.dnf) continue; const rx = o.x - c.x, rz = o.z - c.z, along = -(rx * Math.cos(a) + rz * Math.sin(a)), lat = Math.abs(-rx * Math.sin(a) + rz * Math.cos(a)); if (along > 1 && along < 11 && lat < 2.4) occ = Math.max(occ, 1 - along / 11); }
       this.camLift = lerp(this.camLift || 0, occ, 1 - Math.exp(-dt * 3));
-      const back = 8.5 - this.camLift * 2.5;
-      const want = new THREE.Vector3(c.x - Math.cos(a) * back, y + 3.3 + this.camLift * 3.2, c.z - Math.sin(a) * back);
+      const back = 6.2 - this.camLift * 1.2;
+      const want = new THREE.Vector3(c.x - Math.cos(a) * back, y + 2.15 + this.camLift * 3.4, c.z - Math.sin(a) * back);
       const cp=this.trk.project(want.x,want.z);
       if(cp.d>this.trk.outer-1){want.x-=cp.nx*(cp.d-this.trk.outer+1);want.z-=cp.nz*(cp.d-this.trk.outer+1);}
       const ch=this.trk.project(want.x,want.z);want.y=Math.max(want.y,this.trk.height(ch.s,ch.d)+1.3);

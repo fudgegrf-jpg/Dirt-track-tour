@@ -72,3 +72,13 @@ body[data-phase=highway] #sub-msg:not(:empty){padding:9px 14px;border:1px solid 
 
 /* Preparation is outside #ui, which is rebuilt during scene transitions. */
 #race-loading{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:#0d1219;color:#f1d18a;text-align:center;font:700 20px system-ui;transition:opacity .25s}#race-loading p{font-size:14px;color:#aab6be;font-weight:400}#race-loading.ready{opacity:0;pointer-events:none}
+
+/* Night shows: retain every metric/action, leave the racing line unobstructed.
+   No blur layers over the canvas; wheel/pedal safe-area layout stays unchanged. */
+.night-race-hud .hud-box,.night-race-hud .hud-flag{backdrop-filter:none;background:#08111ad1;border-color:#a9bbcd24;border-radius:3px}
+.night-race-hud .race-messages #center-msg{font-size:clamp(23px,2.7vw,40px);letter-spacing:-.7px}
+.night-race-hud .race-messages #sub-msg{font-size:clamp(10px,1.05vw,14px);color:#c7d0d9}
+.night-race-hud>.hint{display:none}
+.night-race-hud .coach{font-size:11px;background:#08111ace;border-left-width:2px;padding:8px 11px}
+@media(min-width:1100px) and (min-height:600px){.night-race-hud .order{font-size:11px;min-width:165px!important}.night-race-hud .race-messages{width:54%;gap:5px}}
+@media(max-height:500px){.night-race-hud .race-messages #center-msg{font-size:22px}.night-race-hud .race-messages #sub-msg{font-size:10px}.night-race-hud .coach{font-size:9px}}

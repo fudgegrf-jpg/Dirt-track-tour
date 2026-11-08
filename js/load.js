@@ -144,7 +144,7 @@ export class LoadScene {
     // roof cutaway while inside so you can see
     const inside = c.x < 1.5; this.semi.userData.roof.visible = !inside || this.camMode === 2;
     this.crew.forEach((p, i) => { p.userData.arm.rotation.x = Math.sin(this.t * 4 + i) * 0.6 * (i ? 1 : -1) + (i ? -2.4 : 2.4); p.lookAt(c.x, 0, c.z); });
-    this.pits.marker.visible=!this.loading&&Math.hypot(c.x,c.z)>18;this.race.key.position.set(m.position.x+30,90,m.position.z+40);this.race.key.target.position.copy(m.position);
+    this.pits.marker.visible=!this.loading&&Math.hypot(c.x,c.z)>18;this.race.key.position.set(m.position.x+30,90,m.position.z+40);this.race.key.target.position.copy(m.position);this.race.nightArt?.refreshShadow(dt);
     this.updateCamera(dt);
     this.updateHud();
     if(this.done){this.secureT=(this.secureT||0)+dt;this.hud.msg.textContent=this.secureT<1.6?'TYING DOWN':'READY TO ROLL';rp.rotation.z=lerp(this.rampTarget,-Math.PI/2,clamp((this.secureT-1.6)/2,0,1));if(this.secureT>4){delete app.state.pitPose;UI.afterLoad(app,this.result);return;}}

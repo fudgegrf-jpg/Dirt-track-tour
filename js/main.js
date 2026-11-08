@@ -232,13 +232,17 @@ class App {
       const upload=performance.now(),textures=new Set();race.scene.traverse(o=>{for(const m of Array.isArray(o.material)?o.material:[o.material])if(m)for(const v of Object.values(m))if(v?.isTexture)textures.add(v);});for(const t of textures)this.renderer.initTexture(t);this.transitionMetrics.uploadMs=performance.now()-upload;
       // Compile hidden cockpit, low LOD, dust/smoke and flag variants as well as
       // the initial view. Damage changes uniforms only, not shader topology.
-      const compile=performance.now(),visibility=[];race.scene.traverse(o=>{visibility.push([o,o.visible]);o.visible=true;});await this.renderer.compileAsync(race.scene,race.camera);for(const[o,v]of visibility)o.visible=v;
-      if(race.flagman){const m=race.flagman.mat,old=m.map;m.map=race.flagman.ck;m.emissiveMap=m.map;m.needsUpdate=true;await this.renderer.compileAsync(race.scene,race.camera);m.map=old;m.emissiveMap=old;m.needsUpdate=true;}
-      await this.renderer.compileAsync(race.scene,race.camera);this.transitionMetrics.compileMs=performance.now()-compile;
-      const post=performance.now();let drawMs=0;for(let i=0;i<3;i++){const t=performance.now();this.render();this.renderer.getContext().finish();if(i>0)drawMs+=performance.now()-t;await paint();}this.transitionMetrics.firstDrawMs=performance.now()-post;this.transitionMetrics.warmDrawAverageMs=drawMs/2;
+      // High renders into a linear composer target, not directly to the sRGB
+      // canvas. Compile BOTH contexts, including hidden/checkered variants;
+      // warming only the canvas left five cold programs on first later use.
+      const compileScene=async()=>{const target=this.renderer.getRenderTarget();try{this.renderer.setRenderTarget(null);await this.renderer.compileAsync(race.scene,race.camera);if(this.quality==='high'){this.renderer.setRenderTarget(this.composer.readBuffer);await this.renderer.compileAsync(race.scene,race.camera);}}finally{this.renderer.setRenderTarget(target);}};
+      const compile=performance.now(),visibility=[];race.scene.traverse(o=>{visibility.push([o,o.visible]);o.visible=true;});await compileScene();for(const[o,v]of visibility)o.visible=v;
+      if(race.flagman){const m=race.flagman.mat,old=m.map;m.map=race.flagman.ck;m.emissiveMap=m.map;m.needsUpdate=true;await compileScene();m.map=old;m.emissiveMap=old;m.needsUpdate=true;}
+      await compileScene();this.transitionMetrics.compileMs=performance.now()-compile;
+      const post=performance.now();let drawMs=0;for(let i=0;i<3;i++){const t=performance.now();race.key.shadow.needsUpdate=true;this.render();this.renderer.getContext().finish();await new Promise(r=>requestAnimationFrame(r));if(i>0)drawMs+=performance.now()-t;}this.transitionMetrics.firstDrawMs=performance.now()-post;this.transitionMetrics.warmDrawAverageMs=drawMs/2;
       // Auto keeps a conservative Medium base; adapt resolution behind the
       // loading screen rather than allowing a first-lap MAX-quality stall.
-      if(this.qualityChoice==='auto'&&!this.manual){const ms=drawMs/2,scale=Math.max(.65,Math.min(1,(this.autoScale||1)*Math.sqrt(16.7/Math.max(ms,1))));this.autoScale=scale;this.applyQuality();this.render();this.renderer.getContext().finish();this.transitionMetrics.autoScale=scale;}
+      if(this.qualityChoice==='auto'&&!this.manual){const ms=drawMs/2;this.transitionMetrics.presentedWarmMs=ms;if(ms>32&&this.quality!=='low'){this.quality='low';this.transitionMetrics.autoTier='low';this.applyQuality();race.updateSurface(0,true);race.grass?.prepare(race.camera,0);}const scale=Math.max(.65,Math.min(1,(this.autoScale||1)*Math.sqrt(16.7/Math.max(ms,1))));this.autoScale=scale;this.applyQuality();await compileScene();this.render();this.renderer.getContext().finish();await paint();this.transitionMetrics.autoScale=scale;}
       for(const c of race.cars){Object.assign(c.previousPose,{x:c.x,z:c.z,th:c.th});Object.assign(c.renderPose,c.previousPose);}race.acc=0;this.keys.clear();this.pressed.clear();this.last=performance.now();this.transitionMetrics.totalMs=performance.now()-start;this.transitionMetrics.programs=this.renderer.info.programs.length;
       if(token===this.transitionToken){this.warming=false;this.transitioning=false;overlay.classList.add('ready');setTimeout(()=>overlay.remove(),250);}
     }catch(e){console.error('Race preparation failed',e);if(token===this.transitionToken){this.warming=false;this.transitioning=false;overlay.remove();this.toast('Could not prepare the race. Return to the menu and try again.');}}

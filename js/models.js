@@ -9,6 +9,7 @@
 //  - 9 livery schemes painted on hi-res canvases (outlined door number, contingency decals, sponsors), clearcoat paint, mud, LOD
 // All sponsor / tire / brand names here are invented. Fonts: Kanit + Archivo Black (SIL OFL 1.1, vendor/fonts).
 import * as THREE from 'three';
+import {installNightMud} from './night-race.js';
 
 export const SPONSORS = ['CLAYMASTER TIRES', 'RED DIRT OIL', "HAULIN' HOGS BBQ", 'CUSHION CAM', 'BIG E FEED & SEED', 'LOOSE WHEEL PARTS', 'SLICK TRACK BREWING', 'BACKROADS DIESEL', 'GROOVE MASTER', 'NIGHT SHIFT ENERGY',
   'PRAIRIE GRAIN CO.', 'TWIN RIVERS EXCAVATING', 'BUCKSHOT TRUCKING', 'COPPERHEAD WELDING', 'MOONSHINE HOLLOW', 'TRI-COUNTY CONCRETE'];
@@ -30,7 +31,7 @@ const FONT = (px, it = true) => `${it ? 'italic ' : ''}900 ${px}px Impact, "Aria
 const ZL = -1.07, ZR = 0.93, ZC = (ZL + ZR) / 2, BW = ZR - ZL;        // body offset to the left
 const XN = 2.72, XT = -2.48;                                            // nose tip / tail
 const FW = { x: 1.32, r: 0.365, w: 0.3, rim: 0.19, ac: 0.35, ar: 0.425, ay: 0.415 }, RW = { x: -1.36, r: 0.375, w: 0.36, rim: 0.19, ac: 0.36, ar: 0.435, ay: 0.425 };
-const Y_TIP = 0.40, X_COWL = 0.74, Y_COWL = .98, X_WR = -0.62, Y_SILL = 1.08, X_Q = -1.0, Y_Q = 1.41, Y_TAIL = 1.42;
+const Y_TIP = 0.34, X_COWL = 0.74, Y_COWL = .98, X_WR = -0.62, Y_SILL = 1.08, X_Q = -1.0, Y_Q = 1.41, Y_TAIL = 1.42;
 const X_ROOF_F = 0.06, Y_ROOF_F = 1.445, X_ROOF_R = -1.12, Y_ROOF_R = 1.435;
 const DRV_X = -0.32, DRV_Y = 1.24;                                      // driver's helmet
 export const DRIVER_EYE = [DRV_X, DRV_Y + 0.01, -0.16];
@@ -287,6 +288,8 @@ function liveryCanvas({ color, accent, num, sponsor, sponsor2, name, seed, side,
   g.fillStyle = '#9aa0a8'; mpath(g, X, Y, [[2.9, 0.16], [2.0, 0.28], [-2.6, 0.32], [-2.6, 0.305], [2.0, 0.265], [2.9, 0.145]]); g.closePath(); g.fill();
   // door number (between the wheels), leaning forward on both sides
   drawNumber(g, num, X(-0.02), Y(0.68), 0.5 * M, 1.25 * M, P, right ? 0 : 0.42);
+  // Original contingency row, shared stylistic vocabulary across the whole field.
+  for(let i=0;i<4;i++)classicDecal(g,CLASSIC_CONT[(Math.abs(Math.floor(seed||0))+i)%CLASSIC_CONT.length],X(.75),Y(.94-i*.09),.24*M,.065*M);
   // main sponsor on the rear quarter, secondary on the lower door
   drawText(g, sponsor, X(-1.72), Y(1.15), 1.2 * M, 0.2 * M, P.ink, P.line, { shadow: true });
   drawText(g, sponsor2, X(-0.02), Y(0.385), 1.2 * M, 0.075 * M, WHITE, null, { box: INK, boxLine: P.third });
@@ -483,8 +486,8 @@ function bodyGeos(level) {
   if (GEO[level]) return GEO[level];
   const hi = level === 'hi';
   const G = {
-    sideR: sideGeo(1, hi ? 220 : 56, hi ? 14 : 4), sideL: sideGeo(-1, hi ? 220 : 56, hi ? 14 : 4),
-    hood: hoodGeo(hi ? 100 : 30, hi ? 64 : 20), front: noseFrontGeo(hi ? 128 : 32), deck: deckGeo(hi ? 10 : 4, hi ? 12 : 4), tail: tailGeo(),
+    sideR: sideGeo(1, hi ? 80 : 48, hi ? 6 : 4), sideL: sideGeo(-1, hi ? 80 : 48, hi ? 6 : 4),
+    hood: hoodGeo(hi ? 40 : 24, hi ? 18 : 10), front: noseFrontGeo(hi ? 48 : 24), deck: deckGeo(hi ? 10 : 4, hi ? 12 : 4), tail: tailGeo(),
     roof: roofGeo(hi ? 18 : 6, hi ? 20 : 6), splitter: splitterGeo(),
   };
   if (hi) Object.assign(G, { inR: sideGeo(1, 90, 3, true), inL: sideGeo(-1, 90, 3, true), roofU: roofGeo(4, 4, true), ws: windshieldGeo() });
@@ -559,19 +562,15 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
   const scoopPaint=L.scheme===8?new THREE.MeshPhysicalMaterial({color:0x252b30,...PAINT,roughness:.62}):paint;
   const scoop=new THREE.Group(),sx=1.38,sz=-.34,sy=hoodY(sx,(sz-edgeZ(sx,-1))/(edgeZ(sx,1)-edgeZ(sx,-1)));
   const scoopBase=new THREE.Mesh(new THREE.SphereGeometry(1,40,20),scoopPaint);scoopBase.scale.set(.36,.065,.265);scoopBase.position.set(sx,sy+.018,sz);scoop.add(scoopBase);
-  const filter=new THREE.Mesh(new THREE.CylinderGeometry(.176,.184,.10,48),black);filter.position.set(sx,sy+.10,sz);scoop.add(filter);
-  const lid=new THREE.Mesh(new THREE.CylinderGeometry(.205,.205,.027,64),scoopPaint);lid.position.set(sx,sy+.162,sz);scoop.add(lid);
-  const rim=new THREE.Mesh(new THREE.TorusGeometry(.193,.013,10,64),scoopPaint);rim.rotation.x=Math.PI/2;rim.position.set(sx,sy+.176,sz);scoop.add(rim);
+  const filter=new THREE.Mesh(new THREE.CylinderGeometry(.176,.184,.10,24),black);filter.position.set(sx,sy+.10,sz);scoop.add(filter);
+  const lid=new THREE.Mesh(new THREE.CylinderGeometry(.205,.205,.027,28),scoopPaint);lid.position.set(sx,sy+.162,sz);scoop.add(lid);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(.193,.013,6,28),scoopPaint);rim.rotation.x=Math.PI/2;rim.position.set(sx,sy+.176,sz);scoop.add(rim);
   hi.add(scoop);lo.add(scoop.clone());
 
   // ---- mud layers (fade in with ud.mud)
-  const mudSideR = new THREE.MeshStandardMaterial({ map: mudCanvas(seed + 1, 'side'), transparent: true, opacity: 0, roughness: 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-  const mudSideL = mudSideR.clone(); mudSideL.map = mudCanvas(seed + 2, 'side');
-  const mudDeck = new THREE.MeshStandardMaterial({ map: mudCanvas(seed + 3, 'deck'), transparent: true, opacity: 0, roughness: 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-  const mudMats = [mudSideR, mudSideL, mudDeck];
-  const mR = new THREE.Mesh(BG.sideR, mudSideR), mL = new THREE.Mesh(BG.sideL, mudSideL), mN = new THREE.Mesh(BG.hood, mudDeck);
-  for (const m of [mR, mL, mN]) m.renderOrder = 2;
-  hi.add(mR, mL, mN); lo.add(new THREE.Mesh(BL.sideR, mudSideR), new THREE.Mesh(BL.sideL, mudSideL));
+  // Body mud is now part of the original panel shader. Do not build/upload
+  // 24 redundant splatter canvases or draw 40 transparent panels for an 8-car pack.
+  const mudMats=[]; // retained diagnostic API; windshield mud remains independent.
 
   // ---- chassis visible under the body: rails, A-arms, coilovers, rear axle + links, driveshaft, headers, nerf bars, bumpers
   const ch = new THREE.Group();
@@ -673,7 +672,7 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
     const rc = rr + 0.045, a = R - rc, sec = [];
     for (let i = 0; i <= 40; i++) { const t = -Math.PI / 2 + Math.PI * i / 40, c = Math.cos(t), s = Math.sin(t); sec.push([rc + a * Math.pow(c, 0.5), hw * Math.sign(s) * Math.pow(Math.abs(s), 0.42)]); }
     const part = (from, to, pre = [], post = []) => [...pre, ...sec.slice(from, to + 1), ...post].map(([r, z]) => new THREE.Vector2(r, z));
-    const lathe = (pts, mat, seg = 48) => { const g = new THREE.LatheGeometry(pts, seg); g.rotateX(Math.PI / 2); const m = new THREE.Mesh(g, mat); m.castShadow = true; return m; };
+    const lathe = (pts, mat, seg = 32) => { const g = new THREE.LatheGeometry(pts, seg); g.rotateX(Math.PI / 2); const m = new THREE.Mesh(g, mat); m.castShadow = true; return m; };
     const tread = lathe(part(9, 31), tireMat); { const uv = tread.geometry.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 8, uv.getY(i)); }
     const swO = lathe(part(31, 40, [], [[rr + 0.006, hw - 0.025]]), swMat); { const p = swO.geometry.attributes.position, uv = swO.geometry.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, 0.5 + p.getX(i) / (2 * R), 0.5 + p.getY(i) / (2 * R)); }
     const swI = lathe(part(0, 9, [[rr + 0.006, -hw + 0.025]]), swBlack, 32);
@@ -749,16 +748,17 @@ export function makeLateModel({ color = 0xc81d25, accent = 0xffffff, num = '1', 
     const lw = basis(new THREE.Mesh(new THREE.PlaneGeometry(BW - 0.14, wsl), lm), [0, 0, 1], WSD.toArray()); lw.position.copy(a).lerp(b, 0.5).addScaledVector(nrm, -0.012); lw.position.z = ZC;
     lw.renderOrder = 5; cockpitGroup.add(lw); lexMud = lm;
   }
+  const nightMud=installNightMud([paint,...skins]);
   const baseColor = new THREE.Color(color);
   const tireBase = new THREE.Color(0xffffff), loTireBase = new THREE.Color(0x1c1c1c);
   const outer = [helmet, cage, net];
   const ud = {
     wheels, lowWheels, wheelRest: wheels.map(w => w.position.clone()), paint, baseColor, skins, mudMats, helmet, greenhouse: ws, roof, roofNum, cockpit: cockpitGroup, wheelGrp, gauge, lexMud, cage, cageMat, scoop, lod,
-    mud: 0, lexanMud: 0, dmg: 0,
+    mud: 0, lexanMud: 0, dmg: 0, nightMud,
     clay: new THREE.Color(0x8a4f2c),
-    // mud 0..1, dmg 0..100: paint dulls toward clay color, overlays fade in, tires go brown
+    // mud 0..1, dmg 0..100: paint dulls, the single-pass splatter grows, tires go brown
     updateLook(mud = ud.mud, dmg = ud.dmg) {
-      ud.mud = mud; ud.dmg = dmg;
+      ud.mud = mud; ud.dmg = dmg; nightMud.value=mud;
       const k = 1 - dmg / 220, cc = 0.38 * (1 - mud * 0.8), ro = 0.42 + mud * 0.35;
       paint.color.copy(baseColor).lerp(ud.clay, mud * 0.45).multiplyScalar(k * SKIN); paint.clearcoat = cc; paint.roughness = ro;
       for (const s of skins) { s.color.setScalar(k * SKIN).lerp(ud.clay.clone().multiplyScalar(1.6), mud * 0.25); s.clearcoat = cc; s.roughness = ro;

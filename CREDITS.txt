@@ -62,6 +62,26 @@ FAST MUSIC / HUD 2 / SEMI 2 / DRIVABLE INFIELD
   Infield grass/visible pole-base concrete reuse the credited CC0 Poly Haven
   scans. Existing font, texture and music licenses/credits are unchanged.
 
+CAMMED CROSS-PLANE V8
+  Original procedural combustion, cam-overlap variation, open-header resonance and turbulence synthesis.
+  No engine recordings or third-party sound samples used. Musical overrun accents use the existing continuous voice graph.
+  The independent procedural semi/diesel audio remains unchanged.
+
+NIGHT SHOWS / PERFORMANCE STAGE 1
+Original procedural night lighting, single-pass clay/mud shading, pooled instanced
+clods and fictional contingency artwork. No new third-party art/audio or licenses.
+Commercial-game photographs were private visual research only; none are shipped.
+
+DEEPER V8 VOICING
+  Longer virtual exhaust resonators, smooth pressure body and existing-node throat EQ.
+  Original synthesis only; no new samples, external sources or licenses.
+
+REFERENCE-INFORMED CHOPPED V8 IDLE
+  All combustion, cam modulation, exhaust pressure and header-air texture are
+  generated mathematically. Private audio reference was studied for character;
+  no recording, waveform extract, impulse response or sample is embedded.
+  No new third-party assets or licenses. Private review files never ship.
+
 STATIC GITHUB RELEASE
   OFL fonts are embedded as CSS data URLs; licenses remain in vendor/fonts.
   App icons are embedded. Unused preview WAVs are omitted; engine/effect audio is synthesized. Nitro Riffs is embedded as MP3 text chunks.
