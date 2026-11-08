@@ -110,6 +110,12 @@ V8 V6 / STATE-DEPENDENT ORIGINAL SYNTHESIS
   extracted envelope trace, reference video or comparison audio is embedded.
   No new third-party samples or licenses. Independent diesel synthesis unchanged.
 
+NIGHT9 / V8 V7 — DEEPER ORIGINAL PROCEDURAL EXHAUST
+  Six-semitone acoustic playback mapping lowers firing and effective formant centers.
+  Original seeded combustion/cam patterns, pressure rumble and broad low-mid EQ.
+  No recordings, samples, extracted traces or reference analysis included.
+  Existing PCM lengths, persistent graph and independent diesel are preserved.
+
 STATIC GITHUB RELEASE
   OFL fonts are embedded as CSS data URLs; licenses remain in vendor/fonts.
   App icons are embedded. Unused preview WAVs are omitted; engine/effect audio is synthesized. Nitro Riffs is embedded as MP3 text chunks.
