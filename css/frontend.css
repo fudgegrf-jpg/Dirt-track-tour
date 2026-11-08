@@ -69,3 +69,6 @@ body[data-phase=highway] #sub-msg:not(:empty){padding:9px 14px;border:1px solid 
 .pit-hud .loading-messages{top:auto;bottom:132px;width:min(56vw,580px)}
 .pit-hud .loading-messages #center-msg,.pit-hud .loading-messages #sub-msg{position:static;inset:auto;transform:none;width:100%;max-width:none}
 .pit-hud .loading-messages #sub-msg{font-size:14px}
+
+/* Preparation is outside #ui, which is rebuilt during scene transitions. */
+#race-loading{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:#0d1219;color:#f1d18a;text-align:center;font:700 20px system-ui;transition:opacity .25s}#race-loading p{font-size:14px;color:#aab6be;font-weight:400}#race-loading.ready{opacity:0;pointer-events:none}

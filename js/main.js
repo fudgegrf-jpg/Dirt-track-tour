@@ -31,7 +31,7 @@ class App {
     this.graphicsFinish=new GraphicsFinishPass();
     this.renderPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
     this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.1, 0.25, 3.0);
-    this.composer.addPass(this.renderPass);this.composer.addPass(this.graphicsFinish); this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass());
+    this.composer.addPass(this.renderPass);this.composer.addPass(this.graphicsFinish); this.bloom.enabled=false; this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass());
     this.qualityChoice=localStorage.getItem('dtt.quality')||'auto';if(!QUALITY[this.qualityChoice]&&this.qualityChoice!=='auto')this.qualityChoice='auto';this.quality=resolveQuality(this.qualityChoice,this.isMobile);
     this.ui = document.getElementById('ui');
     this.keys = new Set(); this.pressed = new Set();
@@ -195,6 +195,8 @@ class App {
   }
   // ---------- flow ----------
   goto(phase, params = {}) {
+    if(phase==='race'&&!this.manual&&!params.warmed)return this.loadRace();
+    if(!params.warmed){this.transitionToken=(this.transitionToken||0)+1;this.warming=false;this.transitioning=false;document.getElementById('race-loading')?.remove();}
     this.mobile?.reset();
     document.body.dataset.phase=phase;
     const retained=(phase==='results'&&this.mode instanceof RaceScene)||(phase==='load'&&this.mode instanceof RaceScene);
@@ -221,12 +223,32 @@ class App {
     this.canvas.style.visibility = this.mode ? 'visible' : 'hidden';
     this.mobile?.sync();
   }
+  async loadRace(){
+    const token=this.transitionToken=(this.transitionToken||0)+1,start=performance.now();this.warming=true;this.transitioning=true;this.mobile?.reset();
+    document.getElementById('race-loading')?.remove();const overlay=document.createElement('div');overlay.id='race-loading';overlay.setAttribute('role','status');overlay.innerHTML='<div><b>PREPARING THE CLAY</b><p>Warming cars, grass, shadows and audio…</p></div>';document.body.append(overlay);
+    const paint=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    try{await paint();if(token!==this.transitionToken)return;const build=performance.now();this.goto('race',{warmed:true});const race=this.mode;race.updateSurface(0,true);race.grass?.prepare(race.camera,0);if(race.hud){const old=race.hud.msg.textContent;race.hud.msg.textContent='ONE TO GO… GET READY';void race.hud.msg.offsetWidth;await document.fonts.ready;race.hud.msg.textContent=old;}this.transitionMetrics={buildMs:performance.now()-build};await paint();if(token!==this.transitionToken)return;
+      const audio=performance.now();this.audio.ensure();this.transitionMetrics.audioMs=performance.now()-audio;
+      const upload=performance.now(),textures=new Set();race.scene.traverse(o=>{for(const m of Array.isArray(o.material)?o.material:[o.material])if(m)for(const v of Object.values(m))if(v?.isTexture)textures.add(v);});for(const t of textures)this.renderer.initTexture(t);this.transitionMetrics.uploadMs=performance.now()-upload;
+      // Compile hidden cockpit, low LOD, dust/smoke and flag variants as well as
+      // the initial view. Damage changes uniforms only, not shader topology.
+      const compile=performance.now(),visibility=[];race.scene.traverse(o=>{visibility.push([o,o.visible]);o.visible=true;});await this.renderer.compileAsync(race.scene,race.camera);for(const[o,v]of visibility)o.visible=v;
+      if(race.flagman){const m=race.flagman.mat,old=m.map;m.map=race.flagman.ck;m.emissiveMap=m.map;m.needsUpdate=true;await this.renderer.compileAsync(race.scene,race.camera);m.map=old;m.emissiveMap=old;m.needsUpdate=true;}
+      await this.renderer.compileAsync(race.scene,race.camera);this.transitionMetrics.compileMs=performance.now()-compile;
+      const post=performance.now();let drawMs=0;for(let i=0;i<3;i++){const t=performance.now();this.render();this.renderer.getContext().finish();if(i>0)drawMs+=performance.now()-t;await paint();}this.transitionMetrics.firstDrawMs=performance.now()-post;this.transitionMetrics.warmDrawAverageMs=drawMs/2;
+      // Auto keeps a conservative Medium base; adapt resolution behind the
+      // loading screen rather than allowing a first-lap MAX-quality stall.
+      if(this.qualityChoice==='auto'&&!this.manual){const ms=drawMs/2,scale=Math.max(.65,Math.min(1,(this.autoScale||1)*Math.sqrt(16.7/Math.max(ms,1))));this.autoScale=scale;this.applyQuality();this.render();this.renderer.getContext().finish();this.transitionMetrics.autoScale=scale;}
+      for(const c of race.cars){Object.assign(c.previousPose,{x:c.x,z:c.z,th:c.th});Object.assign(c.renderPose,c.previousPose);}race.acc=0;this.keys.clear();this.pressed.clear();this.last=performance.now();this.transitionMetrics.totalMs=performance.now()-start;this.transitionMetrics.programs=this.renderer.info.programs.length;
+      if(token===this.transitionToken){this.warming=false;this.transitioning=false;overlay.classList.add('ready');setTimeout(()=>overlay.remove(),250);}
+    }catch(e){console.error('Race preparation failed',e);if(token===this.transitionToken){this.warming=false;this.transitioning=false;overlay.remove();this.toast('Could not prepare the race. Return to the menu and try again.');}}
+  }
   setQuality(choice){this.qualityChoice=QUALITY[choice]||choice==='auto'?choice:'auto';this.quality=resolveQuality(this.qualityChoice,this.isMobile);this.applyQuality();}
   applyQuality(){
     if(this.mode?.scene)upgradeScanMaterials(this.mode.scene);
     const p={...qualityPreset(this.quality)};if(this.isMobile){p.dpr=Math.min(p.dpr,this.quality==='low'?1:this.quality==='medium'?1:1.25);p.shadow=Math.min(p.shadow,this.quality==='low'?512:1024);p.dust=Math.min(p.dust,this.quality==='low'?450:1000);p.lod=Math.min(p.lod,24);}
     localStorage.setItem('dtt.quality',this.qualityChoice||this.quality);
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio,p.dpr)*p.scale);this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio,p.dpr)*p.scale*(this.qualityChoice==='auto'?(this.autoScale||1):1));this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.mode?.scene?.traverse(o=>{if(o.isLight&&o.castShadow&&o.shadow){const sh=o.shadow;sh.radius=this.quality==='low'?1:1.6;if(sh.mapSize.x!==p.shadow){sh.map?.dispose();sh.map=null;sh.mapSize.set(p.shadow,p.shadow);sh.needsUpdate=true;}}if(o.isLOD&&!o.userData.grass3d&&o.levels[1])o.levels[1].distance=p.lod;});this.mode?.dust?.setBudget(p.dust);this.resize();
   }
   resize() {
@@ -242,12 +264,12 @@ class App {
     (this.mode.grass||this.mode.race?.grass)?.update(this.mode.camera,this.mode.time??(typeof this.mode.t==='number'?this.mode.t:this.mode.race?.time)??0);
     if (this.quality === 'high'){this.graphicsFinish.uniforms.nearFar.value.set(this.mode.camera.near,this.mode.camera.far);this.composer.render();} else this.renderer.render(this.mode.scene, this.mode.camera);
   }
-  step(dt) { if (this.mode && (!this.paused || (this.mode instanceof ShowroomScene && this.mode.studio)) && !this.mobile?.portrait) this.mode.update(dt); this.pressed.clear(); }
+  step(dt) { if(this.warming)return; if (this.mode && (!this.paused || (this.mode instanceof ShowroomScene && this.mode.studio)) && !this.mobile?.portrait) this.mode.update(dt); this.pressed.clear(); }
   frame(t) {
     requestAnimationFrame(t2 => this.frame(t2));
-    const dt = Math.min(0.05, (t - this.last) / 1000); this.last = t;
+    const dt = Math.max(0,Math.min(0.05,(t-this.last)/1000)); this.last = t;
     this.mobile?.sync();
-    if (this.manual) return;
+    if(this.manual||this.warming)return;
     this.pollPad();
     const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);
     if(!typing&&this.tap('KeyH'))this.openHelp();

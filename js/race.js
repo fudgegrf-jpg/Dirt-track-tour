@@ -1,4 +1,5 @@
 import {buildDrivableInfield,buildInfieldObstacles,collideInfield,retireAI,updateRetirements,updateInfieldProgress,updateRetirementVisuals} from './infield.js';
+import {pitGateS,pitGateHalfArc,inPitGate} from './pit-gate.js';
 import {raceGrass} from './grass-3d.js';
 import {matteClay,matteClayShader} from './clay-matte.js';
 import {buildSalina} from './salina.js';
@@ -46,7 +47,9 @@ export class RaceScene {
     this.buildWorld();
     this.buildCars(startBack);
     if (!attract) this.buildHud();
-    this.orbit = 0;
+    this.orbit=0;this.order=[...this.cars];
+    for(const c of this.cars){c.speed=Math.hypot(c.vx,c.vz);c.previousPose={x:c.x,z:c.z,th:c.th};c.renderPose={x:c.x,z:c.z,th:c.th};}
+    this.updateVisuals(0);this.updateCamera(1/60);if(!attract)this.updateHud();
   }
   // One height query for ground-anchored props outside the racing ribbon.
   terrainHeight(x,z){const t=this.trk,q=t.project(x,z);if(this.pits&&Math.abs(x-this.pits.origin.x)<=75&&z>=-51&&z<=41)return 0;const road=this.pits?.road.heightAt(x,z);if(road!==null&&road!==undefined)return road;const apron=this.pits?.lot?.heightAt(x,z);if(apron!==null&&apron!==undefined)return apron;
@@ -119,9 +122,9 @@ export class RaceScene {
     trackMat.onBeforeCompile = sh => {
       sh.uniforms.uSurface={value:surfaceTex};sh.uniforms.uSurfaceSize={value:surfaceSize};
       sh.uniforms.uPools = { value: pools }; sh.uniforms.uDry = dryU; sh.uniforms.uPoolAmt = { value: SK.pool };
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aLane; attribute vec2 aSurfaceUv; varying vec2 vSurfaceUv; varying float vLane; varying vec3 vWPos;')
-        .replace('#include <project_vertex>', '#include <project_vertex>\nvLane = aLane; vSurfaceUv=aSurfaceUv; vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D uSurface; uniform vec2 uSurfaceSize; varying vec2 vSurfaceUv; uniform vec3 uPools[24]; uniform float uDry, uPoolAmt; varying float vLane; varying vec3 vWPos;')
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aLane; attribute vec2 aSurfaceUv; varying vec2 vSurfaceUv; varying float vLane; varying vec3 vWPos; varying float vLightPool; uniform vec3 uPools[24];')
+        .replace('#include <project_vertex>', '#include <project_vertex>\nvLane = aLane; vSurfaceUv=aSurfaceUv; vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;vLightPool=0.;for(int i=0;i<24;i++){vec2 dd=vWPos.xz-uPools[i].xy;vLightPool+=exp(-dot(dd,dd)/(uPools[i].z*uPools[i].z));}');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D uSurface; uniform vec2 uSurfaceSize; varying vec2 vSurfaceUv; uniform float uDry,uPoolAmt;varying float vLane,vLightPool;varying vec3 vWPos;')
         .replace('#include <color_fragment>', `#include <color_fragment>
           vec2 su=vec2(vSurfaceUv.x+0.5/uSurfaceSize.x,vSurfaceUv.y*(1.0-1.0/uSurfaceSize.y)+0.5/uSurfaceSize.y);
           vec4 surface=texture2D(uSurface,su);
@@ -135,13 +138,11 @@ export class RaceScene {
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
           float rutBump=surface.g*(surface.a*0.04 + sin(vWPos.x*22.0+vWPos.z*15.0)*0.003);
           normal = perturbNormalArb(-vViewPosition,normal,vec2(dFdx(rutBump),dFdy(rutBump)),faceDirection);`)
-        .replace('#include <opaque_fragment>', `float pool = 0.0;
-          for (int i = 0; i < 24; i++) { vec2 dd = vWPos.xz - uPools[i].xy; pool += exp(-dot(dd, dd) / (uPools[i].z * uPools[i].z)); }
-          outgoingLight += diffuseColor.rgb * vec3(1.0, 0.92, 0.78) * uPoolAmt * min(pool, 1.5);
+        .replace('#include <opaque_fragment>', `outgoingLight += diffuseColor.rgb * vec3(1.0, 0.92, 0.78) * uPoolAmt * min(vLightPool, 1.5);
           #include <opaque_fragment>`);
       matteClayShader(sh);
     };
-    trackMat.customProgramCacheKey=()=>'dusty-clay-dynamic-track-v1';this.trackMaterial=trackMat;
+    trackMat.customProgramCacheKey=()=>'dusty-clay-vertex-pools-v2';this.trackMaterial=trackMat;
     const tm = new THREE.Mesh(tg, trackMat);tm.name='matte-clay-track'; tm.receiveShadow = true; scene.add(tm);
 
     buildDrivableInfield(this);
@@ -158,7 +159,7 @@ export class RaceScene {
     const postN = Math.floor(trk.P / 5);
     const posts = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.06, 5.4, 6), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: .15, roughness: .8 }), postN);
     const mtx = new THREE.Matrix4();
-    for (let i = 0; i < postN; i++) { const s = i * 5, p = trk.point(s, trk.outer + 0.2), h = trk.height(s, trk.outer) + 1.15 + 2.7; mtx.makeTranslation(p.x, Math.abs(s-(trk.s2-Math.min(25,trk.R*.35)))<18?-100:h, p.z); posts.setMatrixAt(i, mtx); }
+    for (let i = 0; i < postN; i++) { const s = i * 5, p = trk.point(s, trk.outer + 0.2), h = trk.height(s, trk.outer) + 1.15 + 2.7; mtx.makeTranslation(p.x, inPitGate(trk,s)?-100:h, p.z); posts.setMatrixAt(i, mtx); }
     scene.add(posts);
     // outer embankment down to ground
     const emb = ribbon(trk, N, s => { const h = trk.height(s, trk.outer); return [[trk.outer + 0.35, h], [trk.outer + 4 + h * 1.6, trk.smooth ? -0.3 : -0.18]]; }, [0, 1], 10);
@@ -379,7 +380,7 @@ export class RaceScene {
   }
   // ------------------------------------------------------------------ update
   update(dt) {
-    const { app, trk } = this;
+    const {app,trk}=this;dt=Number.isFinite(dt)?clamp(dt,0,.05):0;
     this.time += dt;
     if (!this.attract) {
       if (app.tap('KeyC')) { this.camMode = (this.camMode + 1) % 3; this.player.mesh.userData.setInCar?.(this.camMode === 1); }
@@ -396,10 +397,12 @@ export class RaceScene {
     // physics (fixed substeps)
     this.acc += dt; const h = 1 / 120; let steps = 0;
     const pin = this.attract ? null : app.input();
-    while (this.acc >= h && steps < 12) { this.acc -= h; steps++; this.physics(h, pin); }
+    while(this.acc>=h&&steps<8){this.acc-=h;steps++;for(const c of this.cars){const p=c.previousPose||(c.previousPose={});p.x=c.x;p.z=c.z;p.th=c.th;}this.physics(h,pin);}
+    if(this.acc>=h)this.acc%=h;const alpha=app.manual?1:clamp(this.acc/h,0,1);
+    for(const c of this.cars){const p=c.previousPose||c,v=c.renderPose||(c.renderPose={});if(Math.hypot(c.x-p.x,c.z-p.z)>5){p.x=c.x;p.z=c.z;p.th=c.th;}v.x=lerp(p.x,c.x,alpha);v.z=lerp(p.z,c.z,alpha);v.th=p.th+wrapAngle(c.th-p.th)*alpha;}
     // update race standings
     for (const c of this.cars) c.dist = c.dnf?(c.retiredDist??(c.lap-1)*trk.P+c.s):(c.lap - 1) * trk.P + c.s;
-    this.order = [...this.cars].sort((a, b) => (a.finishRank ?? 99) - (b.finishRank ?? 99) || Number(!!a.dnf)-Number(!!b.dnf) || b.dist - a.dist);
+    this.order=(this.flag==='pace'&&app.settings.autoPace!==false)?[...this.formationOrder]:[...this.cars].sort((a, b) => (a.finishRank ?? 99) - (b.finishRank ?? 99) || Number(!!a.dnf)-Number(!!b.dnf) || b.dist - a.dist);
     if (this.phase === 'cooldown') { this.cool -= dt; if (this.cool <= 0) this.endRace(); }
     // track dries & rubbers in as the feature goes on
     if (!this.attract) { const lead = this.order[0], prog = clamp((lead.dist) / (this.T.laps * trk.P), 0, 1); trk.dry = clamp(this.dry0 + 0.78 * prog, 0, 0.92); }
@@ -485,8 +488,12 @@ export class RaceScene {
       if(!Number.isFinite(c.formationArc)||c.formationEpoch!==this.cautions){c.formationArc=target+((q.s-target+trk.P*100.5)%trk.P-trk.P*.5);c.formationSpeed=Math.hypot(c.vx,c.vz);c.formationLane=q.d;c.formationEpoch=this.cautions;}
       // Critically damped, acceleration-limited gap servo. Never integrate then snap
       // back to a moving target; each car owns a continuous unwrapped arc distance.
-      const desired=this.formationV+clamp((target-c.formationArc)*.6,-4,4);
-      c.formationSpeed+=clamp((desired-c.formationSpeed)*1.8,-2.5,2)*h;
+      let desired=this.formationV,err=target-c.formationArc;
+      // Critical gap damping + jerk-limited acceleration. Caution rows only
+      // merge once there is bumper clearance; never correct world positions.
+      const ahead=(this.formationOrder||this.cars).slice(0,i).filter(o=>!o.dnf);
+      for(const o of ahead){const arc=o.formationArc??o.s,gap=((arc-c.formationArc+trk.P*1.5)%trk.P)-trk.P*.5;if(gap>0&&gap<9&&Math.abs((o.formationLane??o.d)-lane)<2.8){if(Math.abs(c.formationLane-lane)>.5&&gap<7)lane=c.formationLane;else desired=Math.min(desired,(o.formationSpeed||0)+Math.max(-4,(gap-7)*.8));}}
+      const accel=clamp(err*.5+(desired-c.formationSpeed)*1.6,-2.2,1.6);c.formationAccel=(c.formationAccel||0)+clamp(accel-(c.formationAccel||0),-3.5*h,3.5*h);c.formationSpeed+=c.formationAccel*h;
       c.formationSpeed=Math.max(0,c.formationSpeed);c.formationArc+=c.formationSpeed*h;
       c.formationLane+=clamp((lane-c.formationLane)*1.5,-.8,.8)*h;
       const pt=trk.point(c.formationArc,c.formationLane),ox=c.x,oz=c.z;
@@ -617,18 +624,18 @@ export class RaceScene {
   updateVisuals(dt) {
     const { trk, dust } = this;
     for (const c of this.cars) {
-      const m = c.mesh, pr = trk.project(c.x, c.z);
+      const v=(!this.app.manual&&c.renderPose)||c,m=c.mesh,pr=trk.project(v.x,v.z);
       // sit the car on the actual surface: sample the height under all four tires and build the
       // body frame from the fore/aft grade and the side-to-side slope (banking, transitions, cushion ridge)
-      const cs0 = Math.cos(c.th), sn0 = Math.sin(c.th);
-      const hAt = (f, r) => { const q = trk.project(c.x + cs0 * f - sn0 * r, c.z + sn0 * f + cs0 * r); return trk.height(q.s, q.d); };
+      const cs0 = Math.cos(v.th), sn0 = Math.sin(v.th);
+      const hAt = (f, r) => { const q = trk.project(v.x + cs0 * f - sn0 * r, v.z + sn0 * f + cs0 * r); return trk.height(q.s, q.d); };
       const hFL = hAt(1.3, -0.85), hFR = hAt(1.3, 0.85), hRL = hAt(-1.4, -0.85), hRR = hAt(-1.4, 0.85);
       const y = (hFL + hFR + hRL + hRR) / 4;
       const gF = ((hFL + hFR) - (hRL + hRR)) / 2 / 2.7, gR = ((hFR + hRR) - (hFL + hRL)) / 2 / 1.7;
       // tiny smoothing so the cushion/transition seams never pop (fast enough to stay glued to the surface)
       const k = 1 - Math.exp(-dt * 20);
       c.gF = c.gF === undefined ? gF : lerp(c.gF, gF, k); c.gR = c.gR === undefined ? gR : lerp(c.gR, gR, k);
-      m.position.set(c.x, y, c.z);
+      m.position.set(v.x,y,v.z);
       const F = _vF.set(cs0, c.gF, sn0).normalize(), R = _vR.set(-sn0, c.gR, cs0);
       const U = _vU.crossVectors(R, F).normalize(); R.crossVectors(F, U).normalize();
       _mB.makeBasis(F, U, R); _qS.setFromRotationMatrix(_mB);
@@ -669,7 +676,7 @@ export class RaceScene {
       const slide = Math.min(1.5, Math.abs(c.slipR) * 3 + c.wheelSpin * 0.6);
       const rate = Math.max(0,c.speed-1.8)*.9*g.dust*(.4+slide)*(.55+.35*trk.dry)*(this.attract ? .65 : 1);
       c.dustAcc = (c.dustAcc || 0) + rate * dt;
-      const cs = Math.cos(c.th), sn = Math.sin(c.th);
+      const cs = Math.cos(v.th), sn = Math.sin(v.th);
       while (c.dustAcc > 1) {
         c.dustAcc -= 1;
         const side = Math.random() < 0.5 ? -0.86 : 0.86;
@@ -734,9 +741,9 @@ export class RaceScene {
       const want = new THREE.Vector3(tx + Math.cos(ang) * r, 9 + Math.sin(this.orbit * 0.7) * 3, tz + Math.sin(ang) * r);
       cam.position.lerp(want, 1 - Math.exp(-dt * 2)); cam.lookAt(tx, 1, tz); return;
     }
-    const c = this.player, pr = this.trk.project(c.x, c.z), y = this.trk.height(pr.s, pr.d);
-    const velA = c.speed > 3 ? Math.atan2(c.vz, c.vx) : c.th;
-    const shake = (this.shake || 0); this.shake = Math.max(0, shake - dt * 2);
+    const physical=this.player,c=(!this.app.manual&&physical.renderPose)?Object.assign(Object.create(physical),physical.renderPose):physical,pr=this.trk.project(c.x,c.z),y=this.trk.height(pr.s,pr.d);
+    const forward=c.vx*Math.cos(c.th)+c.vz*Math.sin(c.th),blend=c.reversing?0:clamp((forward-4)/6,0,1),velA=c.th+wrapAngle(Math.atan2(c.vz,c.vx)-c.th)*blend;
+    const rawShake=this.shake||0;this.shake=Math.max(0,rawShake-dt*2);const shake=rawShake*(this.app.settings?.shake??1)*(forward<0||c.reversing ? .18 : 1)*clamp(c.speed/5,.12,1);
     const sx = (Math.random() - 0.5) * shake * 0.4, sy = (Math.random() - 0.5) * shake * 0.4;
     if (this.camMode !== 1 && c.mesh.userData.inCarOn) { c.mesh.userData.setInCar?.(false); c.mesh.userData.inCarOn = false; }
     if (this.camMode === 0) {
@@ -803,12 +810,13 @@ export class RaceScene {
 // ribbon around the oval: profile(s) -> [[d, y], ...]; vCoords per profile vertex; u scaled by s/uLen
 function ribbon(trk, N, profile, vCoords, uLen) {
   const n0 = profile(0).length, pos = [], uv = [], idx = [];
-  for (let i = 0; i <= N; i++) {
-    const s = i / N * trk.P, prof = profile(s);
+  const gate=pitGateS(trk),half=pitGateHalfArc(trk),ss=[...Array.from({length:N+1},(_,i)=>i/N*trk.P),gate-half,gate+half].sort((a,b)=>a-b);N=ss.length-1;
+  for(let i=0;i<=N;i++){
+    const s=ss[i],prof=profile(s);
     prof.forEach(([d, y], j) => { const p = trk.point(s, d); pos.push(p.x, y, p.z); uv.push(s / uLen, vCoords[j]); });
   }
-  for (let i = 0; i < N; i++) for (let j = 0; j < n0 - 1; j++) { if(Math.abs((i+.5)/N*trk.P-(trk.s2-Math.min(25,trk.R*.35)))<18)continue; const a = i * n0 + j, b = a + n0; idx.push(a, b, a + 1, a + 1, b, b + 1); }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); closeRibbonNormals(g, N, n0); return g;
+  for (let i = 0; i < N; i++) for (let j = 0; j < n0 - 1; j++) { if(inPitGate(trk,(ss[i]+ss[i+1])*.5))continue; const a = i * n0 + j, b = a + n0; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);g.userData.arcRows=ss; g.computeVertexNormals(); closeRibbonNormals(g, N, n0); return g;
 }
 
 // Match the duplicate UV seam normals, so the start/finish seam cannot sparkle.

@@ -1,3 +1,4 @@
+import {inPitGate} from './pit-gate.js';
 import { ContactShadow, seatWheels } from './contact.js';
 // Hauler loading mini-game: drive the late model up the ramp into the enclosed trailer and park it.
 import * as THREE from 'three';
@@ -20,10 +21,12 @@ export class LoadScene {
     this.t=0;this.timer=0;this.dmg=0;this.hits=0;this.falls=0;this.hold=0;this.cool=0;this.camMode=0;this.intro=0;this.done=false;this.winch=false;this.winchUsed=false;this.crew=[];this.pathIndex=0;this.loading=false;
     if(st.pitPose?.round===st.round&&st.pitPose.session)Object.assign(this,st.pitPose.session);
     this.winchUsed=!!(this.winchUsed||this.winch);
+    if(st.pitPose?.round===st.round&&st.pitPose.routeVersion!==3&&!this.loading){const path=this.pits.road.drive,q=race.trk.project(this.c.x+this.offset.x,this.c.z+this.offset.z);this.exitStarted=q.d>race.trk.outer+1;this.pathIndex=this.exitStarted?path.reduce((best,p,i)=>Math.hypot(this.c.x-p.x,this.c.z-p.z)<Math.hypot(this.c.x-path[best].x,this.c.z-path[best].z)?i:best,0):0;}
+
     if(![this.c.x,this.c.z,this.c.th,this.c.v,this.c.steer].every(Number.isFinite)||(this.c.wr!==undefined&&!Number.isFinite(this.c.wr))){Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0,wr:0});this.winch=false;this.loading=true;this.exitStarted=true;}
     if(!Number.isFinite(this.pathIndex))this.pathIndex=0;
     this.towed=!!st.results?.[st.round]?.dnf;
-    if(this.towed&&!st.pitPose?.session){Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0});this.exitStarted=true;this.pathIndex=this.pits.road.drive.length-1;this.intro=.65;this.towMessage=5;st.pitPose={layout:2,round:st.round,c:{...this.c},session:{exitStarted:true,pathIndex:this.pathIndex}};app.save();}
+    if(this.towed&&!st.pitPose?.session){Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0});this.exitStarted=true;this.pathIndex=this.pits.road.drive.length-1;this.intro=.65;this.towMessage=5;st.pitPose={layout:2,routeVersion:3,round:st.round,c:{...this.c},session:{exitStarted:true,pathIndex:this.pathIndex}};app.save();}
     const mech=app.crew('Mechanic');this.par=35+(mech?mech.skill*2:0);app.ui.innerHTML='';this.buildHud();this.wheelH=this.wheelPts(this.c).map(w=>this.height(w.x,w.z));this.car.position.set(this.c.x+this.offset.x,this.height(this.c.x,this.c.z),this.c.z+this.offset.z);this.car.rotation.set(0,-this.c.th,0);this.updateCamera(1);this.updateHud();
   }
   buildHud() {
@@ -49,16 +52,25 @@ export class LoadScene {
     const cs = Math.cos(c.th), sn = Math.sin(c.th);
     return [[2.85, -1.10], [2.85, 1.10], [-2.65, -1.10], [-2.65, 1.10], [0, -1.10], [0, 1.10]].map(([lx, lz]) => ({ x: c.x + cs * lx - sn * lz, z: c.z + sn * lx + cs * lz, lx }));
   }
-  blocked(c) {
+  blocked(c,previous=null) {
     const wx=c.x+this.offset.x,wz=c.z+this.offset.z,q=this.race.trk.project(wx,wz);
-    const lot=Math.abs(c.x)<72&&c.z>-51&&c.z<39,road=this.pits.road.nearest(wx,wz),track=q.d>this.race.trk.inner+2&&q.d<this.race.trk.outer-1;if(!lot&&road.distance>6.3&&!track)return 'wall';if(lot)for(const o of this.pits.obstacles)if(Math.abs(c.x-o.x)<o.w+2.8&&Math.abs(c.z-o.z)<o.d+1.1)return 'wall';
+    const lot=Math.abs(c.x)<75&&c.z>-53&&c.z<43;
+    // Open ground and graded shoulders are drivable. Only visible objects can
+    // stop the return trip; being off the route is guidance, not an invisible wall.
+    if(lot)for(const o of this.pits.obstacles)if(Math.abs(c.x-o.x)<o.w+2.8&&Math.abs(c.z-o.z)<o.d+1.1)return 'object';
+    for(const b of this.race.infield?.obstacles||[]){if(Math.abs(wx-b.x)>b.hx+4||Math.abs(wz-b.z)>b.hz+4)continue;for(const off of[-1.65,0,1.65]){const px=wx+Math.cos(c.th)*off,pz=wz+Math.sin(c.th)*off;if(Math.hypot(Math.max(0,Math.abs(px-b.x)-b.hx),Math.max(0,Math.abs(pz-b.z)-b.hz))<1)return 'object';}}
+    const corners=this.corners(c),oldCorners=previous?this.corners(previous):null,outer=this.race.trk.outer,oldCenter=previous?this.race.trk.project(previous.x+this.offset.x,previous.z+this.offset.z):null;
+    for(let i=0;i<corners.length;i++){const p=corners[i],pr=this.race.trk.project(p.x+this.offset.x,p.z+this.offset.z);if(inPitGate(this.race.trk,pr.s))continue;if(oldCorners){const old=this.race.trk.project(oldCorners[i].x+this.offset.x,oldCorners[i].z+this.offset.z),inside=oldCenter.d<outer,movingAway=inside?q.d<oldCenter.d-.001:q.d>oldCenter.d+.001,cross=inside?old.d<outer&&pr.d>=outer:old.d>outer+.35&&pr.d<=outer+.35;if(cross&&!movingAway)return 'trackwall';}else if(Math.abs(pr.d-outer)<.32)return 'trackwall';}
+    for(const o of this.pits.road.barriers||[])if(corners.some(p=>Math.hypot(p.x-o.x,p.z-o.z)<o.r))return 'object';
+    // Trailer collision is strictly bounded on BOTH axes in trailer-local space.
+    if(c.x<FRONT_X-4||c.x>3||Math.abs(c.z)>4.5)return null;
     const centerOut = Math.abs(c.z) > IN_HALF + 0.25;
     for (const p of this.corners(c)) {
       if (p.x < 0.02 && p.x > -22) {
-        if (!centerOut && Math.abs(p.z) > IN_HALF - 0.03) return 'wall';
-        if (centerOut && Math.abs(p.z) < IN_HALF + 0.2) return 'wall';
+        if (!centerOut && Math.abs(p.z) > IN_HALF - 0.03) return 'trailer';
+        if (centerOut && Math.abs(p.z) < IN_HALF + 0.2) return 'trailer';
       }
-      if (Math.abs(c.z)<2 && p.lx > 0 && p.x < FRONT_X) return 'front';
+      if (Math.abs(c.z)<2 && p.lx>0 && p.x<FRONT_X && p.x>FRONT_X-1.2) return 'front';
     }
     return null;
   }
@@ -93,12 +105,12 @@ export class LoadScene {
       c.x += Math.cos(c.th) * c.v * dt; c.z += Math.sin(c.th) * c.v * dt;
       // The same coordinates cover the oval, graded exit and paddock; no teleport/clamp to a loading room.
       this.cool -= dt;
-      const b = this.blocked(c);
+      const b=this.blocked(c,prev);
       if (b) {
         const sp = Math.abs(c.v);
         Object.assign(c,prev);c.v=-prev.v*.25;
         if(this.winch&&this.loading){this.winch=false;c.v=0;this.hud.sub.textContent='Winch paused at obstruction · reverse to back out, or R / Re-align';}
-        if (this.cool <= 0 && sp > 0.35) { const d = 1 + sp * 2.6; this.dmg += d; this.hits++; this.cool = 0.6; this.shake = 0.5; this.flash(b === 'front' ? 'BANG! Hit the cabinets' : 'SCRAPED THE TRAILER WALL', '#ff5a4a'); }
+        if (this.cool <= 0 && sp > 0.35) { const d = 1 + sp * 2.6; this.dmg += d; this.hits++; this.cool = 0.6; this.shake = 0.5; this.flash(b==='front'?'BANG! Hit the cabinets':b==='trailer'?'SCRAPED THE TRAILER WALL':b==='trackwall'?'CONTACT — TRACK WALL':'CONTACT — PADDOCK OBJECT', '#ff5a4a'); }
       }
       // falling off the ramp edge
       const hs = this.wheelPts(c).map(w => this.height(w.x, w.z));
@@ -136,7 +148,7 @@ export class LoadScene {
     this.updateCamera(dt);
     this.updateHud();
     if(this.done){this.secureT=(this.secureT||0)+dt;this.hud.msg.textContent=this.secureT<1.6?'TYING DOWN':'READY TO ROLL';rp.rotation.z=lerp(this.rampTarget,-Math.PI/2,clamp((this.secureT-1.6)/2,0,1));if(this.secureT>4){delete app.state.pitPose;UI.afterLoad(app,this.result);return;}}
-    else if((this.saveT=(this.saveT||0)+dt)>2){this.saveT=0;app.state.pitPose={layout:2,round:app.state.round,c:{...c},session:{timer:this.timer,dmg:this.dmg,hits:this.hits,falls:this.falls,winch:this.winch,winchUsed:this.winchUsed,loading:this.loading,pathIndex:this.pathIndex,exitStarted:this.exitStarted}};app.save();}
+    else if((this.saveT=(this.saveT||0)+dt)>2){this.saveT=0;app.state.pitPose={layout:2,routeVersion:3,round:app.state.round,c:{...c},session:{timer:this.timer,dmg:this.dmg,hits:this.hits,falls:this.falls,winch:this.winch,winchUsed:this.winchUsed,loading:this.loading,pathIndex:this.pathIndex,exitStarted:this.exitStarted}};app.save();}
     this.app.audio.set(0.12 + Math.abs(c.v) * 0.06, Math.abs(c.v) > 0.1 ? 0.5 : 0.2, 0.08);
   }
   recoverWinch(){
@@ -147,7 +159,12 @@ export class LoadScene {
   autopilot(dt=1/60) {
     const c=this.c,trk=this.race.trk;let tx,tz;const lot=Math.abs(c.x)<72&&c.z>-51&&c.z<39,path=this.pits.road.drive,localStart=lot&&!this.exitStarted;
     if(!this.exitStarted&&!lot){const q=trk.project(c.x+this.offset.x,c.z+this.offset.z),ds=(this.pits.gateS-q.s+trk.P)%trk.P;if(ds<38||this.pits.road.nearest(c.x+this.offset.x,c.z+this.offset.z).distance<6){this.exitStarted=true;this.pathIndex=path.reduce((best,p,i)=>Math.hypot(c.x-p.x,c.z-p.z)<Math.hypot(c.x-path[best].x,c.z-path[best].z)?i:best,0);this.pathIndex=Math.min(path.length-1,this.pathIndex+1);}else{const p=trk.point(q.s+16,0);tx=p.x-this.offset.x;tz=p.z-this.offset.z;}}
-    if(tx===undefined&&!this.loading){this.exitStarted=true;if(localStart)this.pathIndex=path.length-2;let p=path[Math.min(this.pathIndex,path.length-1)];while(this.pathIndex<path.length-1&&Math.hypot(c.x-p.x,c.z-p.z)<6){p=path[++this.pathIndex];}[tx,tz]=[p.x,p.z];}
+    if(tx===undefined&&!this.loading){this.exitStarted=true;if(localStart)this.pathIndex=path.length-2;
+      // Reproject a resumed/off-route car FORWARD onto the current lane. Do not
+      // orbit an obsolete waypoint behind a narrower gate or an old saved path.
+      const closest=path.reduce((best,p,i)=>Math.hypot(c.x-p.x,c.z-p.z)<Math.hypot(c.x-path[best].x,c.z-path[best].z)?i:best,0);
+      if(closest>this.pathIndex+2)this.pathIndex=Math.min(path.length-1,closest+1);
+      let p=path[Math.min(this.pathIndex,path.length-1)];while(this.pathIndex<path.length-1){const prev=path[Math.max(0,this.pathIndex-1)],d=Math.hypot(c.x-p.x,c.z-p.z),nearGate=Math.hypot(c.x+this.offset.x-this.pits.gate.x,c.z+this.offset.z-this.pits.gate.z)<22,passed=(c.x-p.x)*(p.x-prev.x)+(c.z-p.z)*(p.z-prev.z)>0;if(!(d<(nearGate?2.2:5)||passed&&d<12))break;p=path[++this.pathIndex];}[tx,tz]=[p.x,p.z];}
     if(this.loading){
       // Align on the open pad BEFORE the nose enters the narrow trailer.
       if(c.x>5&&(Math.abs(c.z)>.025||Math.abs(wrapAngle(Math.PI-c.th))>.012)){
@@ -194,7 +211,7 @@ export class LoadScene {
     const off = clamp(c.z, -1.5, 1.5), ang = wrapAngle(c.th - Math.PI);
     g.save(); g.translate(100 + off * 60, 30); g.rotate(ang); g.fillStyle = '#ffc83d'; g.fillRect(-14, -6, 28, 12); g.fillStyle = '#000'; g.fillRect(-14, -2, 6, 4); g.restore();
     if(this.towMessage>0)return;
-    if(Math.abs(c.x)>72||c.z< -51||c.z>39){h.st.textContent='Corner entry → follow the loop road. 25 mph limit.';return;}
+    if(Math.abs(c.x)>72||c.z< -51||c.z>39){const wx=c.x+this.offset.x,wz=c.z+this.offset.z,road=this.pits.road.nearest(wx,wz),gate=Math.hypot(wx-this.pits.gate.x,wz-this.pits.gate.z);h.st.textContent=gate<28?'Narrow gate · 25 mph · follow the marked lane':road.distance>10?'Off lane — follow green mini-map route · 25 mph':'Follow the loop road to Bay '+this.app.state.num+' · 25 mph';return;}
     if(!this.loading){h.st.textContent='Your blue / white hauler is in Bay '+this.app.state.num+'. Approach the striped ramp.';return;}
     if (this.hold <= 0 && !this.done) h.st.textContent = c.x > 0.5 ? (Math.abs(c.z) < 0.4 && Math.abs(ang) < 0.1 ? 'lined up — go!' : Math.abs(c.z)>.4?`ramp to your ${c.z>0?'RIGHT':'LEFT'} — ease over`:'straighten the car before climbing') : 'ease forward to the green box';
   }

@@ -146,6 +146,24 @@ export class RevModel {
   }
 }
 
+// A periodic, band-limited 720-degree combustion waveform. There are no
+// per-firing resets, noise-envelope edges, or RPM-bank phase crossfades.
+export function smoothV8(sr,rpm=3500,load=1){
+  const n=Math.round(sr*120/rpm),a=new Float32Array(n),amps=[1,.72,.93,.65,1.02,.78,.9,.68];
+  for(let h=1;h<=48;h++){let re=0,im=0;for(let k=0;k<8;k++){const phase=2*Math.PI*h*k/8;re+=amps[k]*Math.cos(phase);im-=amps[k]*Math.sin(phase);}
+    const roll=1/(1+(h/(load?24:12))**3),gain=roll/Math.pow(h,.78);for(let j=0;j<n;j++){const phase=2*Math.PI*h*j/n+.22*h/(h+3);a[j]+=gain*(re*Math.cos(phase)-im*Math.sin(phase));}}
+  const g=.2/rms(a);for(let j=0;j<n;j++)a[j]*=g;return a;
+}
+class RoadVoice{
+ constructor(au,{panned=false,offset=0}={}){const c=this.c=au.ctx;this.au=au;this.mix=c.createGain();this.body=c.createBiquadFilter();this.body.type='lowshelf';this.body.frequency.value=160;this.body.gain.value=0;this.tone=c.createBiquadFilter();this.tone.type='lowpass';this.tone.frequency.value=8000;this.tone.Q.value=.45;this.out=c.createGain();this.out.gain.value=0;this.mix.connect(this.body);this.body.connect(this.tone);this.tone.connect(this.out);this.node=this.out;if(panned){this.pan=c.createStereoPanner();this.out.connect(this.pan);this.node=this.pan;}this.layers=[];const startAt=au.offline?0:c.currentTime+.025;
+ for(const name of['on','off']){const source=c.createBufferSource(),g=c.createGain();source.buffer=au.cleanV8[name];source.loop=true;g.gain.value=0;source.connect(g);g.connect(this.mix);source.start(startAt,offset%source.buffer.duration);this.layers.push({name,s:source,g,rpm:au.cleanBaseRPM,target:0});}this.rev=new RevModel();}
+ connect(n){this.node.connect(n);}
+ update(t,rpm,w,vol,pitch=1,tau=.075){const rate=clampAudio(rpm/this.au.cleanBaseRPM*pitch,.2,2.8);for(const l of this.layers){const gain=w[l.name]||0;if(Math.abs(gain-l.target)>.003||gain===0&&l.target!==0){l.g.gain.setTargetAtTime(gain,t,tau);l.target=gain;}if(Math.abs((l.rate??-1)-rate)>.002){l.s.playbackRate.setTargetAtTime(rate,t,.09);l.rate=rate;}}this.out.gain.setTargetAtTime(vol,t,tau);}
+ place(t,x,y,z,L){if(!this.pan)return;const dx=x-L.x,dz=z-L.z,d=Math.hypot(dx,dz)||1,side=(-L.fz*dx+L.fx*dz)/d;this.pan.pan.setTargetAtTime(clampAudio(side,-.95,.95),t,.1);this.distanceGain=1/(1+d/14);}
+ retire(t){this.out.gain.setTargetAtTime(0,t,.04);}
+}
+const clampAudio=(x,a,b)=>Math.min(b,Math.max(a,x));
+
 // one sample-based engine voice (crossfaded + pitch-shifted loop bank)
 class Voice {
   constructor(au, set, { panned = false, offset = 0 } = {}) {
@@ -187,7 +205,7 @@ export class GameAudio {
   now() { return this.ctx.currentTime; }
   ensure() {
     if (this.ctx && this.engineBuilt) return true;
-    try { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false; this.ctx ||= globalThis.DTTMusicBoot?.ctx || new AC(); this.build(); return true; } catch (e) { console.warn('audio off', e); return false; }
+    try { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false; this.ctx ||= globalThis.DTTMusicBoot?.ctx || new AC({latencyHint:this.app?.isMobile?'playback':'balanced'}); this.build(); return true; } catch (e) { console.warn('audio off', e); return false; }
   }
   buildMaster() {
     const c = this.ctx;
@@ -196,22 +214,21 @@ export class GameAudio {
     this.limiter=c.createDynamicsCompressor();this.limiter.threshold.value=-3;this.limiter.knee.value=0;this.limiter.ratio.value=20;this.limiter.attack.value=.001;this.limiter.release.value=.12;
     this.master.connect(this.comp);this.comp.connect(this.limiter);this.limiter.connect(c.destination); this.applyVolume();
   }
-  ensureMusic(){try{if(!this.ctx){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return false;this.ctx=globalThis.DTTMusicBoot?.ctx||new AC();}this.buildMaster();if(!this.music&&!this.offline){this.music=new MenuMusic(this);this.music.setPhase(this.app?.paused?'pause':this.app?.phase||'title');}return true;}catch(e){console.warn('music off',e);return false;}}
+  ensureMusic(){try{if(!this.ctx){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return false;this.ctx=globalThis.DTTMusicBoot?.ctx||new AC({latencyHint:this.app?.isMobile?'playback':'balanced'});}this.buildMaster();if(!this.music&&!this.offline){this.music=new MenuMusic(this);this.music.setPhase(this.app?.paused?'pause':this.app?.phase||'title');}return true;}catch(e){console.warn('music off',e);return false;}}
   build(){
-    this.buildMaster();const c=this.ctx,sr=this.app?.isMobile?Math.min(22050,c.sampleRate):c.sampleRate;this.voiceLimit=this.app?.isMobile?3:7;
+    this.buildMaster();const c=this.ctx,sr=c.sampleRate;this.voiceLimit=this.app?.isMobile?2:3;this.stats={controlUpdates:0,poolRebinds:0,engineSources:2*(this.voiceLimit+1),nativeSampleRate:sr};
     this.engineBus = c.createGain(); this.engineBus.connect(this.master);
     this.aiTone = c.createBiquadFilter(); this.aiTone.type = 'lowpass'; this.aiTone.frequency.value = 12000; this.aiBus = c.createGain(); this.aiBus.gain.value = 0.7; this.aiBus.connect(this.aiTone); this.aiTone.connect(this.master);
     const mk = (arr) => { const b = c.createBuffer(1, arr.length, sr); b.copyToChannel(arr, 0); return b; };
     const t0 = performance?.now?.() ?? 0;
-    this.v8 = { rpms: V8.rpms, bufs: { on: V8.rpms.map((r, i) => mk(synthV8(sr, r, 1, 11 + i))), off: V8.rpms.map((r, i) => mk(synthV8(sr, r, 0, 41 + i))) } };
-    this.v8ai = { rpms: V8.rpms, bufs: { on: this.v8.bufs.on, off: this.v8.bufs.off } };
-    this.pops = [0, 1, 2, 3, 4, 5].map(i => mk(synthPop(sr, i + 1)));
-    this.synthMs = (performance?.now?.() ?? 0) - t0;
-    // player car
-    this.player = new Voice(this, this.v8); this.player.connect(this.engineBus); this.playerRev = new RevModel();
+    this.cleanBaseRPM=3500;this.cleanV8={on:mk(smoothV8(sr,this.cleanBaseRPM,1)),off:mk(smoothV8(sr,this.cleanBaseRPM,0))};
+    this.pops=[0,1].map(i=>mk(synthPop(sr,i+1)));this.synthMs=(performance?.now?.()??0)-t0;
+    this.player=new RoadVoice(this);this.player.connect(this.engineBus);this.playerRev=new RevModel();
+    this.aiPool=Array.from({length:this.voiceLimit},(_,i)=>{const v=new RoadVoice(this,{panned:true,offset:i*.017});v.connect(this.aiBus);return v;});
     // shared noise for dirt / field / crowd
     const nb = c.createBuffer(1, sr * 2, sr), ch = nb.getChannelData(0); let last = 0; const r = rng(5);
     for (let i = 0; i < ch.length; i++) { const w = r() * 2 - 1; last = (last + 0.02 * w) / 1.02; ch[i] = w * 0.6 + last * 3; }
+    closeLoop(ch,sr);
     const noise = (type, f, q) => { const n = c.createBufferSource(); n.buffer = nb; n.loop = true; const fl = c.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q; const g = c.createGain(); g.gain.value = 0; n.connect(fl); fl.connect(g); g.connect(this.master); n.start(); return { fl, g }; };
     this.noiseBuffer=nb;
     this.tire = noise('bandpass', 1800, 0.8); this.roar = noise('lowpass', 220, 0.7); this.crowd = noise('bandpass', 700, 0.5);
@@ -219,7 +236,7 @@ export class GameAudio {
   }
   ensureDiesel() {
     if (this.diesel) return; const c = this.ctx, sr = c.sampleRate, mk = (arr) => { const b = c.createBuffer(1, arr.length, sr); b.copyToChannel(arr, 0); return b; };
-    const set = { rpms: DIESEL.rpms, bufs: { on: DIESEL.rpms.map((r, i) => mk(synthDiesel(sr, r, 'on', 3 + i))), off: DIESEL.rpms.map((r, i) => mk(synthDiesel(sr, r, 'off', 9 + i))), jake: DIESEL.rpms.map((r, i) => mk(synthDiesel(sr, r, 'jake', 17 + i))) } };
+    const set=this.dieselSet ||= { rpms: DIESEL.rpms, bufs: { on: DIESEL.rpms.map((r, i) => mk(synthDiesel(sr, r, 'on', 3 + i))), off: DIESEL.rpms.map((r, i) => mk(synthDiesel(sr, r, 'off', 9 + i))), jake: DIESEL.rpms.map((r, i) => mk(synthDiesel(sr, r, 'jake', 17 + i))) } };
     this.diesel = new Voice(this, set); this.diesel.connect(this.engineBus);
     this.turbo=c.createOscillator();this.turbo.type='sine';this.turbo.frequency.value=1200;this.turboGain=c.createGain();this.turboGain.gain.value=0;this.turbo.connect(this.turboGain);this.turboGain.connect(this.engineBus);this.turbo.start();
     this.dTone=0;this.truckEvents={upshift:0,downshift:0,blowoff:0,airBrake:0,stopHiss:0,jake:0};
@@ -243,44 +260,24 @@ export class GameAudio {
   }
   cam(t, mode) {
     // in-car: firewall + helmet -> muffled, more low-end rumble; chase: open, bright headers
-    const inCar = mode === 'incar';
+    const inCar=mode==='incar';if(this.cabTone===inCar)return;this.cabTone=inCar;
     this.player.tone.frequency.setTargetAtTime(inCar ? 1500 : 9500, t, 0.1); this.player.body.gain.setTargetAtTime(inCar ? 5 : 0, t, 0.1);
     this.aiTone.frequency.setTargetAtTime(inCar ? 1900 : 12000, t, 0.1);
   }
   // per-frame race update. f = { dt, cam:'chase'|'incar'|'tv', L:{x,y,z,fx,fy,fz}, player:{speed,wheelSpin,throttle,x,y,z}|null, cars:[{id,x,y,z,vx,vz,speed,wheelSpin,throttle}] }
   race(f, t) {
     if (!this.live()) return; t = t ?? this.now(); const c = this.ctx, dt = f.dt || 1 / 60;
-    // listener = camera
-    const Ls = c.listener, L = f.L;
-    if (Ls.positionX) { Ls.positionX.setTargetAtTime(L.x, t, 0.02); Ls.positionY.setTargetAtTime(L.y, t, 0.02); Ls.positionZ.setTargetAtTime(L.z, t, 0.02); Ls.forwardX.setTargetAtTime(L.fx, t, 0.02); Ls.forwardY.setTargetAtTime(L.fy, t, 0.02); Ls.forwardZ.setTargetAtTime(L.fz, t, 0.02); Ls.upX.value = 0; Ls.upY.value = 1; Ls.upZ.value = 0; }
-    else Ls.setPosition?.(L.x, L.y, L.z);
-    const lv = this.lPrev ? { x: (L.x - this.lPrev.x) / dt, z: (L.z - this.lPrev.z) / dt } : { x: 0, z: 0 }; this.lPrev = { x: L.x, z: L.z };
-    this.cam(t, f.cam);
-    // player
-    let pr = null;
-    if (f.player) {
-      const p = f.player; pr = this.playerRev.step(dt, p.speed, p.wheelSpin, p.throttle);
-      const on = pr.load, vol = 0.55 * v8Vol(pr.rpm, on) * (pr.cut > 0 ? 0.35 : 1);
-      this.player.update(t, pr.rpm, { on, off: 1 - on }, vol, 1, pr.cut > 0 ? 0.008 : 0.02);
-      if (pr.crackle > 0 && Math.random() < dt * 4) this.pop(t + Math.random() * 0.01, this.player.mix, 0.06 + Math.random() * 0.10);
-      if (pr.cut > 0 && Math.random() < dt * 6) this.pop(t, this.player.mix, 0.09);
-      this.rpm = pr.rpm;
-    } else this.player.update(t, V8.idle, { on: 0, off: 1 }, 0, 1, 0.05);
-    // AI cars: positioned, distance-darkened, doppler shifted
-    const seen = new Set();
-    const audible=[...f.cars].sort((a,b)=>((a.x-L.x)**2+(a.z-L.z)**2)*(this.ai.has(a.id)?.8:1)-((b.x-L.x)**2+(b.z-L.z)**2)*(this.ai.has(b.id)?.8:1)).slice(0,this.voiceLimit);for(const a of audible){
-      seen.add(a.id); let v = this.ai.get(a.id);
-      if (!v) { v = new Voice(this, this.v8ai, { panned: true, offset: (a.id * 0.29) % 1 }); v.connect(this.aiBus); v.rev = new RevModel({ perMs: 196 * (0.97 + 0.06 * ((a.id * 37) % 10) / 10) }); v.dop = 1; this.ai.set(a.id, v); }
-      const r = v.rev.step(dt, a.speed, a.wheelSpin, a.throttle);
-      const dx = a.x - L.x, dz = a.z - L.z, dist = Math.hypot(dx, dz, a.y - L.y) || 1;
-      const vs = (a.vx * dx + a.vz * dz) / dist, vl = (lv.x * dx + lv.z * dz) / dist;           // + = moving away from listener
-      const dop = Math.min(1.25, Math.max(0.8, (343 + vl) / (343 + vs))); v.dop += (dop - v.dop) * 0.3;
-      v.place(t, a.x, a.y + 0.6, a.z);
-      v.tone.frequency.setTargetAtTime(Math.max(900, 14000 / (1 + dist / 35)), t, 0.05);           // air absorption
-      v.update(t, r.rpm, { on: r.load, off: 1 - r.load }, 0.46 * v8Vol(r.rpm, r.load), v.dop, 0.03);
-      if (r.crackle>0&&dist<25&&t-(this.lastAIPop??-1)>.3&&Math.random()<dt*2) {this.lastAIPop=t;this.pop(t,v.mix,.05+Math.random()*.05);}
-    }
-    for (const [id, v] of this.ai) if (!seen.has(id)) {v.retire(t);this.ai.delete(id);}
+    // Audio-clock cadence, not render-frame cadence. No topology changes occur
+    // here: a bounded persistent voice pool is faded/rebound, never recreated.
+    const interval=this.app?.isMobile ? .05 : 1/30;if(this.nextRaceT!==undefined&&t+1e-6<this.nextRaceT)return;
+    const elapsed=this.lastRaceT===undefined?dt:clampAudio(t-this.lastRaceT,.001,.15);this.lastRaceT=t;this.nextRaceT=(this.nextRaceT??t)+interval;if(this.nextRaceT<t)this.nextRaceT=t+interval;this.stats.controlUpdates++;
+    const L=f.L,lv=this.lPrev?{x:clampAudio((L.x-this.lPrev.x)/elapsed,-75,75),z:clampAudio((L.z-this.lPrev.z)/elapsed,-75,75)}:{x:0,z:0};this.lPrev={x:L.x,z:L.z};this.cam(t,f.cam);
+    if(f.player){const p=f.player,pr=this.playerRev.step(elapsed,p.speed,p.wheelSpin,p.throttle),vol=.55*v8Vol(pr.rpm,pr.load)*(pr.cut>0?.86:1);this.player.update(t,pr.rpm,{on:pr.load,off:1-pr.load},vol,1,.075);this.rpm=pr.rpm;}else this.player.update(t,V8.idle,{on:0,off:1},0);
+    if(this.rankAt===undefined||t>=this.rankAt){this.rankAt=t+.4;this.audible=[...f.cars].filter(a=>(a.x-L.x)**2+(a.z-L.z)**2<90**2).sort((a,b)=>((a.x-L.x)**2+(a.z-L.z)**2)*(this.ai.has(a.id)?.72:1)-((b.x-L.x)**2+(b.z-L.z)**2)*(this.ai.has(b.id)?.72:1)).slice(0,this.voiceLimit).map(a=>a.id);}
+    const wanted=new Set(this.audible||[]);
+    for(const[id,v]of this.ai)if(!wanted.has(id)||!f.cars.some(c=>c.id===id)){v.retire(t);v.availableAt=t+.16;this.ai.delete(id);}
+    for(const id of wanted)if(!this.ai.has(id)){const v=this.aiPool.find(v=>![...this.ai.values()].includes(v)&&t>=(v.availableAt??-1));if(v){v.rev=new RevModel();const car=f.cars.find(a=>a.id===id);if(car){v.rev.rpm=clampAudio(Math.abs(car.speed)*196,V8.idle,V8.limit);v.rev.load=car.throttle||0;}v.dop=1;this.ai.set(id,v);this.stats.poolRebinds++;}}
+    for(const[id,v]of this.ai){const a=f.cars.find(c=>c.id===id);if(!a)continue;const r=v.rev.step(elapsed,a.speed,a.wheelSpin,a.throttle),dx=a.x-L.x,dz=a.z-L.z,dist=Math.hypot(dx,dz)||1,radial=((a.vx-lv.x)*dx+(a.vz-lv.z)*dz)/dist;v.dop+=(clampAudio(343/(343+radial),.94,1.06)-v.dop)*(1-Math.exp(-elapsed*3));v.place(t,a.x,a.y+.6,a.z,L);v.tone.frequency.setTargetAtTime(Math.min(c.sampleRate*.45,Math.max(900,8000/(1+dist/35))),t,.12);v.update(t,r.rpm,{on:r.load,off:1-r.load},.42*v8Vol(r.rpm,r.load)*v.distanceGain,v.dop,.1);}
   }
   // highway semi. f = { dt, speed (m/s), throttle 0/1, brake 0/1, cam }
   truck(f, t) {
@@ -323,10 +320,12 @@ export class GameAudio {
   surface(slide, speed01, cushion = 0, t) {
     if (this.muted || !this.ctx||!this.engineBuilt) return; t = t ?? this.now();
     const v = Math.min(1, speed01) * (0.012 + Math.min(1, slide) * 0.035 + cushion * 0.018);
+    if(this.nextSurfaceT!==undefined&&t<this.nextSurfaceT)return;this.nextSurfaceT=t+.05;
     this.tire.g.gain.setTargetAtTime(v, t, 0.08); this.tire.fl.frequency.setTargetAtTime(900 + speed01 * 1600 - cushion * 400, t, 0.1);
   }
   field(near, excite = 0, t) {
     if (this.muted || !this.ctx||!this.engineBuilt) return; t = t ?? this.now(); const k = this.app?.settings?.crowd ?? 1;
+    if(this.nextFieldT!==undefined&&t<this.nextFieldT)return;this.nextFieldT=t+.05;
     this.roar.g.gain.setTargetAtTime(k * (0.004 + Math.min(1, near) * 0.012), t, 0.15);          // the AI engines are real voices now; this is just rumble
     this.aiBus.gain.setTargetAtTime(0.7 * (0.35 + 0.65 * k), t, 0.2);
     this.crowd.g.gain.setTargetAtTime(k * (0.004 + Math.min(1, excite) * 0.03), t, 0.3);
@@ -340,7 +339,8 @@ export class GameAudio {
     this.player.out.gain.cancelScheduledValues(t); this.player.out.gain.setTargetAtTime(0, t, 0.05);
     if(this.turboGain){this.turboGain.gain.cancelScheduledValues(t);this.turboGain.gain.setTargetAtTime(0,t,.05);}
     if (this.diesel) { this.diesel.out.gain.cancelScheduledValues(t); this.diesel.out.gain.setTargetAtTime(0, t, 0.05); }
-    for(const v of this.ai.values())v.retire(t); this.ai.clear(); this.lPrev = null; this.gb = null;
+    for(const v of this.aiPool||[])v.retire(t);this.ai.clear();this.audible=[];this.rankAt=undefined;this.nextRaceT=undefined;this.lastRaceT=undefined;this.nextSurfaceT=undefined;this.nextFieldT=undefined;this.lPrev=null;this.gb=null;
+    if(this.diesel){this.diesel.retire(t);this.diesel=null;if(this.turbo){const o=this.turbo,g=this.turboGain;o.stop(t+.2);o.onended=()=>{o.disconnect();g.disconnect();};this.turbo=null;this.turboGain=null;}}
     for (const g of [this.tire.g.gain, this.roar.g.gain, this.crowd.g.gain]) { g.cancelScheduledValues(t); g.setTargetAtTime(0, t, 0.05); }
   }
   toggleMute() { this.muted = !this.muted; localStorage.setItem('dtt.mute', this.muted ? '1' : '0'); if (this.muted) this.stop(); this.applyVolume();if(!this.muted)this.unlockMusic(); }
