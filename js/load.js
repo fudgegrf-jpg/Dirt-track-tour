@@ -87,7 +87,7 @@ export class LoadScene {
     if (!this.done) {
       if(this.winch)this.winchUsed=true;
       if(app.tap('KeyX')){this.winch=!this.winch;this.winchUsed||=this.winch;this.autoProgress=null;c.v=0;this.hud.sub.textContent=this.winch?'Crew winching · X release / R re-align · $300 once':'Winch released · drive or reverse freely';}
-      let inp = app.input();
+      let inp = app.input();this.audioThrottle=inp.throttle;this.audioFree=!!inp.brake||this.intro>0;
       if (this.intro > 0) {inp = { steer: 0, throttle: 0, brake: 0 };c.v=0;}
       if(this.winch&&(inp.throttle||inp.brake||Math.abs(inp.steer)>.2)){this.winch=false;c.v=0;this.hud.sub.textContent='Winch released — manual control';}
       if(this.winch)inp=this.autopilot(dt);
@@ -96,7 +96,8 @@ export class LoadScene {
       // kinematic drive
       const maxV = this.loading ? (this.winch?1.3:2.35) : 11.18;
       c.steer += clamp(inp.steer - c.steer, -2.2 * dt, 2.2 * dt);
-      if (inp.throttle) c.v = Math.min(maxV, c.v + 2.0 * dt);
+      if(inp.throttle&&inp.brake)c.v=Math.sign(c.v)*Math.max(0,Math.abs(c.v)-5*dt);
+      else if (inp.throttle) c.v = Math.min(maxV, c.v + 2.0 * dt);
       else if (inp.brake) c.v = c.v > 0.05 ? Math.max(0, c.v - 5 * dt) : Math.max(-2.0, c.v - 1.6 * dt);
       else c.v *= Math.exp(-dt * 1.6);
       // gravity on the ramp: slight roll-back
@@ -144,12 +145,12 @@ export class LoadScene {
     // roof cutaway while inside so you can see
     const inside = c.x < 1.5; this.semi.userData.roof.visible = !inside || this.camMode === 2;
     this.crew.forEach((p, i) => { p.userData.arm.rotation.x = Math.sin(this.t * 4 + i) * 0.6 * (i ? 1 : -1) + (i ? -2.4 : 2.4); p.lookAt(c.x, 0, c.z); });
-    this.pits.marker.visible=!this.loading&&Math.hypot(c.x,c.z)>18;this.race.key.position.set(m.position.x+30,90,m.position.z+40);this.race.key.target.position.copy(m.position);this.race.nightArt?.refreshShadow(dt);
+    this.pits.marker.visible=!this.loading&&Math.hypot(c.x,c.z)>18;this.race.key.position.set(m.position.x+30,90,m.position.z+40);this.race.key.target.position.copy(m.position);this.race.nightArt?.refreshShadow(dt);this.race.nightArt?.atmosphere.update(dt,false);
     this.updateCamera(dt);
     this.updateHud();
     if(this.done){this.secureT=(this.secureT||0)+dt;this.hud.msg.textContent=this.secureT<1.6?'TYING DOWN':'READY TO ROLL';rp.rotation.z=lerp(this.rampTarget,-Math.PI/2,clamp((this.secureT-1.6)/2,0,1));if(this.secureT>4){delete app.state.pitPose;UI.afterLoad(app,this.result);return;}}
     else if((this.saveT=(this.saveT||0)+dt)>2){this.saveT=0;app.state.pitPose={layout:2,routeVersion:3,round:app.state.round,c:{...c},session:{timer:this.timer,dmg:this.dmg,hits:this.hits,falls:this.falls,winch:this.winch,winchUsed:this.winchUsed,loading:this.loading,pathIndex:this.pathIndex,exitStarted:this.exitStarted}};app.save();}
-    this.app.audio.set(0.12 + Math.abs(c.v) * 0.06, Math.abs(c.v) > 0.1 ? 0.5 : 0.2, 0.08);
+    this.app.audio.paddock?.({dt,speed:c.v,throttle:this.done?0:this.audioThrottle||0,freeRev:this.audioFree||Math.abs(c.v)<1});
   }
   recoverWinch(){
     Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0,wr:0});this.winch=false;this.loading=true;this.exitStarted=true;this.pathIndex=this.pits.road.drive.length-1;this.falling=0;this.hold=0;this.autoProgress=null;

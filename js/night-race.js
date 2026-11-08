@@ -1,3 +1,4 @@
+import {DustyAir} from './dusty-air.js';
 // Original night-show art direction. No reference photographs or licensed game art.
 import * as THREE from 'three';
 const CLOD_BUDGET={low:32,medium:72,high:120};
@@ -88,7 +89,7 @@ export function nightRaceArt(race){
  if(ground?.material)ground.material.color.set(0x68735a);
  race.scene.userData.nightOnly=true;
  const refreshShadow=dt=>{race.shadowT=(race.shadowT||0)-dt;if(race.shadowT<=0){race.shadowT=1/({low:10,medium:15,high:24}[race.app.quality]||15);race.key.shadow.needsUpdate=true;}};
- return {version:1,refreshShadow,pointLightsRemoved:unbudgetedLights.length,particles:new NightRoost(race),staticBatches:stats,lighting:'vertex stadium pools + one budgeted warm shadow key',clay:'matte',mudPasses:0};
+ return {atmosphere:new DustyAir(race),version:1,refreshShadow,pointLightsRemoved:unbudgetedLights.length,particles:new NightRoost(race),staticBatches:stats,lighting:'vertex stadium pools + one budgeted warm shadow key',clay:'matte',mudPasses:0};
 }
 
 // Fixed-capacity opaque clods: one instanced draw, no allocations/emitters added

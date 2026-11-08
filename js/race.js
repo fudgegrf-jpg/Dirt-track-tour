@@ -1,3 +1,4 @@
+import {stadiumTowers} from './stadium-lights.js';
 import {batchNightStatic,nightRaceArt} from './night-race.js';
 import {buildDrivableInfield,buildInfieldObstacles,collideInfield,retireAI,updateRetirements,updateInfieldProgress,updateRetirementVisuals} from './infield.js';
 import {pitGateS,pitGateHalfArc,inPitGate} from './pit-gate.js';
@@ -149,15 +150,15 @@ export class RaceScene {
           #include <opaque_fragment>`);
       matteClayShader(sh);
     };
-    trackMat.customProgramCacheKey=()=>'dusty-clay-vertex-pools-v2';this.trackMaterial=trackMat;
+    trackMat.customProgramCacheKey=()=>'dusty-clay-vertex-pools-v2';this.trackMaterial=trackMat;trackMat.color.setRGB(1.24,1.22,1.19);trackMat.userData.night7ClayLift=1.22;
     const tm = new THREE.Mesh(tg, trackMat);tm.name='matte-clay-track'; tm.receiveShadow = true; scene.add(tm);
 
     buildDrivableInfield(this);
 
     // ----- outer wall with sponsor banners + catch fence -----
     const ban = bannerTexture();
-    const wallGeo = ribbon(trk, N, s => { const h = trk.height(s, trk.outer); return [[trk.outer, h], [trk.outer, h + 1.15], [trk.outer + 0.35, h + 1.15], [trk.outer + 0.35, h - 0.1]]; }, [0, 1, 1.05, 0], 18);
-    const wallMaps=pbrMaps('concrete',[12,1]);wallMaps.map.dispose();const wall = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({ map: ban, normalMap:wallMaps.normalMap,normalScale:new THREE.Vector2(.3,.3),roughnessMap:wallMaps.roughnessMap,roughness: .9 })); wall.castShadow = true; wall.receiveShadow = true; scene.add(wall);
+    const wallGeo = sponsorWallRibbon(trk, N);
+    const wallMaps=pbrMaps('concrete',[12,1]);wallMaps.map.dispose();const wall = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({ map: ban, normalMap:wallMaps.normalMap,normalScale:new THREE.Vector2(.3,.3),roughnessMap:wallMaps.roughnessMap,roughness: .9 })); wall.name='outer-sponsor-wall';wall.castShadow = true; wall.receiveShadow = true; scene.add(wall);
     const ft = fenceTexture(); ft.repeat.set(1, 3.5);
     const fenceGeo = ribbon(trk, N, s => { const h = trk.height(s, trk.outer) + 1.15; return [[trk.outer + 0.15, h], [trk.outer + 0.15, h + 5.2]]; }, [0, 1], 1.6);
     const fence = new THREE.Mesh(fenceGeo, new THREE.MeshStandardMaterial({ map: ft, alphaTest: 0.4, transparent: false, side: THREE.DoubleSide, metalness: .15, roughness: .8, color: 0x9a9da2 }));
@@ -246,38 +247,40 @@ export class RaceScene {
     // track name sign on the press box
     const nameC = document.createElement('canvas'); nameC.width = 1024; nameC.height = 128; const ng = nameC.getContext('2d'); ng.fillStyle = '#7a1d10'; ng.fillRect(0, 0, 1024, 128); ng.fillStyle = '#fff'; ng.font = 'italic 900 84px Impact, Arial Black'; ng.textAlign = 'center'; ng.textBaseline = 'middle'; ng.fillText(T.name.toUpperCase(), 512, 66, 990);
     const nt = new THREE.CanvasTexture(nameC); nt.colorSpace = THREE.SRGBColorSpace;
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(36, 4.5), new THREE.MeshStandardMaterial({ map: nt, emissive: 0xffffff, emissiveMap: nt, emissiveIntensity: 0.5 })); sign.rotation.y = Math.PI; sign.position.set(0, 0.5 + rows * 0.55 + 7.5, standZ - 0.5); scene.add(sign);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(36, 4.5), new THREE.MeshStandardMaterial({ map: nt, emissive: 0xffffff, emissiveMap: nt, emissiveIntensity: 0.5 })); sign.name='track-name-sign';sign.rotation.y = Math.PI; sign.position.set(0, 0.5 + rows * 0.55 + 7.5, standZ - 0.5); scene.add(sign);
 
     const standGroup=new THREE.Group();standGroup.name='grounded-grandstands';for(const o of scene.children.slice(standStart))standGroup.add(o);standGroup.position.y=-.3;scene.add(standGroup);
     for(const o of standGroup.children){if(o.geometry?.type==='BoxGeometry'&&o.geometry.parameters?.depth===.95)groundObject(this.groundSupports,o,()=>-.3,{kind:'grandstand footing'});}
     // ----- light poles with glowing heads (+ a few real point lights) -----
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x55595e, metalness: 0.6, roughness: 0.5 });
     const lampMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2d0, emissiveIntensity: 2.0 });
-    const towerGroup=new THREE.Group();towerGroup.name='night-towers';scene.add(towerGroup);
-    const nPoles = Math.max(10, Math.round(trk.P / 55));
-    for (let i = 0; i < nPoles; i++) {
-      const s = (i + 0.5) / nPoles * trk.P;if(Math.abs(s-(trk.s2-Math.min(25,trk.R*.35)))<42)continue;const p = trk.point(s, trk.outer + 9), h = trk.smooth ? outsideHeight(trk, s, 9) : trk.height(s, trk.outer) * 0.4;
-      const H = 26;
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, H, 8), poleMat); pole.position.set(p.x, h + H / 2, p.z); pole.castShadow = false; towerGroup.add(pole);groundObject(this.groundSupports,pole,(x,z)=>this.terrainHeight(x,z),{kind:"stadium pole"});
-      const head = new THREE.Group(); head.position.set(p.x, h + H, p.z); head.rotation.y = -p.th+Math.PI/2; towerGroup.add(head);
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.2, 4.6), poleMat); frame.position.z = -0.6; head.add(frame);
-      for (let a = 0; a < 3; a++) for (let b = 0; b < 2; b++) { const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.8, 1.2), lampMat); lamp.position.set(0, -0.5 + b * 1.0, -2 + a * 1.4 - 0.6); lamp.rotation.x = 0; head.add(lamp); }
-      // Stadium pools are evaluated once per track vertex, not four inverse-square
-      // point lights in every grass/car/track pixel. Lamps remain emissive at all tiers.
-      if (i < 24) { const c = trk.point(s, T.W * 0.18); this.pools[i].set(c.x, c.z, 15 + T.W * 0.35); }
+    const towerPoses=[],nPoles=24;
+    for(let i=0;i<nPoles;i++){
+      let s=(i+.5)/nPoles*trk.P;const gate=trk.s2-Math.min(25,trk.R*.35);if(Math.abs(s-gate)<10)s+=14;
+      const p=trk.point(s,trk.outer+13),c=trk.point(s,T.W*.18),h=this.terrainHeight(p.x,p.z);
+      towerPoses.push({x:p.x,y:h,z:p.z,height:30+(i%3)*1.5,tx:c.x,tz:c.z});
+      this.pools[i].set(c.x,c.z,Math.max(10,Math.min(20,trk.P/24*.48)));
     }
-    batchNightStatic(towerGroup,true);
+
     // ----- scoreboard outside turn 2 (live running order)
     { const sbC = document.createElement('canvas'); sbC.width = 512; sbC.height = 320; this.sbC = sbC;
       const sbT = new THREE.CanvasTexture(sbC); sbT.colorSpace = THREE.SRGBColorSpace; this.sbT = sbT;
       const sS = (trk.s1 + trk.s2) / 2, sp = trk.point(sS, trk.outer + 16), a = Math.PI - sp.th;
       const g = new THREE.Group(); g.position.set(sp.x, trk.smooth ? outsideHeight(trk, sS, 16) : 0, sp.z); g.rotation.y = a; scene.add(g);
       const face = new THREE.Mesh(new THREE.PlaneGeometry(16, 10), new THREE.MeshStandardMaterial({ map: sbT, emissive: 0xffffff, emissiveMap: sbT, emissiveIntensity: 0.9, color: 0x222222 }));
-      face.position.set(0, 15, 0.31); g.add(face);
+      face.name='track-scoreboard-sign';face.position.set(0, 15, 0.31); g.add(face);
       const back = new THREE.Mesh(new THREE.BoxGeometry(16.8, 10.8, 0.6), steel); back.position.y = 15; g.add(back);
       for (const x of [-5, 5]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.6, 10, 0.6), steel); leg.position.set(x, 5, -0.2); leg.castShadow = true; g.add(leg);groundFoot(this.groundSupports,leg,(x,z)=>this.terrainHeight(x,z),{kind:'scoreboard footing'}); }
       this.drawScoreboard(); }
     this.pits=createPitWorld(this);
+    // Keep foundations outside the real access lane and hauler parking bays;
+    // grade to the completed terrain/lot, never to a pre-road height estimate.
+    for(const p of towerPoses){const dx=p.x-p.tx,dz=p.z-p.tz,l=Math.hypot(dx,dz)||1;
+      for(let k=0;k<24;k++){const inLot=Math.abs(p.x-this.pits.origin.x)<80&&p.z>-58&&p.z<48;
+        if(this.pits.road.nearest(p.x,p.z).distance>=9&&!inLot)break;p.x+=dx/l*6;p.z+=dz/l*6;}
+      p.y=this.terrainHeight(p.x,p.z);
+    }
+    this.stadium=stadiumTowers(scene,towerPoses,{name:'night-towers'});
     for(let i=0;i<tireN;i++)groundObject(this.groundSupports,tires,(x,z)=>this.infield.heightAt(x,z),{kind:'low inside marker',instance:i});
     const infieldStart=scene.children.length;
     // ----- infield: support trucks, canopies, tool carts, light towers (the "infield pit" look)
@@ -406,7 +409,7 @@ export class RaceScene {
     this.updateFlags(dt);
     // physics (fixed substeps)
     this.acc += dt; const h = 1 / 120; let steps = 0;
-    const pin = this.attract ? null : app.input();
+    const pin = this.attract ? null : app.input();this.audioInput=pin;
     while(this.acc>=h&&steps<8){this.acc-=h;steps++;for(const c of this.cars){const p=c.previousPose||(c.previousPose={});p.x=c.x;p.z=c.z;p.th=c.th;}this.physics(h,pin);}
     if(this.acc>=h)this.acc%=h;const alpha=app.manual?1:clamp(this.acc/h,0,1);
     for(const c of this.cars){const p=c.previousPose||c,v=c.renderPose||(c.renderPose={});if(Math.hypot(c.x-p.x,c.z-p.z)>5){p.x=c.x;p.z=c.z;p.th=c.th;}v.x=lerp(p.x,c.x,alpha);v.z=lerp(p.z,c.z,alpha);v.th=p.th+wrapAngle(c.th-p.th)*alpha;}
@@ -719,7 +722,7 @@ export class RaceScene {
       for (let i = 0; i < pos.count; i++) { const x = f.base[i * 3]; pos.array[i * 3 + 2] = Math.sin(this.time * 9 + x * 6) * 0.08 * (x + 0.45); }
       pos.needsUpdate = true;
     }
-    dust.update(dt);this.nightArt?.particles.update(dt);
+    dust.update(dt);this.nightArt?.particles.update(dt);this.nightArt?.atmosphere.update(dt);
     // shadow light follows the focus car
     this.nightArt?.refreshShadow(dt);
     const f = this.player; this.key.position.set(f.x + 30, 90, f.z + 40); this.key.target.position.set(f.x, this.trk.height(f.s,f.d)+0.6, f.z);
@@ -730,7 +733,7 @@ export class RaceScene {
     const p = this.player, au = this.app.audio, cam = this.camera, fw = _vF.set(0, 0, -1).applyQuaternion(cam.quaternion);
     const car = c => ({ id: c.num ? (String(c.num).split('').reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) % 9973) : 1, x: c.x, y: c.mesh?.position.y ?? 0, z: c.z, vx: c.speed * Math.cos(c.th), vz: c.speed * Math.sin(c.th), speed: c.speed, wheelSpin: c.wheelSpin || 0, throttle: c.throttle || 0 });
     const f = { dt, cam: this.camMode === 1 ? 'incar' : this.camMode === 2 ? 'tv' : 'chase', L: { x: cam.position.x, y: cam.position.y, z: cam.position.z, fx: fw.x, fy: fw.y, fz: fw.z },
-      player: { speed: p.speed, wheelSpin: p.wheelSpin || 0, throttle: p.throttle || 0 }, cars: this.cars.filter(o => o !== p&&(!o.dnf||o.retirement?.mode==='limping'&&!o.retirement.parked)).map(car) };
+      player: { speed: p.speed, wheelSpin: p.wheelSpin || 0, throttle: !this.app.autopilot&&!p.finished&&p.damage<100&&this.audioInput&&(this.flag!=='pace'&&this.flag!=='yellow'||this.audioInput.throttle>0)?this.audioInput.throttle:p.throttle||0,freeRev:!this.app.autopilot&&!!this.audioInput?.throttle&&(this.flag==='pace'||this.flag==='yellow'||Math.abs(p.speed)<1&&this.audioInput.brake>0) }, cars: this.cars.filter(o => o !== p&&(!o.dnf||o.retirement?.mode==='limping'&&!o.retirement.parked)).map(car) };
 
     const slide = clamp(Math.abs(p.slipR) * 2.5 + p.wheelSpin * 0.5, 0, 1) * clamp(p.speed / 12, 0, 1);
     au.surface?.(slide, p.speed / 40, p.zone === 'cushion' ? 1 : 0);
@@ -828,6 +831,29 @@ function ribbon(trk, N, profile, vCoords, uLen) {
   }
   for (let i = 0; i < N; i++) for (let j = 0; j < n0 - 1; j++) { if(inPitGate(trk,(ss[i]+ss[i+1])*.5))continue; const a = i * n0 + j, b = a + n0; idx.push(a, b, a + 1, a + 1, b, b + 1); }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);g.userData.arcRows=ss; g.computeVertexNormals(); closeRibbonNormals(g, N, n0); return g;
+}
+
+// The generic ribbon is wound into this wall's solid profile. Its near face
+// was culled, exposing the far face's backwards print from the racing surface.
+// Give each face its own corners/UVs, turn the solid faces outward, and run U
+// left-to-right for THAT face's viewer (opposite directions inside/outside).
+// Keep exactly the same physical profile, pit-gate triangles and one draw.
+function sponsorWallRibbon(trk, N) {
+  const raw=ribbon(trk,N,s=>{const h=trk.height(s,trk.outer);return [[trk.outer,h],[trk.outer,h+1.15],[trk.outer+.35,h+1.15],[trk.outer+.35,h-.1]];},[0,1,1.05,0],18);
+  const pos=[],uv=[],idx=[],P=raw.attributes.position,U=raw.attributes.uv,corners=[0,1,1,2,2,3],rows=raw.userData.arcRows.length;
+  for(let row=0;row<rows;row++)for(let j=0;j<6;j++){
+    const k=row*4+corners[j];pos.push(P.getX(k),P.getY(k),P.getZ(k));
+    // Whole atlas repeats also prevent a cut word at the start/finish seam.
+    const u=raw.userData.arcRows[row]/trk.P*Math.max(1,Math.round(trk.P/18));
+    uv.push(u*(j<4?-1:1),U.getY(k));
+  }
+  const I=raw.index;
+  for(let i=0;i<I.count;i+=3){
+    const a=I.getX(i),b=I.getX(i+1),c=I.getX(i+2),face=Math.min(a%4,b%4,c%4);
+    const map=k=>Math.floor(k/4)*6+face*2+(k%4-face);
+    idx.push(map(a),map(c),map(b));
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.userData.arcRows=raw.userData.arcRows;g.userData.readableWallFaces=true;g.computeVertexNormals();closeRibbonNormals(g,rows-1,6);raw.dispose();return g;
 }
 
 // Match the duplicate UV seam normals, so the start/finish seam cannot sparkle.

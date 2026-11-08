@@ -82,6 +82,34 @@ REFERENCE-INFORMED CHOPPED V8 IDLE
   no recording, waveform extract, impulse response or sample is embedded.
   No new third-party assets or licenses. Private review files never ship.
 
+V4 ORIGINAL V8 / STADIUM HARDWARE
+  Pressure-pulse synthesis, deterministic firing variation, parametric EQ and
+  synthetic delay reflections are original mathematical generation. Fitted
+  spectral gain/room-width numbers are not sampled recording data. No clip
+  waveform or measured impulse response is embedded. Private comparison audio
+  and all source references are excluded. Stadium towers, lamp arrays and
+  optical-glow artwork are original procedural/instanced geometry. No new
+  third-party sound samples, art assets or licenses.
+
+V8 V5 / COHERENT COMBUSTION AND THROTTLE RESPONSE
+  Original procedural pulse timing, cylinder-strength variation, weak-burn events,
+  synthetic pressure/rasp and early reflections, and numeric parametric EQ.
+  Private reference recordings informed statistics only. No recording, extracted
+  waveform/envelope trace, measured impulse response, or sample from them is used.
+  No new third-party assets/licenses; the separate semi diesel is unchanged.
+
+NIGHT7 STADIUM ATMOSPHERE
+  Original procedural light-shaft gradients, height haze and drifting dust sprites.
+  Private visual references inform direction only; no reference image is embedded
+  or distributed. No new third-party assets or licenses. Night6 audio is unchanged.
+
+V8 V6 / STATE-DEPENDENT ORIGINAL SYNTHESIS
+  Original coherent firing kernels, seeded turbulence, cross-plane pressure orders,
+  synthetic exhaust resonators and smooth slow loaded-envelope motion. Numeric
+  spectral targets only; no reference waveform, measured impulse response,
+  extracted envelope trace, reference video or comparison audio is embedded.
+  No new third-party samples or licenses. Independent diesel synthesis unchanged.
+
 STATIC GITHUB RELEASE
   OFL fonts are embedded as CSS data URLs; licenses remain in vendor/fonts.
   App icons are embedded. Unused preview WAVs are omitted; engine/effect audio is synthesized. Nitro Riffs is embedded as MP3 text chunks.

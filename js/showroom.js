@@ -1,3 +1,4 @@
+import {stadiumTowers,studioStadium} from './stadium-lights.js';
 import {detailEnvironment} from './details.js';
 import { DEFAULT_DRIVER, DEFAULT_PROFILE } from './data.js';
 import { ContactShadow } from './contact.js';
@@ -40,7 +41,7 @@ export class ShowroomScene {
     for (let i = 0; i < 4; i++) { const t = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.38, 20), new THREE.MeshStandardMaterial({ color: 0x57524c, roughness: 0.95 })); t.position.set(-1.5 + (i % 2) * 0.1, 0.19 + Math.floor(i / 2) * 0.0 + i * 0.39, -2.8); t.castShadow = true; s.add(t); }
     const wl = new THREE.PointLight(0xfff0d0, 0, 30, 1.6); wl.position.set(-6, 3.9, -2.5); s.add(wl);
     // distant track light poles & treeline silhouettes
-    for (let i=0;i<10;i++){const p=new THREE.Mesh(new THREE.CylinderGeometry(.3,.4,26,8),new THREE.MeshStandardMaterial({color:0x454950,roughness:.9}));p.position.set(-90+i*22,13,-80);s.add(p);const lamp=new THREE.Mesh(new THREE.BoxGeometry(.45,.6,1.6),new THREE.MeshStandardMaterial({color:0xddd7c8,emissive:0xffddaa,emissiveIntensity:.5,roughness:1}));lamp.position.set(p.position.x,26,-80);s.add(lamp);}
+    stadiumTowers(s,Array.from({length:10},(_,i)=>({x:-90+i*22,y:0,z:-80,height:30,tx:0,tz:0})),{name:'paddock-stadium-v4'});
     const crowns = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(4, 1), new THREE.MeshStandardMaterial({ color: 0x52614b, roughness:1 }), 100);
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.22,.35,6,6),new THREE.MeshStandardMaterial({color:0x655344,roughness:1}),100);
     const m=new THREE.Matrix4();for(let i=0;i<100;i++){
@@ -57,9 +58,10 @@ export class ShowroomScene {
     s.add(new THREE.HemisphereLight(0xe3edf5,0x39434a,1.8));s.add(new THREE.AmbientLight(0xc5d1d7,.65));
     const key=new THREE.DirectionalLight(0xfff4e6,2.4);key.position.set(5,9,8);key.castShadow=true;key.shadow.mapSize.set(2048,2048);Object.assign(key.shadow.camera,{left:-8,right:8,top:8,bottom:-8,near:.1,far:35});key.shadow.bias=-.00003;key.shadow.normalBias=.004;s.add(key);
     const rim=new THREE.DirectionalLight(0xc9dce6,1.7);rim.position.set(-7,6,-5);s.add(rim);
-    const floor=new THREE.Mesh(new THREE.PlaneGeometry(180,180),new THREE.MeshStandardMaterial({color:0x28343a,roughness:.94,metalness:.08}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;s.add(floor);
+    const floor=new THREE.Mesh(new THREE.PlaneGeometry(300,300),new THREE.MeshStandardMaterial({color:0x28343a,roughness:.94,metalness:.08}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;s.add(floor);
     const ring=new THREE.Mesh(new THREE.RingGeometry(4.35,4.365,128),new THREE.MeshBasicMaterial({color:0x75888a,transparent:true,opacity:.22,depthWrite:false}));ring.rotation.x=-Math.PI/2;ring.position.y=.008;s.add(ring);
     this.car=makeLateModel({color:st.color??DEFAULT_PROFILE.color,accent:st.accent??DEFAULT_PROFILE.accent,num:st.num||DEFAULT_PROFILE.num,name:st.driver||DEFAULT_DRIVER,sponsor:st.team||'RED CLAY RACING',livery:{scheme:st.scheme??DEFAULT_PROFILE.scheme,cageColor:st.cageColor??DEFAULT_PROFILE.cageColor}});this.car.rotation.y=-.12;s.add(this.car);this.contact=new ContactShadow(s,this.car);this.contact.update(()=>0);
+    this.stadium=studioStadium(s);
     const dm=(st.carDmg||0)/100;this.car.userData.paint.color.multiplyScalar(1-dm*.4);this.update(0);
   }
   update(dt) {
@@ -69,7 +71,7 @@ export class ShowroomScene {
       this.car.rotation.y+=dt*.14;this.contact?.update(()=>0);
       const title=this.app.phase==='title',compact=innerWidth<1000||this.app.isMobile;
       const a=.75,r=compact?(title?9:11.8):11.4;
-      this.camera.position.set(Math.cos(a)*r,3.5,Math.sin(a)*r);this.camera.lookAt(0,.8,0);
+      this.camera.position.set(Math.cos(a)*r,title&&compact?2.5:3.5,Math.sin(a)*r);this.camera.lookAt(0,.8,0);
       const target=title?(compact?.70:.70):(compact?.16:.27);
       this.camera.filmOffset=(.5-target)*2*this.camera.getFilmWidth()*this.camera.aspect*Math.tan(this.camera.fov*Math.PI/360);this.camera.updateProjectionMatrix();return;
     }

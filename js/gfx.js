@@ -66,15 +66,17 @@ const SPCOL = ['#c81d25', '#1e5fd8', '#f2c014', '#1f9e4a', '#111', '#ff6a00', '#
 export function bannerTexture() {
   const W = 2048, H = 128, c = canvas(W, H), g = c.getContext('2d');
   g.fillStyle = '#e9e6df'; g.fillRect(0, 0, W, H);g.globalAlpha=.45;for(let x=0;x<W;x+=128)g.drawImage(scanImage('concrete'),x,0,128,H);g.globalAlpha=1;
-  let x = 0, i = 0;
-  while (x < W) {
-    const wdt = 300 + (i % 3) * 60, col = SPCOL[i % SPCOL.length];
+  // Fit six COMPLETE panels into the existing power-of-two atlas. Previously
+  // 300/360/420 repeated totaled 2160px, cropping the final sponsor at 2048.
+  const panels=[];let x=0,weight=0;
+  for(let i=0;i<6;i++) {
+    weight+=300+(i%3)*60;const end=i===5?W:Math.round(weight/2160*W),wdt=end-x,col=SPCOL[i%SPCOL.length];
     g.fillStyle = col; g.fillRect(x + 6, 14, wdt - 12, H - 28);
     g.fillStyle = col === '#f2c014' ? '#111' : '#fff'; g.font = '900 46px Impact, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(SPONSORS[i % SPONSORS.length], x + wdt / 2, H / 2 + 2, wdt - 30);
-    x += wdt; i++;
+    g.fillText(SPONSORS[i], x + wdt / 2, H / 2 + 2, wdt - 30);
+    panels.push({text:SPONSORS[i],x,width:wdt});x=end;
   }
-  return tex(c);
+  const t=tex(c);t.userData.bannerPanels=panels;return t;
 }
 
 export function fenceTexture() {
