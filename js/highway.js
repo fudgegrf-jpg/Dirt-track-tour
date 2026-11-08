@@ -506,7 +506,7 @@ export class HighwayScene {
     this.pumpFuel(dt);if(this.resting)this.hud.sub.textContent=`RESTING · fatigue ${Math.round(this.fatigue*100)}% · clock running`;else if(this.hud.sub.textContent.startsWith('RESTING'))this.hud.sub.textContent='';
     const service=this.exits.some(e=>T.S>e.S+164&&T.S<e.S+204)&&Math.abs(T.v)<.7&&Math.abs(T.lat-79)<4&&Math.abs(T.yaw)<.22,st=app.state;if(service&&st.haulerDmg>0&&st.money>0){const repair=Math.min(st.haulerDmg,dt*4,st.money/(UI.HAULER_PER_PT*.8)),cost=repair*UI.HAULER_PER_PT*.8;st.haulerDmg-=repair;st.money-=cost;this.spent+=cost;this.serviceCost=(this.serviceCost||0)+cost;this.hours+=repair/Math.max(this.serviceStartDmg||0,st.haulerDmg+repair);this.serviceStartDmg=this.serviceStartDmg||st.haulerDmg+repair;this.hud.sub.textContent=`ROAD SERVICE · rig ${Math.round(st.haulerDmg)}% damage · $${this.serviceCost.toFixed(2)} total`;this.serviceNotice=3;}else if(this.hud.sub.textContent.startsWith('ROAD SERVICE')&&(this.serviceNotice-=dt)<=0)this.hud.sub.textContent='';if(!service){this.serviceStartDmg=0;this.serviceCost=0;}
     // arrival
-    if (T.S >= this.Lg) { this.arrive(); }
+    if (T.S >= this.Lg) { this.arrive(); return; }
     if (Math.floor(this.time * 2) !== this.lastTod) { this.lastTod = Math.floor(this.time * 2); this.applyTimeOfDay(); }
     this.updateTraffic(dt);
     this.placeTruck(dt);

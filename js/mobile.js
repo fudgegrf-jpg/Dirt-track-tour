@@ -64,7 +64,7 @@ export class MobileControls {
   reset(){this.gas.clear();this.brake.clear();this.left.clear();this.right.clear();this.steerPointer=null;this.steer=0;this.tiltValue=0;this.neutral=null;this.root.querySelectorAll('.held').forEach(e=>e.classList.remove('held'));this.paintSteer();}
   apply(inp){if(!this.driving)return;if(this.left.size||this.right.size)inp.steer=Number(!!this.right.size)-Number(!!this.left.size);else if(this.steerPointer!==null)inp.steer=this.steer;else if(this.tilt)inp.steer=this.tiltValue;inp.throttle=Math.max(inp.throttle,this.gas.size?1:0);inp.brake=Math.max(inp.brake,this.brake.size?1:0);}
   sync(){
-    const a=this.app,phase=a.phase;const portrait=this.enabled&&innerHeight>innerWidth;
+    const a=this.app,phase=a.phase;if(phase!=='race'&&this.mapMode){this.mapMode=null;this.mapProject=null;this.mapPoints=null;}const portrait=this.enabled&&innerHeight>innerWidth;
     if(portrait&&!this.portrait){this.reset();a.audio.stop();}this.portrait=portrait;
     const driving=this.enabled&&!portrait&&!a.paused&&!document.hidden&&!a.mode?.done&&!a.mode?.ended&&!a.mode?.menu&&['race','load','highway'].includes(phase);
     if(this.driving&&!driving)this.reset();this.driving=driving;

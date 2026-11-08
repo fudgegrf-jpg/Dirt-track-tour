@@ -1,3 +1,4 @@
+import {storage} from './storage.js';
 import {migrateSeasonSave,SEASON_TRACK_VERSION} from './season.js';
 import {GraphicsFinishPass} from './gfx2-post.js';
 import {upgradeScanMaterials} from './gfx2-materials.js';
@@ -33,36 +34,36 @@ class App {
     this.renderPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
     this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.1, 0.25, 3.0);
     this.composer.addPass(this.renderPass);this.composer.addPass(this.graphicsFinish); this.bloom.enabled=false; this.composer.addPass(this.bloom); this.composer.addPass(new OutputPass());
-    this.qualityChoice=localStorage.getItem('dtt.quality')||'auto';if(!QUALITY[this.qualityChoice]&&this.qualityChoice!=='auto')this.qualityChoice='auto';this.quality=resolveQuality(this.qualityChoice,this.isMobile);
+    this.qualityChoice=storage.getItem('dtt.quality')||'auto';if(!QUALITY[this.qualityChoice]&&this.qualityChoice!=='auto')this.qualityChoice='auto';this.quality=resolveQuality(this.qualityChoice,this.isMobile);
     this.ui = document.getElementById('ui');
-    this.keys = new Set(); this.pressed = new Set();
+    this.keys = new Set(); this.padKeys = new Set(); this.pressed = new Set();
     addEventListener('keydown', e => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code) && !['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) e.preventDefault(); if (!this.keys.has(e.code)) this.pressed.add(e.code); this.keys.add(e.code); });
     addEventListener('keyup', e => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
     addEventListener('resize', () => this.resize());
     this.mode = null; this.last = performance.now(); this.paused = false; this.manual = false;
-    this.settings = Object.assign({ shake: 1, volume: 0.8, crowd: 1, cam: 'chase', assist: 'high', diff: 'normal', autoPace: true,musicVolume:.35,musicMuted:false,touchSteering:'wheel' }, (() => { try { return JSON.parse(localStorage.getItem('dtt.settings')) || {}; } catch (e) { return {}; } })());
+    this.settings = Object.assign({ shake: 1, volume: 0.8, crowd: 1, cam: 'chase', assist: 'high', diff: 'normal', autoPace: true,musicVolume:.35,musicMuted:false,touchSteering:'wheel' }, (() => { try { return JSON.parse(storage.getItem('dtt.settings')) || {}; } catch (e) { return {}; } })());
     // One-time migration: existing saves receive the safer new default too.
     // Subsequent explicit Off/Low/Medium/High/Max choices are respected.
-    if(this.settings.assistVersion!==2){this.settings.assist='high';this.settings.assistVersion=2;localStorage.setItem('dtt.settings',JSON.stringify(this.settings));}
+    if(this.settings.assistVersion!==2){this.settings.assist='high';this.settings.assistVersion=2;storage.setItem('dtt.settings',JSON.stringify(this.settings));}
     if(!['off','low','med','high','max'].includes(this.settings.assist))this.settings.assist='high';
     this.audio = new GameAudio(this);
     addEventListener('pointerdown',()=>this.audio.unlockMusic(),{passive:true});addEventListener('keydown',()=>this.audio.unlockMusic());document.addEventListener('visibilitychange',()=>this.audio.music?.apply());
     this.mobile = new MobileControls(this);
     addEventListener('gamepadconnected', e => this.toast?.(`Controller connected: ${e.gamepad.id.slice(0, 32)}`));
     this.state = this.load();
-    try { this.profile = JSON.parse(localStorage.getItem('dtt.profile')) || {}; } catch { this.profile = {}; }
+    try { this.profile = JSON.parse(storage.getItem('dtt.profile')) || {}; } catch { this.profile = {}; }
     const paintMigrated=migrateDefaultLivery(this.profile);
     const profileRenamed=this.profile.driver==='Dale Rhodes'&&paintMigrated;if(profileRenamed)this.profile.driver=DEFAULT_DRIVER;
-    if(paintMigrated||profileRenamed)localStorage.setItem('dtt.profile',JSON.stringify(this.profile));
+    if(paintMigrated||profileRenamed)storage.setItem('dtt.profile',JSON.stringify(this.profile));
     this.applyQuality();
     this.resize();
     document.getElementById('loading')?.remove();
-    this.goto('title');
+    this.goto('title');this.warnStorage();
     requestAnimationFrame(t => this.frame(t));
   }
   // ---------- input helpers ----------
-  key(...codes) { return codes.some(c => this.keys.has(c)); }
+  key(...codes) { return codes.some(c => this.keys.has(c)||this.padKeys.has(c)); }
   tap(code) { if (this.pressed.has(code)) { this.pressed.delete(code); return true; } return false; }
   input() {
     const l = this.key('ArrowLeft', 'KeyA'), r = this.key('ArrowRight', 'KeyD');
@@ -79,19 +80,19 @@ class App {
   // poll the first connected gamepad; buttons become key taps so every scene's shortcuts work on a controller
   pollPad() {
     const gp = navigator.getGamepads ? [...navigator.getGamepads()].find(x => x && x.connected) : null;
-    if (!gp) { this.pad = null; return; }
+    if (!gp) { this.pad = null; this.padKeys.clear();this.padPrev={};return; }
     const b = i => gp.buttons[i] ? (gp.buttons[i].value ?? (gp.buttons[i].pressed ? 1 : 0)) : 0;
     this.pad = { steer: gp.axes[0] || 0, gas: b(7), brake: b(6) };
     const map = { 0: 'Space', 1: 'KeyX', 2: 'KeyE', 3: 'KeyC', 4: 'KeyQ', 5: this.phase==='highway'?'KeyJ':'KeyT', 8: 'KeyR', 9: 'Escape', 12: 'ArrowUp', 13: 'ArrowDown' };
     this.padPrev = this.padPrev || {};
     for (const [i, code] of Object.entries(map)) {
       const down = b(+i) > 0.5;
-      if (down && !this.padPrev[i]) { this.pressed.add(code); this.keys.add(code); }
-      if (!down && this.padPrev[i]) this.keys.delete(code);
+      if (down && !this.padPrev[i]) { this.pressed.add(code); this.padKeys.add(code); }
+      if (!down && this.padPrev[i]) this.padKeys.delete(code);
       this.padPrev[i] = down;
     }
   }
-  saveSettings() { localStorage.setItem('dtt.settings', JSON.stringify(this.settings)); this.audio.applyVolume(); }
+  saveSettings() { storage.setItem('dtt.settings', JSON.stringify(this.settings)); this.audio.applyVolume();this.warnStorage(); }
   toast(msg) {
     document.querySelectorAll('.toast').forEach(t=>t.remove());
     const d = document.createElement('div'); d.className = 'toast'; d.textContent = msg; document.body.appendChild(d);
@@ -164,10 +165,10 @@ class App {
   }
   load() {
     try {
-      const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+      const s = JSON.parse(storage.getItem(SAVE_KEY));
       if (s && s.v === 1) {
         const paintMigrated=migrateDefaultLivery(s);
-        if(!s.salinaLayoutVersion){if(s.results?.[0]?.track==='Volusia')s.results[0].track='Salina';if(s.round===0&&s.pitPose?.c&&(Math.abs(s.pitPose.c.x)>75||s.pitPose.c.z< -51||s.pitPose.c.z>41))delete s.pitPose;s.salinaLayoutVersion=1;localStorage.setItem(SAVE_KEY,JSON.stringify(s));}
+        if(!s.salinaLayoutVersion){if(s.results?.[0]?.track==='Volusia')s.results[0].track='Salina';if(s.round===0&&s.pitPose?.c&&(Math.abs(s.pitPose.c.x)>75||s.pitPose.c.z< -51||s.pitPose.c.z>41))delete s.pitPose;s.salinaLayoutVersion=1;storage.setItem(SAVE_KEY,JSON.stringify(s));}
         if (!s.driver?.trim() || (s.driver === 'Dale Rhodes' && paintMigrated)) {
           const old = s.driver ?? ''; s.driver = DEFAULT_DRIVER; s.standings ||= {};
           if (old !== DEFAULT_DRIVER && Object.hasOwn(s.standings, old)) {
@@ -178,15 +179,19 @@ class App {
           const rename = o => { if (!o || typeof o !== 'object') return;
             for (const k of Object.keys(o)) { if ((k === 'name' || k === 'driver') && o[k] === old) o[k] = DEFAULT_DRIVER; else rename(o[k]); }
           }; rename(s.results); rename(s.log);
-          localStorage.setItem(SAVE_KEY, JSON.stringify(s));
+          storage.setItem(SAVE_KEY, JSON.stringify(s));
         }
-        if(migrateSeasonSave(s)||paintMigrated)localStorage.setItem(SAVE_KEY,JSON.stringify(s));
+        let settledStage=false;
+        if(s.phase==='race'&&s.results?.[s.round]){s.phase='load';settledStage=true;}
+        if(s.phase==='load'&&s.loadLog?.round===s.round){s.phase=s.round>=TRACKS.length-1?'season':'highway';settledStage=true;}
+        if(migrateSeasonSave(s)||paintMigrated||settledStage)storage.setItem(SAVE_KEY,JSON.stringify(s));
         return s;
       }
     } catch (e) {} return null;
   }
-  save() { if (this.state) localStorage.setItem(SAVE_KEY, JSON.stringify(this.state)); }
-  clearSave() { localStorage.removeItem(SAVE_KEY); }
+  warnStorage(){if(storage.failed&&!this.storageWarned){this.storageWarned=true;this.toast('Autosave unavailable — progress lasts until this page is reloaded.');}}
+  save() { if (this.state) storage.setItem(SAVE_KEY, JSON.stringify(this.state));this.warnStorage(); }
+  clearSave() { storage.removeItem(SAVE_KEY); }
   get track() { return TRACKS[Math.max(0,Math.min(Number.isInteger(this.state?.round)?this.state.round:0,TRACKS.length-1))]; }
   get route() { return ROUTES[this.state?.round??0]; }
   crew(role) { return (this.state?.crew || []).map(id => CREW_POOL.find(c => c.id === id)).find(c => c && c.role === role); }
@@ -254,7 +259,7 @@ class App {
   applyQuality(){
     if(this.mode?.scene)upgradeScanMaterials(this.mode.scene);
     const p={...qualityPreset(this.quality)};if(this.isMobile){p.dpr=Math.min(p.dpr,this.quality==='low'?1:this.quality==='medium'?1:1.25);p.shadow=Math.min(p.shadow,this.quality==='low'?512:1024);p.dust=Math.min(p.dust,this.quality==='low'?450:1000);p.lod=Math.min(p.lod,24);}
-    localStorage.setItem('dtt.quality',this.qualityChoice||this.quality);
+    storage.setItem('dtt.quality',this.qualityChoice||this.quality);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio,p.dpr)*p.scale*(this.qualityChoice==='auto'?(this.autoScale||1):1));this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.mode?.scene?.traverse(o=>{if(o.isLight&&o.castShadow&&o.shadow){const sh=o.shadow;sh.radius=this.quality==='low'?1:1.6;if(sh.mapSize.x!==p.shadow){sh.map?.dispose();sh.map=null;sh.mapSize.set(p.shadow,p.shadow);sh.needsUpdate=true;}}if(o.isLOD&&!o.userData.grass3d&&o.levels[1])o.levels[1].distance=p.lod;});(this.mode?.nightArt||this.mode?.race?.nightArt)?.shadows.configure();this.mode?.dust?.setBudget(p.dust);this.resize();
   }

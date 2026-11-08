@@ -1,3 +1,4 @@
+import {storage} from './storage.js';
 // 2D overlay screens (DOM): title, schedule, shop, results, route map, arrival, season summary.
 import { DEFAULT_DRIVER, DEFAULT_PROFILE, TRACKS, ROUTES, AI_DRIVERS, UPGRADES, CREW_POOL, POINTS } from './data.js';
 
@@ -49,7 +50,7 @@ export function title(app) {
  const close=()=>{editor.hidden=true;el.querySelector('#t-edit').focus({preventScroll:true});};
  el.querySelector('#t-edit').onclick=()=>{editor.hidden=false;el.querySelector('#t-close').focus({preventScroll:true});};el.querySelector('#t-close').onclick=close;
  el.querySelector('#t-style').onchange=e=>{if(+e.target.value!==8)return;for(const[id,key]of[['#t-col','color'],['#t-acc','accent'],['#t-cage','cageColor']])el.querySelector(id).value=hex(DEFAULT_PROFILE[key]);el.querySelector('#t-num').value=DEFAULT_PROFILE.num;};
- el.querySelector('#t-apply').onclick=()=>{app.profile=app.profileOverride=read();localStorage.setItem('dtt.profile',JSON.stringify(app.profile));app.goto('title');el.querySelector('#t-edit')?.blur();};
+ el.querySelector('#t-apply').onclick=()=>{app.profile=app.profileOverride=read();storage.setItem('dtt.profile',JSON.stringify(app.profile));app.goto('title');el.querySelector('#t-edit')?.blur();};
  editor.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}if(e.key==='Enter'&&e.target.matches('input:not([type=color])')){e.preventDefault();el.querySelector('#t-apply').click();}if(e.key==='Tab'){const f=[...editor.querySelectorAll('button,input,select')],i=f.indexOf(document.activeElement);if(e.shiftKey&&i===0){e.preventDefault();f.at(-1).focus();}else if(!e.shiftKey&&i===f.length-1){e.preventDefault();f[0].focus();}}};
  el.querySelector('#t-new').onclick=()=>{if(has&&!completed&&(saved.results?.length||Object.values(saved.up||{}).some(v=>v))&&!confirm('Start a new season? This replaces your current autosave.'))return;app.state=app.newState(read());app.profile=read();app.profileOverride=null;app.save();app.goto('schedule');};
  el.querySelector('#t-set').onclick=()=>app.openSettings();if(has)el.querySelector('#t-cont').onclick=()=>{app.state=saved;const ph=saved.phase;app.goto(completed?'season':({results:'load',arrive:'shop',title:'shop'}[ph]||ph||'shop'));};
@@ -101,8 +102,7 @@ export function applyResults(app, res, playerDmg) {
   st.carDmg = Math.min(100, playerDmg);
   st.results.push({ trackId:app.track.id,classification:res.map(r=>({name:r.name,pts:r.pts})),track: app.track.short, pos: me.pos, pts: me.pts, purse: me.purse + bonus, late: st.late, dnf: me.dnf });
   st.late = false;
-  app.save();
-  st.lastClassification={round:st.round,res,payroll};app.save();
+  st.lastClassification={round:st.round,res,payroll};st.phase=me.dnf?'load':'results';app.save();
   app.goto(me.dnf?'load':'results', { res, payroll });
 }
 export function results(app, { res, payroll } = {}) {
@@ -118,7 +118,9 @@ export function results(app, { res, payroll } = {}) {
 // called by the loading mini-game
 export function afterLoad(app, r) {
   const st = app.state;
-  st.money -= r.cost; st.carDmg = Math.min(100, st.carDmg + r.dmg); st.slackBonus = r.bonusHours; st.loadLog = {...r,round:st.round}; if(st.round>=TRACKS.length-1)st.phase='season';app.save();
+  if(r.round!==undefined&&r.round!==st.round)return;
+  if(st.loadLog?.round===st.round)return;
+  st.money -= r.cost; st.carDmg = Math.min(100, st.carDmg + r.dmg); st.slackBonus = r.bonusHours; st.loadLog = {...r,round:st.round}; st.phase=st.round>=TRACKS.length-1?'season':'highway';app.save();
   app.goto(st.round>=TRACKS.length-1?'season':'highway');
 }
 

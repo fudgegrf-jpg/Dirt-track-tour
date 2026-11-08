@@ -395,6 +395,7 @@ export class RaceScene {
   }
   // ------------------------------------------------------------------ update
   update(dt) {
+    if(this.ended||this.pausedRace)return;
     const {app,trk}=this;dt=Number.isFinite(dt)?clamp(dt,0,.05):0;
     this.time += dt;
     if (!this.attract) {
@@ -418,7 +419,7 @@ export class RaceScene {
     // update race standings
     for (const c of this.cars) c.dist = c.dnf?(c.retiredDist??(c.lap-1)*trk.P+c.s):(c.lap - 1) * trk.P + c.s;
     this.order=(this.flag==='pace'&&app.settings.autoPace!==false)?[...this.formationOrder]:[...this.cars].sort((a, b) => (a.finishRank ?? 99) - (b.finishRank ?? 99) || Number(!!a.dnf)-Number(!!b.dnf) || b.dist - a.dist);
-    if (this.phase === 'cooldown') { this.cool -= dt; if (this.cool <= 0) this.endRace(); }
+    if (this.phase === 'cooldown') { this.cool -= dt; if (this.cool <= 0) {this.endRace();return;} }
     // track dries & rubbers in as the feature goes on
     if (!this.attract) { const lead = this.order[0], prog = clamp((lead.dist) / (this.T.laps * trk.P), 0, 1); trk.dry = clamp(this.dry0 + 0.78 * prog, 0, 0.92); }
     else trk.dry = 0.45;

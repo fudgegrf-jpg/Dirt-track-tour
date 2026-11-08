@@ -1,3 +1,4 @@
+import {storage} from './storage.js';
 import {racingV8,RACING_V8} from './racing-v8.js';
 import {MenuMusic} from './menu-music.js';
 // Engine & track audio: original procedural synthesis, never recorded samples.
@@ -207,7 +208,7 @@ class Voice {
 const v8Vol = (rpm, load) => (0.28 + 0.72 * Math.pow(Math.min(1, rpm / 8000), 0.8)) * (0.42 + 0.58 * load);
 
 export class GameAudio {
-  constructor(app, ctx = null) { this.app = app; this.ctx = ctx; this.offline = !!ctx; this.muted = !ctx && localStorage.getItem('dtt.mute') === '1'; this.ai = new Map(); this.lastT = 0; if (ctx) this.build(); }
+  constructor(app, ctx = null) { this.app = app; this.ctx = ctx; this.offline = !!ctx; this.muted = !ctx && storage.getItem('dtt.mute') === '1'; this.ai = new Map(); this.lastT = 0; if (ctx) this.build(); }
   now() { return this.ctx.currentTime; }
   ensure() {
     if (this.ctx && this.engineBuilt) return true;
@@ -356,7 +357,7 @@ export class GameAudio {
     if(this.diesel){this.diesel.retire(t);this.diesel=null;if(this.turbo){const o=this.turbo,g=this.turboGain;o.stop(t+.2);o.onended=()=>{o.disconnect();g.disconnect();};this.turbo=null;this.turboGain=null;}}
     for (const g of [this.tire.g.gain, this.roar.g.gain, this.crowd.g.gain]) { g.cancelScheduledValues(t); g.setTargetAtTime(0, t, 0.05); }
   }
-  toggleMute() { this.muted = !this.muted; localStorage.setItem('dtt.mute', this.muted ? '1' : '0'); if (this.muted) this.stop(); this.applyVolume();if(!this.muted)this.unlockMusic(); }
+  toggleMute() { this.muted = !this.muted; storage.setItem('dtt.mute', this.muted ? '1' : '0'); if (this.muted) this.stop(); this.applyVolume();if(!this.muted)this.unlockMusic(); }
 }
 
 // 16-bit PCM WAV from channel arrays
