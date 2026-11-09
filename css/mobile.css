@@ -80,3 +80,11 @@ body{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}input,
 /* On very short Android landscape screens the Clear button must not extend
    sideways into the central announcement column. */
 @media(max-height:310px){.mobile .touch-side-left{flex-direction:column}}
+/* Fullscreen button: on menu screens it covered header text (season/round label,
+   phone shop title); during desktop driving it covered the SPEED box. Menus get a
+   small corner icon; desktop driving moves it to the empty top-centre. */
+body:not([data-phase=race]):not([data-phase=load]):not([data-phase=highway]) .touch-primary{top:max(6px,env(safe-area-inset-top));right:max(6px,env(safe-area-inset-right));left:auto;transform:none}
+body:not([data-phase=race]):not([data-phase=load]):not([data-phase=highway]) #touch-fullscreen{width:32px;height:32px;min-width:32px;min-height:32px;padding:0}
+body:not([data-phase=race]):not([data-phase=load]):not([data-phase=highway]) #touch-fullscreen>span{display:none}
+body:not([data-phase=race]):not([data-phase=load]):not([data-phase=highway]) #touch-fullscreen svg{width:16px;height:16px}
+body:not(.mobile):is([data-phase=race],[data-phase=load],[data-phase=highway]) .touch-primary{left:50%;right:auto;transform:translateX(-50%)}

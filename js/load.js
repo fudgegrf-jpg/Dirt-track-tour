@@ -123,13 +123,13 @@ export class LoadScene {
         const sp = Math.abs(c.v);
         Object.assign(c,prev);c.v=-prev.v*.25;
         if(this.winch&&this.loading){this.winch=false;c.v=0;this.hud.sub.textContent='Winch paused at obstruction · reverse to back out, or R / Re-align';}
-        if (this.cool <= 0 && sp > 0.35) { const d = 1 + sp * 2.6; this.dmg += d; this.hits++; this.cool = 0.6; this.shake = 0.5; this.flash(b==='front'?'BANG! Hit the cabinets':b==='trailer'?'SCRAPED THE TRAILER WALL':b==='trackwall'?'CONTACT — TRACK WALL':'CONTACT — PADDOCK OBJECT', '#ff5a4a'); }
+        if (this.cool <= 0 && sp > 0.35) { const d = this.winch ? 0 : 1 + sp * 2.6; /* paid crew assist is driving: no damage billed to the team */ this.dmg += d; this.hits++; this.cool = 0.6; this.shake = 0.5; this.flash(b==='front'?'BANG! Hit the cabinets':b==='trailer'?'SCRAPED THE TRAILER WALL':b==='trackwall'?'CONTACT — TRACK WALL':'CONTACT — PADDOCK OBJECT', '#ff5a4a'); }
       }
       // Repeated wall bounces at the same spot must not survive the results
       // handoff forever. Independent of hit cooldown and winch reverse cycles.
       if(b==='trackwall')this.lastWallContact=this.t;
       const driving=!!(inp.throttle||inp.brake||this.winch),anchor=this.wallAnchor;
-      if(!anchor||Math.hypot(c.x-anchor.x,c.z-anchor.z)>1.5||!driving||this.t-(this.lastWallContact??-99)>.5){this.wallAnchor={x:c.x,z:c.z};this.wallTrapTime=0;}
+      if(!anchor||Math.hypot(c.x-anchor.x,c.z-anchor.z)>1.5||!driving||this.t-(this.lastWallContact??-99)>(this.winch?2.2:.5)){this.wallAnchor={x:c.x,z:c.z};this.wallTrapTime=0;}
       else this.wallTrapTime=(this.wallTrapTime||0)+dt;
       if(this.wallTrapTime>2.5){
         const q=this.race.trk.project(c.x+this.offset.x,c.z+this.offset.z);

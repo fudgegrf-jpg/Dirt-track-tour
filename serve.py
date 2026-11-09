@@ -13,7 +13,7 @@ class GameHandler(SimpleHTTPRequestHandler):
             path = unquote(urlsplit(self.path).path)
             target = (ROOT / (path.lstrip('/') or 'index.html')).resolve()
             relative = target.relative_to(ROOT)
-            allowed = str(relative) in {'index.html','manifest.webmanifest'} or (relative.parts[0] in {'js','css','vendor','icons'} and target.suffix.lower() in {'.js','.mjs','.css','.ttf','.woff','.woff2','.png','.svg','.ico','.wasm','.json'})
+            allowed = str(relative) in {'index.html','manifest.webmanifest'} or (relative.parts[0] in {'js','css','vendor','icons','assets'} and target.suffix.lower() in {'.js','.mjs','.css','.ttf','.woff','.woff2','.png','.svg','.ico','.wasm','.json','.ogg','.mp3'})
             if not allowed or any(p.startswith('.') for p in relative.parts) or not target.is_file():
                 self.send_error(404); return None
         except (ValueError, OSError, IndexError):
