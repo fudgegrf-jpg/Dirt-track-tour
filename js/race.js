@@ -11,6 +11,7 @@ import {foliageMap,crownGeometry,pineGeometry} from './foliage.js';
 import {groundObject,groundFoot} from './grounding.js';
 import {polishInfield} from './world-polish.js';
 import { createPitWorld } from './pits.js';
+import { PaceCar } from './pace-car.js';
 import { DEFAULT_DRIVER, DEFAULT_PROFILE } from './data.js';
 import {qualityPreset} from './quality.js';
 import { ContactShadow } from './contact.js';
@@ -52,6 +53,7 @@ export class RaceScene {
     this.buildCars(startBack);
     this.nightArt=nightRaceArt(this);
     if (!attract) this.buildHud();
+    if (!attract) this.paceCar=new PaceCar(this);   // Night19: visible pace car on the invisible pace logic
     this.orbit=0;this.order=[...this.cars];
     for(const c of this.cars){c.speed=Math.hypot(c.vx,c.vz);c.previousPose={x:c.x,z:c.z,th:c.th};c.renderPose={x:c.x,z:c.z,th:c.th};}
     this.updateVisuals(0);this.updateCamera(1/60);if(!attract)this.updateHud();
@@ -428,6 +430,7 @@ export class RaceScene {
     this.excite = Math.max(0.25, this.excite - dt * 0.15); if (this.crowdU) { this.crowdU.uTime.value = this.time; this.crowdU.uExcite.value = this.excite; }
     if ((this.sbAcc = (this.sbAcc || 0) + dt) > 0.5) { this.sbAcc = 0; this.drawScoreboard(); }
     this.updateSurface(dt);
+    this.paceCar?.update(dt);
     this.updateVisuals(dt);updateRetirementVisuals(this);
     this.updateCamera(dt);
     this.updateAudio(dt);
@@ -451,7 +454,7 @@ export class RaceScene {
       if(c.retirement)continue;
       let inp;
       const ps = this.paceSpeed() * (this.flag === 'yellow' ? 0.88 : 1);
-      const ctx = { dt: h, green, pace, paceSpeed: c === leader ? ps : ps + 4, paceLane: this.flag === 'pace' ? c.paceLane : -0.1, hold: green ? (4 - (this.greenT || 0)) / 2 : 0 };
+      const ctx = { dt: h, green, pace, paceSpeed: c === leader ? ps : ps + 4, paceLane: this.flag === 'pace' ? c.paceLane : this.flag === 'yellow' ? (c.cautionLane ?? -0.1) : -0.1, hold: green ? (4 - (this.greenT || 0)) / 2 : 0 };
       c.human = c.player && !!pin && !this.app.autopilot && !c.finished; c.assist = c.human ? (this.app.settings.assist || 'high') : null;
       if (c.player && pin) {
         inp = this.app.autopilot ? aiInput(c, trk, (c.ai ||= { lane: 0.3, skill: 0.9, aggr: 0.6, cons: 0.97, adapt: 0.5, curLane: 0.3 }), this.cars, ctx) : { ...pin };
@@ -500,9 +503,12 @@ export class RaceScene {
   autoFormation(h){
     const trk=this.trk,yellow=this.flag==='yellow',targetV=this.paceSpeed()*(yellow?.88:1);
     this.formationV+=(targetV-this.formationV)*(1-Math.exp(-h*1.5));this.formationS+=this.formationV*h;
+    let settled=true,lead=null;
     (this.formationOrder||this.cars).forEach((c,i)=>{if(c.dnf)return;
-      const ds=yellow?i*9:Math.floor(i/2)*9,target=this.formationS-ds,q=trk.project(c.x,c.z),oldS=c.s;
-      let lane=yellow?-1:(i%2?1:-1)*Math.min(3.2,this.T.W*.18);
+      // slots are measured from the formation leader's own arc (Night19), so a leader that
+      // lags the virtual pace point can never be swallowed by the rows behind it
+      const ds=Math.floor(i/2)*9,target=(lead&&Number.isFinite(lead.formationArc)&&lead.formationEpoch===this.cautions?lead.formationArc:this.formationS)-ds,q=trk.project(c.x,c.z),oldS=c.s;
+      let lane=(i%2?1:-1)*Math.min(3.2,this.T.W*.18);   // Night19: two-wide under pace AND caution (leader inside)
       const stopped=this.cars.find(o=>o.retirement&&Math.abs(((target-o.s+trk.P*1.5)%trk.P)-trk.P*.5)<16&&Math.abs(o.d-lane)<3);
       if(stopped)lane=clamp(stopped.d+4,-trk.W/2+2,trk.W/2-2);
       if(!Number.isFinite(c.formationArc)||c.formationEpoch!==this.cautions){c.formationArc=target+((q.s-target+trk.P*100.5)%trk.P-trk.P*.5);c.formationSpeed=Math.hypot(c.vx,c.vz);c.formationLane=q.d;c.formationEpoch=this.cautions;}
@@ -512,15 +518,23 @@ export class RaceScene {
       // Critical gap damping + jerk-limited acceleration. Caution rows only
       // merge once there is bumper clearance; never correct world positions.
       const ahead=(this.formationOrder||this.cars).slice(0,i).filter(o=>!o.dnf);
-      for(const o of ahead){const arc=o.formationArc??o.s,gap=((arc-c.formationArc+trk.P*1.5)%trk.P)-trk.P*.5;if(gap>0&&gap<9&&Math.abs((o.formationLane??o.d)-lane)<2.8){if(Math.abs(c.formationLane-lane)>.5&&gap<7)lane=c.formationLane;else desired=Math.min(desired,(o.formationSpeed||0)+Math.max(-4,(gap-7)*.8));}}
-      const accel=clamp(err*.5+(desired-c.formationSpeed)*1.6,-2.2,1.6);c.formationAccel=(c.formationAccel||0)+clamp(accel-(c.formationAccel||0),-3.5*h,3.5*h);c.formationSpeed+=c.formationAccel*h;
-      c.formationSpeed=Math.max(0,c.formationSpeed);c.formationArc+=c.formationSpeed*h;
+      // Night19 two-wide: rows only care about cars that share (or are moving into)
+      // their lane, plus a no-passing rule so out-of-order cars fall back behind
+      // their row before merging; lane changes wait while anything is alongside.
+      const myRow=Math.floor(i/2);
+      ahead.forEach((o,j)=>{const arc=o.formationArc??o.s,gap=((arc-c.formationArc+trk.P*1.5)%trk.P)-trk.P*.5,oL=o.formationLane??o.d,lat=Math.abs(oL-c.formationLane),into=Math.abs(oL-lane)<2.8;
+        if(gap>0&&gap<9&&(lat<2.8||into)){if(lat>=2.8&&Math.abs(c.formationLane-lane)>.5&&gap<7)lane=c.formationLane;else desired=Math.min(desired,(o.formationSpeed||0)+Math.max(-4,(gap-7)*.8));}
+        const rows=myRow-Math.floor(j/2);if(rows>0&&gap<9*rows+6){desired=Math.min(desired,(o.formationSpeed||0)+Math.max(-4,(gap-9*rows+1)*.6));}
+        if(rows>0&&gap<3){desired=Math.min(desired,(o.formationSpeed||0)-1.5);if(Math.abs(gap)<6&&lat<4.6&&Math.abs(lane-c.formationLane)>.3)lane=c.formationLane;}});
+      const accel=clamp(err*.5+(desired-c.formationSpeed)*1.6,yellow&&(err<-3||desired<c.formationSpeed-3)?-4.5:-2.2,1.6);c.formationAccel=(c.formationAccel||0)+clamp(accel-(c.formationAccel||0),-(yellow?6:3.5)*h,3.5*h);c.formationSpeed+=c.formationAccel*h;
+      c.formationSpeed=Math.max(0,c.formationSpeed);c.formationArc+=c.formationSpeed*h;if(Math.abs(err)>2.5||Math.abs(lane-c.formationLane)>1)settled=false;
       c.formationLane+=clamp((lane-c.formationLane)*1.5,-.8,.8)*h;
       const pt=trk.point(c.formationArc,c.formationLane),ox=c.x,oz=c.z;
       c.x=pt.x;c.z=pt.z;c.th+=clamp(wrapAngle(pt.th-c.th)*6,-1.8,1.8)*h;
       c.vx=(c.x-ox)/h;c.vz=(c.z-oz)/h;c.speed=Math.hypot(c.vx,c.vz);c.w=-c.formationSpeed*trk.curvature(c.formationArc);c.steer=-Math.atan(2.8*trk.curvature(c.formationArc));c.throttle=.25;c.brake=0;c.human=false;c.reverseHold=0;c.reversing=false;c.s=trk.project(c.x,c.z).s;c.d=c.formationLane;
-      if(oldS>trk.P*.75&&c.s<trk.P*.25){c.lap++;c.lapStart=this.time;}c.prevS=c.s;
+      if(oldS>trk.P*.75&&c.s<trk.P*.25){c.lap++;c.lapStart=this.time;}c.prevS=c.s;if(!lead)lead=c;
     });
+    this.formationSettled=settled;
   }
   hit(c, dmg, kind) {
     if (dmg <= 0) return;
@@ -545,7 +559,7 @@ export class RaceScene {
       if (inZone || this.paceT > 40) this.goGreen();
     } else if (this.flag === 'yellow') {
       this.cautionT += dt;
-      if (this.cautionT > 10 && L.s > trk.s4 + 6 && L.s < trk.s4 + T.L * 0.4) this.goGreen();
+      if (this.cautionT > 10 && (this.formationSettled !== false || this.app.settings.autoPace === false || this.cautionT > 30) && (this.paceCar?.ready() ?? true) && L.s > trk.s4 + 6 && L.s < trk.s4 + T.L * 0.4) this.goGreen();
       else if (this.cautionT > 10) hud.sub.textContent = 'Restart when the leader hits the frontstretch — get ready!';
     } else if (this.phase === 'race') {
       this.greenT += dt;
@@ -562,9 +576,9 @@ export class RaceScene {
     this.app.audio.crowdCheer?.();
   }
   throwCaution(c) {
-    this.formationOrder=[...(this.order||this.cars)].filter(o=>!o.dnf&&!o.finished);if(!this.formationOrder.includes(this.player)&&!this.player.dnf)this.formationOrder.push(this.player);this.formationS=this.formationOrder[0]?.s||0;this.formationV=this.formationOrder[0]?.speed||this.paceSpeed();
+    this.formationOrder=[...(this.order||this.cars)].filter(o=>!o.dnf&&!o.finished);if(!this.formationOrder.includes(this.player)&&!this.player.dnf)this.formationOrder.push(this.player);this.formationS=this.formationOrder[0]?.s||0;this.formationV=this.formationOrder[0]?.speed||this.paceSpeed();this.formationOrder.forEach((o,i)=>{o.cautionLane=i%2?0.26:-0.32;});this.formationSettled=false;
     this.flag = 'yellow'; this.cautions++; this.cautionT = 0; this.excite = 0.8; for (const o of this.cars) o.slowT = 0;
-    this.flash('CAUTION', 2.2, '#ffd400'); this.hud.sub.textContent = `#${String(c.num).replace(/[&<>]/g,"")} ${String(c.name).replace(/[&<>]/g,"")} is stopped — slow down, single file, no passing`;
+    this.flash('CAUTION', 2.2, '#ffd400'); this.hud.sub.textContent = `#${String(c.num).replace(/[&<>]/g,"")} ${String(c.name).replace(/[&<>]/g,"")} is stopped — slow down, line up two-wide, no passing`;
   }
   flash(t, sec = 1.2, color = '#fff') { if (!this.hud) return; this.hud.msg.textContent = t; this.hud.msg.style.color = color; this.msgT = sec; }
   crossLine(c) {

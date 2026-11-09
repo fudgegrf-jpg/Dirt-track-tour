@@ -157,3 +157,10 @@ The car engine now plays a synthesized cammed small-block V8 sound pack provided
 
 Format: the browser gets `v8pack-loops.ogg` (Ogg Vorbis, ~215 KB) when it reports Ogg support. Older Safari/iOS (before 18.4), or any Ogg decode failure, gets the `v8pack-loops.mp3` twin (~287 KB, encoded from the same WAV masters). Only one of the two is downloaded, lazily, at first engine use. If both fail, or AudioWorklet is unavailable, the original Night12 synthesizer stays as the loading/failure fallback. The pack's one-shot clips are not shipped. Classic 42 remains the default.
 
+## Night19 — pace car, two-wide caution, AI pit return, paddock/road polish
+
+A visible pace car with a flashing yellow light bar now leads pace laps and cautions, then peels off and parks in the infield under green; it rejoins when the yellow comes out again. Caution and pace formations run **two-wide** behind the pace car (not single file), with the existing auto-pace restart handshake waiting until the pace car is clear.
+
+After the checkered flag, all seven AI cars drive back to the paddock on staggered paths: about four load into their own haulers (ramp, winch, gate close) and about three park just outside the trailer opening so the lot does not look identical. AI yield to each other and to the player; the player winch assist also queues behind AI ahead.
+
+Paddock polish adds painted bay marks, pit-exit lettering, bollards, canopy/lot lighting and related props. Highway polish adds RPM markers, mile markers and median lights on the travel leg. AI paddock engine voices reuse the Night18 V8 pack pool. Classic 42 (scheme 8) / Jayden Fudge #42 and the career loop remain the defaults.

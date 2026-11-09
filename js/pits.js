@@ -6,6 +6,7 @@ import {makeSemi} from './gfx.js';
 import {createPitLot} from './pit-lot.js';
 import {matteClay} from './clay-matte.js';
 import {AI_DRIVERS} from './data.js';
+import {polishPaddock,polishPitRoad} from './paddock-polish.js';
 // One paddock generator, located from the actual backstretch of each oval.
 export function createPitWorld(race){
  const {app,trk,T,scene}=race,st=app.state||app.profile||{};
@@ -26,10 +27,13 @@ export function createPitWorld(race){
  lot.addBay(-17.8,0,true);
  sign('BAY '+(st.num||'42')+' / '+(st.driver||'Jayden Fudge').toUpperCase(),-9,-3,4.5,8);
  const marker=new THREE.Mesh(new THREE.ConeGeometry(.22,.6,3),new THREE.MeshBasicMaterial({color:0xd2f77f}));marker.rotation.z=Math.PI;marker.position.set(3,5,0);root.add(marker);
- const count=low?3:7;
+ // Night19: every AI team always has its own hauler (low quality uses the low-detail rig).
+ // Loaders keep the gate shut until their car returns; parkers race with the ramp down.
+ const count=AI_DRIVERS.length,rigs=[],LOADERS=new Set([1,4,5,6]);
  for(let i=0;i<count;i++){
   const row=i%2?1:-1,z=i>3?-32+(i-4)*10:row*(16+Math.floor(i/2)*9),x=i>3?36:-17.8;const d=AI_DRIVERS[i%AI_DRIVERS.length];
-  const rig=makeSemi({team:d.name.split(' ')[1]+' Racing',num:d.num,color:d.color,accent:d.accent,cabColor:d.color,detail:low?'low':'medium'});rig.rotation.y=Math.PI;rig.position.set(x,0,z);root.add(rig);rig.userData.rampPivot.rotation.z=i%3===0?Math.asin(1.25/rig.userData.rampLen):-Math.PI/2;obstacles.push({x:x+5,z,w:14,d:1.8});bays.push({x: x+10,z:z+5});lot.addBay(x,z);
+  const rig=makeSemi({team:d.name.split(' ')[1]+' Racing',num:d.num,color:d.color,accent:d.accent,cabColor:d.color,detail:low?'low':'medium'});rig.rotation.y=Math.PI;rig.position.set(x,0,z);root.add(rig);const role=LOADERS.has(i)?'loader':'parker';rig.userData.rampPivot.rotation.z=role==='parker'?Math.asin(1.25/rig.userData.rampLen):-Math.PI/2;obstacles.push({x:x+5,z,w:14,d:1.8});bays.push({x: x+10,z:z+5});lot.addBay(x,z);
+  rigs.push({i,x,z,rear:x+17.8,rig,driverId:d.id,num:d.num,color:d.color,role,side:i>3?'right':z>0?'north':'south',rampRun:rig.userData.rampLen*Math.cos(Math.asin(1.25/rig.userData.rampLen))});
   const weave=canvasTexture('fabric',256),fabric=new THREE.MeshStandardMaterial({color:d.color,map:weave,bumpMap:weave,bumpScale:.025,roughness:.85});const canopy=new THREE.Mesh(pitchedRoof(11,5,.75),fabric);canopy.position.set(x-7,3.5,z+5);canopy.castShadow=!low;root.add(canopy);for(const dx of[-12,-2])for(const dz of[3,7])box(x+dx,1.7,z+dz,.07,3.4,.07,steel);
   box(x-6,.6,z+5,1.8,1.2,.8,fabric,true);box(x-10,.45,z+5,1.4,.9,1,black,true);
  }
@@ -40,7 +44,8 @@ export function createPitWorld(race){
  // Low-poly crew silhouettes beside, never on, the ramp.
  for(const z of[-3.5,3.5]){const g=new THREE.Group(),body=new THREE.Mesh(new THREE.CapsuleGeometry(.22,.55,low?4:7,low?8:14),mat(0x135bc4));body.position.y=1.1;g.add(body);for(const a of[-.13,.13]){const leg=new THREE.Mesh(new THREE.BoxGeometry(.15,.8,.19),black);leg.position.set(a,.4,0);g.add(leg);}const head=new THREE.Mesh(new THREE.SphereGeometry(.18,low?12:20,low?8:12),mat(0xcb9874));head.position.y=1.7;g.add(head);g.position.set(5,0,z);root.add(g);}
  const strip=box(-8,4.1,0,14,.035,.10,new THREE.MeshStandardMaterial({color:0xcfe3ef,emissive:0xdfefff,emissiveIntensity:.5}));const l=new THREE.PointLight(0xdcecff,8,16,1.5);l.position.set(-7,3,0);root.add(l);
+ const polish=polishPaddock(race,{root,lot,rigs,obstacles,low});polish.road=polishPitRoad(race,{root,road,origin,low});
  enrichPaddock(race,{root,bays,origin});lot.finish();
  for(const o of root.children)o.userData.groundSign?.();
- return {root,origin,gate,gateS,road,lot,semi,obstacles,bays,marker,height:h};
+ return {root,origin,gate,gateS,road,lot,semi,obstacles,bays,rigs,polish,marker,height:h};
 }

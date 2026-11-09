@@ -310,6 +310,11 @@ export class GameAudio {
     const dt=this.lastPadT===undefined?(f.dt||.016):clampAudio(t-this.lastPadT,.001,.15);this.lastPadT=t;this.nextPadT=t+interval;
     const p=this.playerRev.step(dt,f.speed||0,0,f.throttle||0,!!f.freeRev);
     this.player.update(t,p.rpm,{on:p.load,off:1-p.load,cut:p.cut>0},.26*v8Vol(p.rpm,p.load),1,.06);this.rpm=p.rpm;this.cam(t,'chase');
+    // Night19: returning AI cars reuse the race voice pool (same V8 pack), quieter, idling down
+    if(f.L&&f.cars&&this.aiPool){const L=f.L,near=f.cars.filter(a=>(a.x-L.x)**2+(a.z-L.z)**2<70**2).sort((a,b)=>((a.x-L.x)**2+(a.z-L.z)**2)-((b.x-L.x)**2+(b.z-L.z)**2)).slice(0,Math.min(3,this.voiceLimit)),wanted=new Set(near.map(a=>a.id));
+     for(const[id,v]of this.ai)if(!wanted.has(id)){v.retire(t);v.availableAt=t+.16;this.ai.delete(id);}
+     for(const a of near)if(!this.ai.has(a.id)){const v=this.aiPool.find(v=>![...this.ai.values()].includes(v)&&t>=(v.availableAt??-1));if(v){v.rev=new RevModel();v.rev.rpm=clampAudio(Math.abs(a.speed)*196,V8.idle,V8.limit);v.dop=1;this.ai.set(a.id,v);}}
+     for(const[id,v]of this.ai){const a=near.find(c=>c.id===id);if(!a)continue;const r=v.rev.step(dt,a.speed,0,a.throttle);v.place(t,a.x,a.y+.6,a.z,L);v.update(t,r.rpm,{on:r.load,off:1-r.load,cut:r.cut>0},.2*v8Vol(r.rpm,r.load)*v.distanceGain,1,.1);}}
   }
   cam(t, mode) {
     // in-car: firewall + helmet -> muffled, more low-end rumble; chase: open, bright headers

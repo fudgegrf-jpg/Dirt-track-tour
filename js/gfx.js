@@ -25,20 +25,30 @@ export function grassTexture(base='#2f4a22'){const t=pbrMaps('grass').map;t.repe
 export function asphaltTexture(){return pbrMaps('asphalt').map;}
 
 // interstate lane texture across 12.4 m (u) and 12 m along (v)
-export function laneTexture() {
-  const W = 512, H = 512, c = canvas(W, H), g = c.getContext('2d');
+export function laneTexture(quality = 'high') {
+  // Night19: sharper, worn markings, milled rumble strips, chip-seal shoulders, sealed
+  // cracks and patches. Same lat layout (-1 .. 11.4 m across, 12 m per repeat).
+  const hi = quality !== 'low', W = hi ? 1024 : 512, H = W, k = W / 512, c = canvas(W, H), g = c.getContext('2d');
+  let sd = 9127; const R = () => ((sd = Math.imul(sd, 1664525) + 1013904223 >>> 0) / 4294967296);
   for(let y=0;y<4;y++)for(let x=0;x<4;x++)g.drawImage(scanImage('asphalt'),x*W/4,y*H/4,W/4,H/4);
-  for (let i = 0; i < 26000; i++) { const v = 35 + Math.random() * 55 | 0; g.fillStyle = `rgba(${v},${v},${v},0.08)`; g.fillRect(Math.random() * W, Math.random() * H, 1.6, 1.6); }
-  const px = m => (m + 1) / 12.4 * W; // lat -1 .. 11.4
-  // tire wear darker strips
-  for (const lc of [1.85, 5.55]) for (const o of [-0.9, 0.9]) { g.fillStyle = 'rgba(20,20,22,0.25)'; g.fillRect(px(lc + o) - 12, 0, 24, H); }
-  for(const lc of[1.85,5.55])for(const o of[-.85,.85]){const cx=px(lc+o),gr=g.createLinearGradient(cx-14,0,cx+14,0);gr.addColorStop(0,'#18191a00');gr.addColorStop(.5,'#15171940');gr.addColorStop(1,'#18191a00');g.fillStyle=gr;g.fillRect(cx-14,0,28,H);}
-  g.strokeStyle='#1b1c1d70';g.lineWidth=1.2;for(let i=0;i<9;i++){g.beginPath();let x=(i*71)%W;g.moveTo(x,0);for(let y=0;y<=H;y+=32){x+=Math.sin(i*7+y*.1)*4;g.lineTo(x,y);}g.stroke();}
-  g.fillStyle = '#d8b21c'; g.fillRect(px(0) - 4, 0, 8, H);               // left yellow edge
-  g.fillStyle = '#e8e8e8'; g.fillRect(px(7.4) - 4, 0, 8, H);             // right white edge
-  g.fillRect(px(3.7) - 4, 0, 8, H * 0.25);                              // dashed (3m of 12m)
-  g.fillStyle = 'rgba(180,180,180,.14)'; g.fillRect(px(7.6), 0, W - px(7.6), H);        // shoulder lighter
-  for (let y = 0; y < H; y += 16) { g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(px(7.9), y, 20, 7); } // rumble strip
+  for (let i = 0; i < 26000 * k * k; i++) { const v = 35 + R() * 55 | 0; g.fillStyle = `rgba(${v},${v},${v},0.08)`; g.fillRect(R() * W, R() * H, 1.6 * k, 1.6 * k); }
+  const px = m => (m + 1) / 12.4 * W, my = m => m / 12 * H; // lat -1 .. 11.4, 12 m per tile
+  // chip-seal shoulders: lighter, coarser aggregate
+  for (const [a, b] of [[-1, -.08], [7.55, 11.4]]) { g.fillStyle = 'rgba(150,148,142,.16)'; g.fillRect(px(a), 0, px(b) - px(a), H); for (let i = 0; i < 5200 * k; i++) { const v = R() < .5 ? 30 + R() * 30 | 0 : 120 + R() * 60 | 0; g.fillStyle = `rgba(${v},${v},${v - 4},.22)`; const x = px(a) + R() * (px(b) - px(a)); g.fillRect(x, R() * H, 2 * k, 2 * k); } }
+  // tire wear / oil drip: darker wheel paths and a faint centre-of-lane drip line
+  for (const lc of [1.85, 5.55]) for (const o of [-0.9, 0.9]) { g.fillStyle = 'rgba(20,20,22,0.22)'; g.fillRect(px(lc + o) - 12 * k, 0, 24 * k, H); }
+  for(const lc of[1.85,5.55])for(const o of[-.85,.85]){const cx=px(lc+o),gr=g.createLinearGradient(cx-14*k,0,cx+14*k,0);gr.addColorStop(0,'#18191a00');gr.addColorStop(.5,'#15171940');gr.addColorStop(1,'#18191a00');g.fillStyle=gr;g.fillRect(cx-14*k,0,28*k,H);}
+  for (const lc of [1.85, 5.55]) { const gr = g.createLinearGradient(px(lc) - 20 * k, 0, px(lc) + 20 * k, 0); gr.addColorStop(0, '#0e0f1000'); gr.addColorStop(.5, '#0e0f1030'); gr.addColorStop(1, '#0e0f1000'); g.fillStyle = gr; g.fillRect(px(lc) - 20 * k, 0, 40 * k, H); }
+  // an old rectangular patch, a longitudinal joint and sealed (tar snake) cracks
+  g.fillStyle = 'rgba(28,29,31,.28)'; g.fillRect(px(4.4), my(6.3), px(6.9) - px(4.4), my(2.1)); g.strokeStyle = 'rgba(14,14,15,.45)'; g.lineWidth = 1.5 * k; g.strokeRect(px(4.4), my(6.3), px(6.9) - px(4.4), my(2.1));
+  g.strokeStyle = 'rgba(12,12,13,.34)'; g.lineWidth = 2 * k; g.beginPath(); g.moveTo(px(3.95), 0); g.lineTo(px(3.95), H); g.stroke();
+  g.strokeStyle='rgba(16,16,17,.55)';g.lineWidth=2.2*k;for(let i=0;i<7;i++){g.beginPath();let x=px(-.5+R()*11.5),y=R()*H;g.moveTo(x,y);for(let j=0;j<14;j++){x+=(R()-.5)*14*k;y+=(R()-.3)*18*k;g.lineTo(x,y);}g.stroke();}
+  g.beginPath();let tx=px(.3);g.moveTo(tx,my(9.1));for(let j=0;j<16;j++){tx+=(px(7.3)-px(.3))/16;g.lineTo(tx,my(9.1)+(R()-.5)*8*k);}g.stroke();
+  // milled rumble strips: dark grooves with a lit lip, inside both shoulders
+  for (const [a, w] of [[-.82, .5], [7.95, .42]]) for (let y = 0; y < H; y += 7.5 * k) { g.fillStyle = 'rgba(0,0,0,0.42)'; g.fillRect(px(a), y, w / 12.4 * W, 3.6 * k); g.fillStyle = 'rgba(200,200,195,.12)'; g.fillRect(px(a), y + 3.6 * k, w / 12.4 * W, 1.2 * k); }
+  // markings: 15 cm lines with bead sparkle and wear
+  const mark = (lat, color, y0 = 0, y1 = H) => { const w = .15 / 12.4 * W; g.fillStyle = color; g.fillRect(px(lat) - w / 2, y0, w, y1 - y0); for (let i = 0; i < 110 * k; i++) { const y = y0 + R() * (y1 - y0); g.fillStyle = R() < .5 ? 'rgba(55,55,57,.32)' : 'rgba(255,255,250,.5)'; g.fillRect(px(lat) - w / 2 + R() * w, y, 1.4 * k, 1.4 * k); } };
+  mark(0, '#d9b11e'); mark(7.4, '#ececE6'); mark(3.7, '#ececE6', 0, H * 0.25); // dashed 3 m of 12 m
   const t = tex(c);t.userData.gfx2Kind='asphalt';t.userData.gfx2Repeat=4;return t;
 }
 

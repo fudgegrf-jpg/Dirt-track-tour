@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { makeLateModel, makeSemi, makeSky, dirtTextures, glowTexture, trailerTexture, disposeScene } from './gfx.js';
 import { clamp, lerp, wrapAngle, resolveWallPenetration } from './physics.js';
 import * as UI from './ui.js';
+import { PitReturn } from './pit-return.js';
 
 const RAMP_LEN = 4.6, FLOOR = 1.25, RAMP_HALF = 1.22, IN_HALF = 1.25, FRONT_X = -15.4;
 export class LoadScene {
@@ -26,10 +27,9 @@ export class LoadScene {
     }
     if(wallShift){this.c.x=world.x-this.offset.x;this.c.z=world.z-this.offset.z;this.c.v=0;}
     this.contact=p.contactShadow;this.rigContact=new ContactShadow(this.scene,this.semi,true);this.rigContact.update(()=>0);
-    race.cars.filter(c=>!c.player).forEach((c,i)=>{const b=this.pits.bays[i%this.pits.bays.length];c.mesh.position.set(this.offset.x+b.x,0,this.offset.z+b.z+Math.floor(i/this.pits.bays.length)*4);c.mesh.rotation.set(0,Math.PI,0);c.mesh.traverse(o=>{if(o.isLOD){o.autoUpdate=false;o.levels[0].object.visible=false;o.levels[1].object.visible=true;}});c.contactShadow.update(()=>0);});
     this.goal=new THREE.Mesh(new THREE.PlaneGeometry(2.3,2.2),new THREE.MeshStandardMaterial({color:0xd2f77f,emissive:0x799f33,emissiveIntensity:.25,transparent:true,opacity:.65}));this.goal.rotation.x=-Math.PI/2;this.goal.position.set(-11.65,FLOOR+.02,0);this.pits.root.add(this.goal);
     this.t=0;this.timer=0;this.dmg=0;this.hits=0;this.falls=0;this.hold=0;this.cool=0;this.camMode=0;this.intro=0;this.done=false;this.winch=false;this.winchUsed=false;this.crew=[];this.pathIndex=0;this.loading=false;
-    if(st.pitPose?.round===st.round&&st.pitPose.session)Object.assign(this,st.pitPose.session);
+    if(st.pitPose?.round===st.round&&st.pitPose.session){Object.assign(this,st.pitPose.session);this.resumed=true;}
     this.winchUsed=!!(this.winchUsed||this.winch);
     if(st.pitPose?.round===st.round&&st.pitPose.routeVersion!==3&&!this.loading){const path=this.pits.road.drive,q=race.trk.project(this.c.x+this.offset.x,this.c.z+this.offset.z);this.exitStarted=q.d>race.trk.outer+1;this.pathIndex=this.exitStarted?path.reduce((best,p,i)=>Math.hypot(this.c.x-p.x,this.c.z-p.z)<Math.hypot(this.c.x-path[best].x,this.c.z-path[best].z)?i:best,0):0;}
 
@@ -37,6 +37,8 @@ export class LoadScene {
     if(!Number.isFinite(this.pathIndex))this.pathIndex=0;
     this.towed=!!st.results?.[st.round]?.dnf;
     if(this.towed&&!st.pitPose?.session){Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0});this.exitStarted=true;this.pathIndex=this.pits.road.drive.length-1;this.intro=.65;this.towMessage=5;st.pitPose={layout:2,routeVersion:3,round:st.round,c:{...this.c},session:{exitStarted:true,pathIndex:this.pathIndex}};app.save();}
+    // Night19: the AI field drives itself home (resumed/towed sessions settle instantly)
+    this.pitReturn=new PitReturn(this,{settle:!!(this.resumed||this.towed)});
     const mech=app.crew('Mechanic');this.par=35+(mech?mech.skill*2:0);app.ui.innerHTML='';this.buildHud();this.wheelH=this.wheelPts(this.c).map(w=>this.height(w.x,w.z));this.car.position.set(this.c.x+this.offset.x,this.height(this.c.x,this.c.z),this.c.z+this.offset.z);this.car.rotation.set(0,-this.c.th,0);this.updateCamera(1);this.updateHud();
   }
   buildHud() {
@@ -167,12 +169,14 @@ export class LoadScene {
     // roof cutaway while inside so you can see
     const inside = c.x < 1.5; this.semi.userData.roof.visible = !inside || this.camMode === 2;
     this.crew.forEach((p, i) => { p.userData.arm.rotation.x = Math.sin(this.t * 4 + i) * 0.6 * (i ? 1 : -1) + (i ? -2.4 : 2.4); p.lookAt(c.x, 0, c.z); });
+    this.pitReturn?.update(dt);
     this.pits.marker.visible=!this.loading&&Math.hypot(c.x,c.z)>18;this.race.key.position.set(m.position.x+30,90,m.position.z+40);this.race.key.target.position.copy(m.position);this.race.nightArt?.refreshShadow(dt);this.race.nightArt?.atmosphere.update(dt,false);
     this.updateCamera(dt);
     this.updateHud();
     if(this.done){this.secureT=(this.secureT||0)+dt;this.hud.msg.textContent=this.secureT<1.6?'TYING DOWN':'READY TO ROLL';rp.rotation.z=lerp(this.rampTarget,-Math.PI/2,clamp((this.secureT-1.6)/2,0,1));if(this.secureT>4){delete app.state.pitPose;UI.afterLoad(app,this.result);return;}}
     else if((this.saveT=(this.saveT||0)+dt)>2){this.saveT=0;app.state.pitPose={layout:2,routeVersion:3,round:app.state.round,c:{...c},session:{timer:this.timer,dmg:this.dmg,hits:this.hits,falls:this.falls,winch:this.winch,winchUsed:this.winchUsed,loading:this.loading,pathIndex:this.pathIndex,exitStarted:this.exitStarted}};app.save();}
-    this.app.audio.paddock?.({dt,speed:c.v,throttle:this.done?0:this.audioThrottle||0,freeRev:this.audioFree||Math.abs(c.v)<1});
+    const cam=this.camera,fw=new THREE.Vector3(0,0,-1).applyQuaternion(cam.quaternion);
+    this.app.audio.paddock?.({dt,speed:c.v,throttle:this.done?0:this.audioThrottle||0,freeRev:this.audioFree||Math.abs(c.v)<1,cars:this.pitReturn?.audioCars()||[],L:{x:cam.position.x,y:cam.position.y,z:cam.position.z,fx:fw.x,fy:fw.y,fz:fw.z}});
   }
   recoverWinch(){
     Object.assign(this.c,{x:13,z:0,th:Math.PI,v:0,steer:0,wr:0});this.winch=false;this.loading=true;this.exitStarted=true;this.pathIndex=this.pits.road.drive.length-1;this.falling=0;this.hold=0;this.autoProgress=null;this.wallTrapTime=0;this.wallAnchor=null;
@@ -203,7 +207,9 @@ export class LoadScene {
     if(!this.loading&&this.t-this.autoProgress.t>1.8){this.autoReverseUntil=this.t+1.3;this.autoProgress={x:c.x,z:c.z,t:this.t};}
     if(!this.loading&&this.t<(this.autoReverseUntil||0))return{steer:-steer,throttle:0,brake:1};
     if(this.loading&&this.t-this.autoProgress.t>3){this.winch=false;this.hud.sub.textContent='Winch paused — X release / R re-align';return{steer:0,throttle:0,brake:0};}
-    const target=this.loading?1.3:clamp(8-Math.abs(wrapAngle(want-c.th))*6,3,8);
+    let target=this.loading?1.3:clamp(8-Math.abs(wrapAngle(want-c.th))*6,3,8);
+    // Night19: the paid assist keeps a car length to AI cars driving home ahead of it
+    const ahead=this.loading?null:this.pitReturn?.carAhead(c);if(ahead){target=Math.min(target,Math.max(0,ahead.v+(ahead.gap-6.5)*.7));this.autoProgress={x:c.x,z:c.z,t:this.t};if(target<.2)return{steer,throttle:0,brake:c.v>.05?1:0};}
     return{steer,throttle:!stop&&c.v<target-.08?1:0,brake:stop?(c.v>.05?1:0):(c.v>target+.15?1:0)};
   }
   flash(t, col) { this.hud.msg.textContent = t; this.hud.msg.style.color = col; clearTimeout(this.ft); this.ft = setTimeout(() => { if (this.hud) this.hud.msg.textContent = ''; }, 1400); }

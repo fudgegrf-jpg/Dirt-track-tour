@@ -6,6 +6,7 @@ import {travelQuote,updateTravelButton,openTravel} from './highway-travel.js';
 import {ensureTrailer,stepTrailer,syncTrailer} from './articulation.js';
 import {woodTexture,drawTruckGauges} from './truck-cockpit.js';
 import {resolveHighway} from './contacts.js';
+import {polishRoad} from './road-polish.js';
 import {beveledBox,canvasTexture,detailEnvironment,enrichTruckStop,enrichRoadside,instances,chunkInstances,batchStatic} from './details.js';
 import {qualityPreset} from './quality.js';
 import { ContactShadow,seatWheels,seatRigWheels } from './contact.js';
@@ -101,7 +102,7 @@ export class HighwayScene {
     this.sun = new THREE.DirectionalLight(0xfff2dd, 2.6); this.sun.castShadow = true; this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 400 }); this.sun.shadow.bias = -0.000025; this.sun.shadow.normalBias = 0.006;
     s.add(this.sun, this.sun.target);
-    const laneT = laneTexture(); laneT.anisotropy = 16;
+    const laneT = laneTexture(this.app.quality); laneT.anisotropy = 16;
     const roadMat = new THREE.MeshStandardMaterial({ map: laneT, roughness: 0.82, metalness: 0.0 });
     this.roadMat = roadMat;
     // regional look per leg: Deep South pines -> Ozark hardwoods -> Missouri/Iowa prairie -> Corn Belt
@@ -200,7 +201,7 @@ export class HighwayScene {
     // destination: track glow + sign
     this.sign(this.Lg - 260, 13.6, signTexture([`${this.to.name}`, `${this.to.event}`, 'RACERS EXIT HERE ▶'], '#7a1d10', '#fff', 640, 300), 6, 2.8);
     this.dest = this.pt(this.Lg + 120, 140);
-    const glow = glowTexture();this.buildFuelAccess();enrichRoadside(this);
+    const glow = glowTexture();this.buildFuelAccess();enrichRoadside(this);this.roadPolish=polishRoad(this);
     for(let i=0;i<posts.count;i++){posts.getMatrixAt(i,mt);if(mt.elements[13]<-50)continue;const S=this.S0+Math.floor(i/2)*4,lat=i%2?-7.5:11.05,top=mt.elements[13]+.5,target=this.groundY(S,lat),height=Math.max(.1,top-target);mt.elements[5]=height;mt.elements[13]=top-height/2;posts.setMatrixAt(i,mt);groundObject(this.groundSupports,posts,(x,z)=>this.groundWorld(x,z),{kind:'guardrail post foot',instance:i});}posts.instanceMatrix.needsUpdate=true;
 
   }
@@ -419,6 +420,7 @@ export class HighwayScene {
     const night = 1 - day;this.night=night;
     this.heads.forEach(l => l.intensity = night > 0.3 ? 380 * night : 0);
     for (const m of this.lamps || []) m.emissiveIntensity = 0.25 + 0.55 * night;
+    for (const m of this.roadGlow || []) m.opacity = m.userData.base * Math.max(0, night - .15) / .85;
     for (const m of this.signs) m.emissiveIntensity = 0.04 + 0.5 * night;   // retro-reflective look in headlights
     this.app.renderer.toneMappingExposure = 0.95 - 0.03 * night;
     // night: tighter bloom so oncoming headlights read as lamps, not fog balls; dim amber cab instead of a bright dome light

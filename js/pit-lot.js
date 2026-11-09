@@ -30,5 +30,5 @@ export function createPitLot(race,root,origin){
  curbSegment(-74.7,-5,.4,91.2);curbSegment(74.7,-5,.4,91.2);curbSegment(0,40.7,149,.4);curbSegment(-11.5,-50.7,126,.4); // entrance remains open x52..75
  const curb=new THREE.InstancedMesh(new THREE.BoxGeometry(1,.15,1),material,curbPos.length),matrix=new THREE.Matrix4(),q=new THREE.Quaternion();curb.name='paddock-edge-curbs';root.add(curb);for(let i=0;i<curbPos.length;i++){const p=curbPos[i];matrix.compose(new THREE.Vector3(p.x,.075,p.z),q,new THREE.Vector3(p.w,1,p.d));curb.setMatrixAt(i,matrix);groundObject(race.groundSupports,curb,()=>0,{kind:'paddock curb foot',instance:i});}curb.receiveShadow=true;
  function heightAt(wx,wz){const x=wx-origin.x,z=wz-origin.z,dx=Math.max(0,Math.abs(x)-75),dz=Math.max(0,-51-z,z-41),d=Math.max(dx,dz);if(d>3)return null;if(z< -51&&x>=44)return null;return-.3*d/3;}
- return{surface,decals,apron,curb,slots,addBay,heightAt,finish(){texture.needsUpdate=true;},datum:0,entry:{minX:52,maxX:75,z:-51},tileMeters:5};
+ return{surface,decals,apron,curb,slots,addBay,heightAt,ctx:g,line,finish(){texture.needsUpdate=true;},datum:0,entry:{minX:52,maxX:75,z:-51},tileMeters:5};
 }
