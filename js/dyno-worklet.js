@@ -1,8 +1,9 @@
+import {cylinderCutGain} from './engine-limiter.js';
 // Jayden Fudge's authorized engine recording; persistent sample player only.
 // Two adjacent RPM loops, phase-coherent in 720-degree engine cycles. No node
 // creation, network, allocations, FFTs, or synthesized cylinders in process().
 class JaydenDynoProcessor extends AudioWorkletProcessor{
- static get parameterDescriptors(){return[{name:'active',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'},{name:'rpm',defaultValue:2000,minValue:500,maxValue:11000,automationRate:'k-rate'},{name:'load',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'}];}
+ static get parameterDescriptors(){return[{name:'active',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'},{name:'rpm',defaultValue:2000,minValue:500,maxValue:11000,automationRate:'k-rate'},{name:'load',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'},{name:'limiter',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'}];}
  constructor({processorOptions:o}){super();this.loops=o.loops;this.release=o.release;this.phase=o.phase||0;this.fade=0;this.tail=-1;this.armed=false;this.alive=true;this.coast=0;this.stride=o.cheap?2:1;this.lastOutput=0;this.port.onmessage=e=>{if(e.data?.dispose)this.alive=false;};}
  read(b,phase){const data=b.data,n=data.length,x=(phase/b.cycles*n)%n,i=Math.floor(x),u=x-i;return data[i]+(data[(i+1)%n]-data[i])*u;}
  process(inputs,outputs,p){if(!this.alive)return false;const y=outputs[0][0],rpm=p.rpm[0],load=p.load[0],loops=this.loops;if(p.active[0]<.001){this.phase+=rpm/(120*sampleRate)*y.length;this.tail=-1;this.armed=false;this.fade=0;this.coast=0;this.lastOutput=0;return true;}let i=0;while(i<loops.length-2&&rpm>loops[i+1].rpm)i++;
@@ -19,7 +20,8 @@ class JaydenDynoProcessor extends AudioWorkletProcessor{
    // retaining the real recorded header tone, plus its short actual release.
    this.coast+=(v-this.coast)*coastK;v=v*dry+this.coast*wet;
    if(this.tail>=0){const j=Math.floor(this.tail);if(j<tail.length-1){const q=this.tail-j;v+=(tail[j]+(tail[j+1]-tail[j])*q)*.24;this.tail+=this.tailRate*stride;}else this.tail=-1;}
-   this.fade=Math.min(1,this.fade+fadeStep);const value=v*this.fade;if(stride===2){y[k]=(this.lastOutput+value)*.5;y[k+1]=value;}else y[k]=value;this.lastOutput=value;
+   this.fade=Math.min(1,this.fade+fadeStep);// Firing-phase cuts run at audio rate, independent of 30/20 Hz controls.
+   const value=v*this.fade*cylinderCutGain((this.phase+step*k)*8,p.limiter[0]);if(stride===2){y[k]=(this.lastOutput+value)*.5;y[k+1]=value;}else y[k]=value;this.lastOutput=value;
   }
   this.phase+=step*y.length;return true;
  }
