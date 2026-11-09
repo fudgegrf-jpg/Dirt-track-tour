@@ -1,14 +1,10 @@
 import {storage} from './storage.js';
 import {racingV8,RACING_V8} from './racing-v8.js';
 import {MenuMusic} from './menu-music.js';
-// Engine & track audio: original procedural synthesis, never recorded samples.
-// Night12 bakes two shared cross-plane pulse/dual-header buffers in racing-v8.js.
-// Persistent on/off sources pitch-track actual RPM, with load transitions, native
-// hard-cut limiter envelopes and cheap camera/distance absorption. No per-firing
-// nodes, live convolution, cylinder worklets, or sources allocated while racing.
-// Two nearby AI voices on desktop / one on touch reserve CPU for the richer voice;
-// the complete eight-car field and shared distant-engine rumble remain unchanged.
-// The diesel and compatibility synthesis exports below are intentionally retained.
+// Night15: Jayden Fudge's permission-granted dyno recording is the primary
+// car voice. The Night12 original synth below remains the immediate/failure
+// fallback. Only the owned dyno take is sampled; private references never ship.
+// Persistent worklets interpolate a compact RPM atlas; diesel is unchanged.
 const TAU = Math.PI * 2;
 export const V8 = { idle: RACING_V8.idle, limit: RACING_V8.limit, rpms: [850, 1500, 2400, 3500, 4800, 6200, 7600, 9000] };
 export const DIESEL = { idle: 650, rpms: [600, 800, 1100, 1450, 1800, 2100] };
@@ -161,13 +157,22 @@ export function smoothV8(sr,rpm=3500,load=1){
   const g=.2/rms(a);for(let j=0;j<n;j++)a[j]*=g;return a;
 }
 class RoadVoice{
- constructor(au,{panned=false,offset=0}={}){const c=this.c=au.ctx;this.au=au;this.mix=c.createGain();this.body=c.createBiquadFilter();this.body.type='lowshelf';this.body.frequency.value=160;this.body.gain.value=0;this.tone=c.createBiquadFilter();this.tone.type='lowpass';this.tone.frequency.value=8000;this.tone.Q.value=.45;this.out=c.createGain();this.out.gain.value=0;this.mix.connect(this.body);this.body.connect(this.tone);this.tone.connect(this.out);this.node=this.out;if(panned){this.pan=c.createStereoPanner();this.out.connect(this.pan);this.node=this.pan;}this.layers=[];const startAt=au.offline?0:c.currentTime+.025;
- for(const name of['on','off']){const source=c.createBufferSource(),g=c.createGain();source.buffer=au.cleanV8[name];source.loop=true;g.gain.value=0;source.connect(g);g.connect(this.mix);source.start(startAt,offset%source.buffer.duration);this.layers.push({name,s:source,g,rpm:name==='off'?au.offBaseRPM:au.cleanBaseRPM,target:0});}this.rev=new RevModel();}
+ constructor(au,{panned=false,offset=0}={}){const c=this.c=au.ctx;this.au=au;this.mix=c.createGain();this.body=c.createBiquadFilter();this.body.type='lowshelf';this.body.frequency.value=160;this.body.gain.value=0;this.tone=c.createBiquadFilter();this.tone.type='lowpass';this.tone.frequency.value=8000;this.tone.Q.value=.45;this.out=c.createGain();this.out.gain.value=0;this.body.connect(this.tone);this.tone.connect(this.out);this.node=this.out;if(panned){this.pan=c.createStereoPanner();this.out.connect(this.pan);this.node=this.pan;}this.layers=[];this.startSynth(offset);this.rev=new RevModel();}
+ startSynth(offset=0){const c=this.c,au=this.au;this.mix ||= c.createGain();this.mix.connect(this.body);const startAt=au.offline?0:c.currentTime+.025;
+ for(const name of['on','off']){const source=c.createBufferSource(),g=c.createGain();source.buffer=au.cleanV8[name];source.loop=true;g.gain.value=0;source.connect(g);g.connect(this.mix);source.start(startAt,offset%source.buffer.duration);this.layers.push({name,s:source,g,rpm:name==='off'?au.offBaseRPM:au.cleanBaseRPM,target:0});}}
+ installSamples(options){
+  const c=this.c,t=c.currentTime;this.mix.disconnect();for(const l of this.layers){try{l.s.stop(t);}catch{}l.s.disconnect();l.g.disconnect();}this.layers=[];this.mix=null;
+  try{const n=new AudioWorkletNode(c,'jayden-dyno',{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[1],processorOptions:options});this.sampler=n;this.sampleRPM=n.parameters.get('rpm');this.sampleLoad=n.parameters.get('load');this.sampleActive=n.parameters.get('active');this.sampleActiveTarget=this.lastVolume>1e-4?1:0;this.sampleRPMTarget=this.mapRPM(this.lastRPM||V8.idle);this.sampleLoadTarget=this.lastLoad||0;this.sampleActive.setValueAtTime(this.sampleActiveTarget,t);this.sampleRPM.setValueAtTime(this.sampleRPMTarget,t);this.sampleLoad.setValueAtTime(this.sampleLoadTarget,t);n.connect(this.body);n.onprocessorerror=()=>{this.restoreSynth();this.au.sampleState='processor-fallback';};}
+  catch(e){this.restoreSynth();throw e;}
+ }
+ mapRPM(rpm){const [lo,hi]=this.au.sampleRange;return lo+(clampAudio(rpm,V8.idle,V8.limit)-V8.idle)/(V8.limit-V8.idle)*(hi-lo);}
+ restoreSynth(){if(this.sampler){this.sampler.onprocessorerror=null;this.sampler.port.postMessage({dispose:true});this.sampler.port.close();this.sampler.disconnect();this.sampler=null;this.sampleRPM=this.sampleLoad=this.sampleActive=null;}if(!this.layers.length)this.startSynth();this.au.stats.sampleVoices=[this.au.player,...this.au.aiPool].filter(v=>v.sampler).length;this.au.stats.engineSources=2*([this.au.player,...this.au.aiPool].length-this.au.stats.sampleVoices);}
+
  connect(n){this.node.connect(n);}
- update(t,rpm,w,vol,pitch=1,tau=.075){const loaded=w.on||0,near=1000+rpm*(.27-.055*loaded),cabin=this.au.cabTone&&this===this.au.player,cutoff=cabin?Math.min(1450,near):near/(1+(this.distance||0)/65);this.tone.frequency.setTargetAtTime(Math.max(650,Math.min(this.c.sampleRate*.43,cutoff)),t,.06);for(const l of this.layers){const rate=clampAudio(rpm/l.rpm*pitch,.2,5.2),gain=w[l.name]||0;if(Math.abs(gain-l.target)>.003||gain===0&&l.target!==0){l.g.gain.setTargetAtTime(gain,t,w.cut?.003:.035);l.target=gain;}if(Math.abs((l.rate??-1)-rate)>.002){l.s.playbackRate.setTargetAtTime(rate,t,.035);l.rate=rate;}}this.out.gain.setTargetAtTime(vol*(w.cut?.025:1),t,w.cut?.002:.015);}
+ update(t,rpm,w,vol,pitch=1,tau=.075){this.lastRPM=rpm;this.lastLoad=w.on||0;this.lastVolume=vol;if(this.sampler){const active=vol>1e-4?1:0,mapped=this.mapRPM(rpm)*pitch,load=w.on||0;if(active!==this.sampleActiveTarget){this.sampleActive.setTargetAtTime(active,t,.035);this.sampleActiveTarget=active;}if(Math.abs(mapped-this.sampleRPMTarget)>1){this.sampleRPM.setTargetAtTime(mapped,t,.025);this.sampleRPMTarget=mapped;}if(Math.abs(load-this.sampleLoadTarget)>.003||load===0&&this.sampleLoadTarget!==0){this.sampleLoad.setTargetAtTime(load,t,.025);this.sampleLoadTarget=load;}}const loaded=w.on||0,near=1000+rpm*(.27-.055*loaded),cabin=this.au.cabTone&&this===this.au.player,cutoff=cabin?Math.min(1450,near):near/(1+(this.distance||0)/65);this.tone.frequency.setTargetAtTime(Math.max(650,Math.min(this.c.sampleRate*.43,cutoff)),t,.06);for(const l of this.layers){const rate=clampAudio(rpm/l.rpm*pitch,.2,5.2),gain=w[l.name]||0;if(Math.abs(gain-l.target)>.003||gain===0&&l.target!==0){l.g.gain.setTargetAtTime(gain,t,w.cut?.003:.035);l.target=gain;}if(Math.abs((l.rate??-1)-rate)>.002){l.s.playbackRate.setTargetAtTime(rate,t,.035);l.rate=rate;}}if(!this.sampleSwapping)this.out.gain.setTargetAtTime(vol*(w.cut?.025:1),t,w.cut?.002:.015);}
 
  place(t,x,y,z,L){if(!this.pan)return;const dx=x-L.x,dz=z-L.z,d=Math.hypot(dx,dz)||1,side=(-L.fz*dx+L.fx*dz)/d;this.pan.pan.setTargetAtTime(clampAudio(side,-.95,.95),t,.1);this.distance=d;this.distanceGain=1/(1+d/14);}
- retire(t){this.out.gain.setTargetAtTime(0,t,.04);}
+ retire(t){this.lastVolume=0;this.out.gain.setTargetAtTime(0,t,.04);this.sampleActive?.setTargetAtTime(0,t,.035);this.sampleActiveTarget=0;}
 }
 const clampAudio=(x,a,b)=>Math.min(b,Math.max(a,x));
 
@@ -252,6 +257,7 @@ export class GameAudio {
   unlockMusic(){if(!this.muted&&this.ensureMusic()){this.ctx.resume?.().catch?.(()=>{});this.music?.unlock();}}
   setMusicPhase(phase){if(!this.music&&globalThis.DTTMusicBoot?.ctx)this.ensureMusic();(this.music||globalThis.DTTMusicBoot)?.setPhase(phase);}
   applyVolume() { this.music?.apply();if(this.master)this.master.gain.setTargetAtTime(this.muted?0:(this.app?.settings?.volume??.8),this.ctx.currentTime,.018); }
+  loadDyno(){if(!this.samplePromise){this.samplePromise=import('./dyno-sampler.js').then(m=>m.loadDyno(this)).catch(e=>{this.sampleState='fallback';this.sampleError=String(e.message||e);return false;});}return this.samplePromise;}
   live() { if (this.muted || !this.ensure()) return false; if (!this.offline && this.ctx.state === 'suspended') this.ctx.resume?.().catch?.(() => {}); return true; }
   horn(time){if(this.muted||(!this.offline&&!this.ensureMusic()))return;const c=this.ctx,t=time??c.currentTime;if(t-(this.hornAt??-1)<.5)return;this.hornAt=t;this.ctx.resume?.().catch?.(()=>{});const g=c.createGain(),f=c.createBiquadFilter();f.type='lowpass';f.frequency.value=1100;f.Q.value=.5;f.connect(g);g.connect(this.master);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.055,t+.035);g.gain.setValueAtTime(.055,t+.25);g.gain.exponentialRampToValueAtTime(.0001,t+.46);let ended=0;this.activeHorns=(this.activeHorns||0)+1;for(const hz of[196,246.94]){const o=c.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(hz*.97,t);o.frequency.exponentialRampToValueAtTime(hz,t+.06);o.connect(f);o.start(t);o.stop(t+.48);o.onended=()=>{o.disconnect();if(++ended===2){f.disconnect();g.disconnect();this.activeHorns--;}};}}
   pop(t, dest, gain = 0.5) {
@@ -260,13 +266,13 @@ export class GameAudio {
   }
   // generic single engine (loading the car onto the hauler, menus): rpm01 0..1
   set(rpm01, load = 0.5, vol = 0.12, t) {
-    if (!this.live()) return; t = t ?? this.now();
+    if (!this.live()) return;if(!this.offline&&!this.samplePromise)this.loadDyno(); t = t ?? this.now();
     const rpm = V8.idle + Math.max(0, rpm01 - 0.12) * 7000;
     this.player.update(t, rpm, { on: load, off: 1 - load }, vol * 2.2 * v8Vol(rpm, load), 1, 0.06);
     this.cam(t, 'chase');
   }
   paddock(f,t){
-    if(!this.live())return;t=t??this.now();const interval=this.app?.isMobile ? .05 : 1/30;
+    if(!this.live())return;if(!this.offline&&!this.samplePromise)this.loadDyno();t=t??this.now();const interval=this.app?.isMobile ? .05 : 1/30;
     if(this.nextPadT!==undefined&&t+1e-6<this.nextPadT)return;
     const dt=this.lastPadT===undefined?(f.dt||.016):clampAudio(t-this.lastPadT,.001,.15);this.lastPadT=t;this.nextPadT=t+interval;
     const p=this.playerRev.step(dt,f.speed||0,0,f.throttle||0,!!f.freeRev);
@@ -280,7 +286,7 @@ export class GameAudio {
   }
   // per-frame race update. f = { dt, cam:'chase'|'incar'|'tv', L:{x,y,z,fx,fy,fz}, player:{speed,wheelSpin,throttle,x,y,z}|null, cars:[{id,x,y,z,vx,vz,speed,wheelSpin,throttle}] }
   race(f, t) {
-    if (!this.live()) return; t = t ?? this.now(); const c = this.ctx, dt = f.dt || 1 / 60;
+    if (!this.live()) return;if(!this.offline&&!this.samplePromise)this.loadDyno(); t = t ?? this.now(); const c = this.ctx, dt = f.dt || 1 / 60;
     // Audio-clock cadence, not render-frame cadence. No topology changes occur
     // here: a bounded persistent voice pool is faded/rebound, never recreated.
     const interval=this.app?.isMobile ? .05 : 1/30;if(this.nextRaceT!==undefined&&t+1e-6<this.nextRaceT)return;
@@ -350,7 +356,7 @@ export class GameAudio {
   }
   stop() {
     if (!this.ctx||!this.engineBuilt) return; const t = this.now();
-    this.player.out.gain.cancelScheduledValues(t); this.player.out.gain.setTargetAtTime(0, t, 0.05);
+    this.player.lastVolume=0;this.player.out.gain.cancelScheduledValues(t); this.player.out.gain.setTargetAtTime(0, t, 0.05);this.player.sampleActive?.setTargetAtTime(0,t,.035);this.player.sampleActiveTarget=0;
     if(this.turboGain){this.turboGain.gain.cancelScheduledValues(t);this.turboGain.gain.setTargetAtTime(0,t,.05);}
     if (this.diesel) { this.diesel.out.gain.cancelScheduledValues(t); this.diesel.out.gain.setTargetAtTime(0, t, 0.05); }
     for(const v of this.aiPool||[])v.retire(t);this.ai.clear();this.audible=[];this.rankAt=undefined;this.nextRaceT=undefined;this.lastRaceT=undefined;this.nextSurfaceT=undefined;this.nextFieldT=undefined;this.lPrev=null;this.gb=null;

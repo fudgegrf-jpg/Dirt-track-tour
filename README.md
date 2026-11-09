@@ -143,3 +143,10 @@ Night12 racing V8 synthesis and tuning are unchanged (audio.js only guards stora
 ## Night14 — independent driver identities
 
 Championship standings and race classifications now use fixed driver IDs, not display names. Choosing an AI driver's exact name no longer combines either driver's points. Existing saves migrate automatically: full classifications or preserved player points recover separate totals; uncertain legacy records are explicitly marked estimated. The unmodified original standings and history remain in `driverIdentityArchive` inside the save. Existing Night11 removed-track archives are retained. Money, upgrades, crew, damage and career position are preserved. Night12 racing V8 audio and the Classic 42 default are unchanged.
+
+
+## Night15 — Jayden's own dyno-recorded late model engine
+
+The main car voice now uses eight compact, seamless RPM loops and a short unloading release cut only from the permission-granted Jayden Fudge dyno recording. One 96-kbps mono MP3 atlas is fetched/decoded only at first car-engine use; startup/menu music does not wait for it. RPM loops are dechirped, crossfaded and pitch-tracked in bounded persistent sample players. Nearby AI use the same real recording at the existing reduced/distance-filtered level. Inaudible sample players skip processing. Nearby AI interpolate at half the audio sample rate and linearly upsample before the existing distance filters; the player stays at native rate.
+
+The original Night12 racing V8 stays intact as the immediate/loading fallback and is automatically retained if MP3 decoding, downloading, or AudioWorklet support fails. The semi/diesel, driving/input model, stable driver IDs, Classic 42 default, and all visuals remain unchanged. Only Jayden's authorized dyno take is sampled; private YouTube/reference recordings still never ship. See CREDITS.txt for permission attribution.
