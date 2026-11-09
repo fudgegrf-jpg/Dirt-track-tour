@@ -5,12 +5,13 @@ CODE, ART AND SOUND
   All game code, 3D models, textures, liveries and decals are made procedurally in this project's
   own code (js/). The race cars, haulers, tracks and scenery are built from code at run time.
 
-  AUDIO: the primary car engine uses the permission-granted Jayden Fudge dyno recording
-  credited below. Only that owned recording is sampled. The original Night12 V8 synthesizer
+  AUDIO: the primary car engine uses the synthesized V8 late model sound pack provided by
+  Garrett (free to use per the pack's README), credited below. No recording of a real engine
+  ships in this build. The original Night12 V8 synthesizer
   remains the immediate/loading and decode/compatibility-failure fallback. Tire/dirt noise,
   crowd, wind, and the semi's diesel/jake brake remain procedural Web Audio synthesis.
   Private reference recordings are never embedded or shipped. WAV files in audio-samples/
-  are legacy offline previews of the procedural synthesizer, not the current recorded engine.
+  are legacy offline previews of the procedural synthesizer, not the current engine.
 
   SPONSORS AND BRANDS: all sponsor, contingency, tire and fuel brand names on the cars are made up
   for this game. Any resemblance to a real company is unintended. Track names refer to real US
@@ -126,4 +127,5 @@ STATIC GITHUB RELEASE
   OFL fonts are embedded as CSS data URLs; licenses remain in vendor/fonts.
   App icons are embedded. Unused preview WAVs are omitted; engine/effect audio is synthesized. Nitro Riffs is embedded as MP3 text chunks.
 
-Engine audio recorded from Jayden Fudge's late model engine, used with permission.
+Engine audio: synthesized V8 late model sound pack, provided by Garrett (free to use).
+(Night15-17 builds used audio recorded from Jayden Fudge's late model engine, used with permission; it is not included in this build.)
