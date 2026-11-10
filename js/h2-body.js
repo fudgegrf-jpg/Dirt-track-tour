@@ -219,6 +219,15 @@ function band(x0, x1, y0, y1, s, nx, ny) {
   });
 }
 
+// Windshield and rear glass share these edges with the black frame so the pane
+// overlaps the pillars, cowl, and roof instead of stopping short of them.
+export function windAt(u, v) {
+  const bow = 0.016 * (1 - u * u);
+  return [lerp(1.15, 0.74, v) + bow, lerp(1.30, 1.86, v), u * lerp(0.86, 0.80, v)];
+}
+export function rearGlassAt(u, v) {
+  return [lerp(-2.32, -1.92, v), lerp(1.36, 1.86, v), u * lerp(0.74, 0.68, v)];
+}
 function yHood(x, z) {
   const t = clamp((x - 1.18) / (2.30 - 1.18), 0, 1);
   const edge = lerp(1.305, 1.15, smooth(t));
@@ -392,10 +401,9 @@ export function buildH2(group, low) {
 
   // closed greenhouse: solid roof and side walls, glass set into the openings
   put(surf(low ? 16 : 22, low ? 8 : 12, (u, v) => {
-    const x = lerp(0.72, -2.02, u), z = lerp(-0.84, 0.84, v);
-    const crown = 0.05 * (1 - Math.min(1, (z / 0.84) ** 2));
-    const tuck = u < 0.04 ? (1 - u / 0.04) * 0.04 : u > 0.96 ? (u - 0.96) / 0.04 * 0.03 : 0;
-    return [x, 1.90 + crown - tuck, z];
+    const x = lerp(0.98, -2.08, u), z = lerp(-0.86, 0.86, v);
+    const crown = 0.05 * (1 - Math.min(1, (z / 0.86) ** 2));
+    return [x, 1.90 + crown, z];
   }), 'gloss', [0, 1, 0]);
   for (const s of [1, -1]) {
     put(surf(low ? 16 : 24, 5, (u, v) => {
@@ -407,33 +415,60 @@ export function buildH2(group, low) {
     }), 'gloss', [0, 0.3, s]);
     // sail from the side wall back to the rear glass, so the cabin is closed
     put(surf(6, 5, (u, v) => {
-      const y = lerp(1.34, 1.90, v);
-      const xGlass = lerp(-2.30, -1.98, clamp((y - 1.36) / 0.50, 0, 1));
-      const x = lerp(-1.68, xGlass, u);
-      const z = lerp(0.80, 0.64, u) * s;
+      const y = lerp(1.30, 1.94, v);
+      const t = clamp((y - 1.36) / 0.50, 0, 1);
+      const xGlass = lerp(-2.46, -2.06, t);
+      const x = lerp(-1.50, xGlass, u);
+      const z = lerp(0.84, 0.92, u) * s;
       return [x, y, z];
     }), 'gloss', [-0.2, 0.4, s]);
+    // Solid D-pillar so the rear glass corner cannot open onto the background.
+    box(0.62, 0.66, 0.26, 0.012, 1, 'gloss', [-1.98, 1.60, s * 0.80]);
     // roof rail, outboard of the wall and meeting the glass header
     put(surf(16, 1, (u, v) => {
       const x = lerp(0.70, -1.70, u);
       return [x, lerp(1.82, 1.94, v), (0.835 - v * 0.02) * s];
     }), 'gloss', [0, 0.5, s]);
   }
-  const wind = surf(low ? 8 : 12, low ? 6 : 8, (u, v) => {
-    const z = lerp(-1, 1, u), bow = 0.022 * (1 - z * z);
-    const x = lerp(1.175, 0.80, v) + bow;
-    const y = lerp(1.325, 1.90, v);
-    return [x, y, z * lerp(0.74, 0.66, v)];
-  });
-  put(wind, 'glass', null);
-  // rear glass sits on the tailgate, tucked under the roof
-  put(surf(8, 6, (u, v) => {
-    const z = lerp(-0.62, 0.62, u);
-    return [lerp(-2.28, -2.02, v), lerp(1.40, 1.86, v), z];
-  }), 'glass', null);
-  for (const s of [1, -1]) box(0.18, 0.52, 0.055, 0.01, 1, 'gloss', [-2.14, 1.63, s * 0.66]);
-  box(0.08, 0.055, 1.28, 0.01, 1, 'gloss', [-2.02, 1.88, 0]);
-  box(0.10, 0.07, 1.40, 0.012, 1, 'gloss', [1.16, 1.30, 0]);
+  const nuW = low ? 10 : 14, nvW = low ? 8 : 10;
+  put(surf(nuW, nvW, (u, v) => windAt(u * 2 - 1, v)), 'glass', null);
+  // Black reveal sits just behind the pane and runs past every edge, so a sightline
+  // that slips off the glass still hits the frame instead of the background.
+  put(surf(nuW, nvW, (u, v) => {
+    const p = windAt((u * 2 - 1) * 1.08, v * 1.08 - 0.04);
+    p[0] -= 0.03;
+    return p;
+  }), 'gloss', [1, 0.2, 0]);
+  for (const s of [1, -1]) {
+    put(surf(nvW, 2, (u, v) => {
+      const e = windAt(s, u);
+      return [e[0] + 0.015 * v, e[1], s * (Math.abs(e[2]) - 0.06 + v * 0.15)];
+    }), 'gloss', [0.55, 0.15, s]);
+  }
+  put(surf(nuW, 2, (u, v) => {
+    const e = windAt(u * 2 - 1, 1);
+    return [e[0] - 0.02 + v * 0.08, e[1] - 0.015 + v * 0.07, e[2]];
+  }), 'gloss', [0.3, 0.9, 0]);
+  put(surf(nuW, 2, (u, v) => {
+    const e = windAt(u * 2 - 1, 0);
+    return [e[0] + 0.015 - v * 0.05, e[1] + 0.02 - v * 0.08, e[2]];
+  }), 'gloss', [1, -0.2, 0]);
+  put(surf(nuW, nvW, (u, v) => rearGlassAt(u * 2 - 1, v)), 'glass', null);
+  put(surf(nuW, nvW, (u, v) => {
+    const p = rearGlassAt((u * 2 - 1) * 1.08, v * 1.06 - 0.03);
+    p[0] += 0.03;
+    return p;
+  }), 'gloss', [-1, 0.2, 0]);
+  for (const s of [1, -1]) {
+    put(surf(nvW, 2, (u, v) => {
+      const e = rearGlassAt(s, u);
+      return [e[0] - 0.012 * v, e[1], s * (Math.abs(e[2]) - 0.06 + v * 0.16)];
+    }), 'gloss', [-0.4, 0.2, s]);
+  }
+  put(surf(nuW, 2, (u, v) => {
+    const e = rearGlassAt(u * 2 - 1, 1);
+    return [e[0] + 0.02 - v * 0.06, e[1] - 0.01 + v * 0.06, e[2]];
+  }), 'gloss', [-0.3, 0.8, 0]);
 
   // side openings: trapezoid front glass, rectangular rear and quarter
   const sideGlass = (s, x0, x1, y0, y1) => {
@@ -456,11 +491,6 @@ export function buildH2(group, low) {
     rail(0.05, 0.42, 0.02, 1.62, zf); rail(0.05, 0.42, -0.84, 1.62, zf);
     rail(0.42, 0.042, -1.21, 1.455, zf); rail(0.42, 0.046, -1.21, 1.805, zf);
     rail(0.045, 0.36, -1.02, 1.63, zf); rail(0.045, 0.36, -1.40, 1.63, zf);
-    // thick A-pillar from the cowl up to the roof
-    put(surf(6, 1, (u, v) => {
-      const x = lerp(1.14, 0.70, u), y = lerp(1.30, 1.94, u);
-      return [x, y, lerp(0.72, 0.90, v) * s];
-    }), 'gloss', [0.4, 0.6, s]);
     // D-pillar gills
     for (let i = 0; i < 8; i++) box(0.012, 0.012, 0.055, 0.002, 1, 'chrome', [-1.46, 1.46 + i * 0.038, s * 0.90]);
     // door gaps read as dark seams
@@ -491,32 +521,37 @@ export function buildH2(group, low) {
   box(0.62, 0.012, 0.02, 0.003, 1, 'gloss', [1.08, 1.36, 0.28], [0.4, 0.15, 0.15]);
   box(0.62, 0.012, 0.02, 0.003, 1, 'gloss', [1.08, 1.36, -0.22], [-0.3, -0.1, -0.12]);
 
-  // roof rack, cab markers, pace bar
+  // roof rack and pace bar sit on the roof crown, with feet so nothing floats
+  const roofY = (x, z) => 1.90 + 0.05 * (1 - Math.min(1, (z / 0.86) ** 2));
+  const railY = roofY(0, 0.58) + 0.02;
   for (const s of [1, -1]) {
-    const rail = new THREE.CylinderGeometry(0.018, 0.018, 1.85, 8); rail.rotateZ(Math.PI / 2);
-    put(rail, 'gloss', null, [-0.35, 2.025, s * 0.58]);
+    const rail = new THREE.CylinderGeometry(0.016, 0.016, 1.70, 8); rail.rotateZ(Math.PI / 2);
+    put(rail, 'gloss', null, [-0.40, railY, s * 0.55]);
+    for (const x of [0.25, -0.40, -1.05]) box(0.03, 0.025, 0.03, 0.004, 1, 'gloss', [x, roofY(x, 0.55) + 0.01, s * 0.55]);
   }
-  for (const x of [0.42, -0.30, -1.15]) {
-    const barR = new THREE.CylinderGeometry(0.016, 0.016, 1.16, 8); barR.rotateX(Math.PI / 2);
-    put(barR, 'gloss', null, [x, 2.04, 0]);
+  for (const x of [0.30, -0.40, -1.10]) {
+    const barR = new THREE.CylinderGeometry(0.014, 0.014, 1.10, 8); barR.rotateX(Math.PI / 2);
+    put(barR, 'gloss', null, [x, railY + 0.01, 0]);
   }
   for (const s of [-1, -0.5, 0, 0.5, 1]) {
-    box(0.045, 0.028, 0.07, 0.006, 1, 'amber', [0.70, 1.985, s * 0.32]);
-    box(0.04, 0.025, 0.06, 0.005, 1, 'tail', [-1.52, 1.985, s * 0.28]);
+    box(0.05, 0.02, 0.07, 0.004, 1, 'amber', [0.88, 1.935, s * 0.18]);
+    box(0.045, 0.018, 0.06, 0.004, 1, 'tail', [-1.90, 1.932, s * 0.16]);
   }
-  box(0.16, 0.045, 0.78, 0.012, 2, 'gloss', [0.12, 2.055, 0]);
+  const barY = roofY(0.12, 0) + 0.02;
+  box(0.16, 0.04, 0.72, 0.01, 2, 'gloss', [0.12, barY, 0]);
+  for (const s of [-1, 1]) box(0.05, 0.028, 0.05, 0.006, 1, 'gloss', [0.12, roofY(0.12, 0) + 0.012, s * 0.28]);
   const paceMat = [0, 1].map(() => new THREE.MeshStandardMaterial({ color: 0xffb000, emissive: 0xffaa00, emissiveIntensity: 1.5, roughness: 0.35 }));
   const lamps = [], sprites = [], tex = glowTexture();
   for (const side of [1, -1]) {
     const pods = [];
     for (const k of [0, 1]) {
       const pod = new THREE.Mesh(beveledBox(0.11, 0.028, 0.14, 0.008, 2), paceMat[side > 0 ? 0 : 1]);
-      pod.position.set(0.12, 2.082, side * (0.12 + k * 0.20));
+      pod.position.set(0.12, barY + 0.028, side * (0.12 + k * 0.20));
       pod.name = 'h2-pace-lamp'; pod.castShadow = false; pods.push(pod); group.add(pod);
     }
     lamps.push(pods[0]);
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xffb020, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55 }));
-    sp.scale.setScalar(low ? 0.4 : 0.62); sp.position.set(0.12, 2.10, side * 0.22); group.add(sp);
+    sp.scale.setScalar(low ? 0.4 : 0.62); sp.position.set(0.12, barY + 0.05, side * 0.22); group.add(sp);
     if (!low || side > 0) sprites.push(sp); else sp.visible = false;
   }
 

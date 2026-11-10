@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildH2, H2_LAMP } from './h2-body.js';
+import { buildH2, H2_LAMP, windAt, rearGlassAt } from './h2-body.js';
 // Visible pace car on the existing pace logic (formation arc / pace leader).
 // Kinematic only: it is never in the race car list, never collides, and only
 // uses the apron plus an infield spot. The mesh is an original H2-proportioned SUV.
@@ -49,6 +49,21 @@ export function auditPaceCar(group){
  probe(new THREE.Vector3(-.1,1.58,1.7),new THREE.Vector3(0,0,-1),'h2-glass');
  probe(new THREE.Vector3(-.8,1.58,-1.7),new THREE.Vector3(0,0,1),'h2-glass');
  probe(new THREE.Vector3(3.4,H2_LAMP.y,H2_LAMP.z),new THREE.Vector3(-1,0,0),'h2-headlamp');
+ const seal=(samples,out)=>{
+  for(const [u,v] of samples){
+   const p=samples===rearSamples?rearGlassAt(u,v):windAt(u,v);
+   const target=new THREE.Vector3(...p);
+   const origin=target.clone().add(out(u,v));
+   const dir=target.clone().sub(origin);
+   const dist=dir.length();
+   ray.set(origin,dir.normalize());
+   const hit=ray.intersectObjects(meshes,false)[0];
+   if(!hit||hit.distance>dist+.05)fails.push(`opening ${u},${v} hit ${hit?.object.name||'nothing'}`);
+  }
+ };
+ const rearSamples=[[-1,.08],[-1,.92],[1,.08],[1,.92],[0,.95],[0,.08]];
+ seal([[-1,.05],[-1,.5],[-1,.95],[1,.05],[1,.5],[1,.95],[0,.97],[-.7,.95],[.7,.95]],(u,v)=>new THREE.Vector3(.7,.02,Math.sign(u||1)*.22));
+ seal(rearSamples,(u)=>new THREE.Vector3(-.65,.02,Math.sign(u||1)*.2));
  return fails;
 }
 export class PaceCar{
