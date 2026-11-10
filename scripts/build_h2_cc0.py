@@ -732,53 +732,89 @@ def _disc(bm, radius, y, n=20, z_axis=False):
 
 
 def build_rim_mesh(outside, detail='high'):
-    """One 17-inch H2 wheel made of joined prisms, not loose blades.
+    """Stock H2 alloy: a lip, exactly six thick spokes, a small cap.
 
-    The lip is a ring, the six spokes are thick trapezoids welded to it,
-    and the windows are the open gaps. A disc behind the face shows through
-    those windows. +Y is the outside.
+    Nothing else is radial. A dark disc sits behind the windows so the
+    openings read as holes, and it does not reach the face. +Y is outside.
     """
     import bmesh
     bm = bmesh.new()
-    n = 48 if detail == 'high' else 24
-    y_f, y_b = 0.056, 0.030
-    r_o, r_i = 0.216, 0.196
+    n = 32 if detail == 'high' else 18
+    y_face, y_root = 0.052, 0.034
+    r_o, r_i = 0.216, 0.186
+    _annulus(bm, r_i, r_o, y_root - 0.006, y_face, n)
 
-    def prism(r0, r1, a0, a1, y0, y1, steps=1):
-        for s in range(steps):
-            t0 = a0 + (a1 - a0) * s / steps
-            t1 = a0 + (a1 - a0) * (s + 1) / steps
-            pts = [(r0, t0), (r0, t1), (r1, t1), (r1, t0)]
-            bot = [bm.verts.new((math.cos(a) * r, y0, math.sin(a) * r)) for r, a in pts]
-            top = [bm.verts.new((math.cos(a) * r, y1, math.sin(a) * r)) for r, a in pts]
-            bm.faces.new(top)
-            bm.faces.new(list(reversed(bot)))
-            for k in range(4):
-                nxt = (k + 1) % 4
-                bm.faces.new((bot[k], top[k], top[nxt], bot[nxt]))
+    def spoke(angle):
+        # One trapezoid. Outer half-width 16 degrees, inner 13, so the spoke
+        # is about as wide as the window and a little narrower at the cap.
+        # The front face is inset, which is the chamfer, not a second blade.
+        def corners(inset_deg, inset_r):
+            spec = (
+                (0.050 + inset_r, math.radians(-(13 - inset_deg))),
+                (0.184 - inset_r, math.radians(-(16 - inset_deg))),
+                (0.184 - inset_r, math.radians(16 - inset_deg)),
+                (0.050 + inset_r, math.radians(13 - inset_deg)),
+            )
+            return spec
 
-    for i in range(n):
-        prism(r_i, r_o, 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n, y_b, y_f)
-    # Exactly six spokes, each one prism about as wide as the window, with a small chamfer.
+        def ring(y, inset_deg, inset_r):
+            made = []
+            for radius, da in corners(inset_deg, inset_r):
+                a = angle + da
+                made.append(bm.verts.new((math.cos(a) * radius, y, math.sin(a) * radius)))
+            return made
+
+        back = ring(y_root, 0.0, 0.0)
+        front = ring(y_face, 1.6, 0.004)
+        bm.faces.new(front)
+        bm.faces.new(list(reversed(back)))
+        for k in range(4):
+            nxt = (k + 1) % 4
+            bm.faces.new((back[k], front[k], front[nxt], back[nxt]))
+
     for s in range(6):
-        a = 2 * math.pi * s / 6
-        prism(0.082, r_i, a - math.radians(15), a + math.radians(15), 0.030, y_f - 0.008, 1)
-        prism(0.090, r_i - 0.004, a - math.radians(12), a + math.radians(12), y_f - 0.008, y_f, 1)
-    # Hub and cap stay coarse. A 48-slice hub reads as a turbine, not six spokes.
-    hub_n = 12 if detail == 'high' else 8
-    prism(0.012, 0.086, 0, 2 * math.pi, 0.032, y_f, hub_n)
-    prism(0.0, 0.050, 0, 2 * math.pi, y_f, y_f + 0.012, hub_n)
+        spoke(2 * math.pi * s / 6)
+
+    # Small center cap only. A pie out to the spokes is what read as a turbine.
+    segs = 16 if detail == 'high' else 10
+    def circle(radius, y):
+        return [
+            bm.verts.new((math.cos(2 * math.pi * i / segs) * radius, y, math.sin(2 * math.pi * i / segs) * radius))
+            for i in range(segs)
+        ]
+    cap0 = circle(0.046, y_face - 0.002)
+    cap1 = circle(0.046, y_face + 0.010)
+    hub = bm.verts.new((0.0, y_face + 0.010, 0.0))
+    for i in range(segs):
+        j = (i + 1) % segs
+        bm.faces.new((cap0[i], cap0[j], cap1[j], cap1[i]))
+        bm.faces.new((cap1[i], cap1[j], hub))
     for s in range(6):
         ang = 2 * math.pi * (s + 0.5) / 6
         ret = bmesh.ops.create_cone(
             bm, cap_ends=True, cap_tris=False, segments=6,
-            radius1=0.009, radius2=0.009, depth=0.012,
+            radius1=0.007, radius2=0.007, depth=0.008,
         )
         bmesh.ops.rotate(bm, verts=ret['verts'], cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 2, 3, 'X'))
-        bmesh.ops.translate(bm, verts=ret['verts'], vec=(math.cos(ang) * 0.032, y_f + 0.014, math.sin(ang) * 0.032))
-    # Brake-colored disc behind the spokes, seen through the windows.
-    prism(0.02, 0.190, 0, 2 * math.pi, -0.004, 0.010, hub_n)
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+        bmesh.ops.translate(
+            bm, verts=ret['verts'],
+            vec=(math.cos(ang) * 0.026, y_face + 0.012, math.sin(ang) * 0.026),
+        )
+    # Window interior. Kept well behind the spokes and smooth, so its
+    # segments cannot read as extra blades.
+    back_n = 24 if detail == 'high' else 16
+    def back_circle(radius, y):
+        return [
+            bm.verts.new((math.cos(2 * math.pi * i / back_n) * radius, y, math.sin(2 * math.pi * i / back_n) * radius))
+            for i in range(back_n)
+        ]
+    b0 = back_circle(0.178, 0.000)
+    b1 = back_circle(0.178, 0.016)
+    bmid = bm.verts.new((0.0, 0.016, 0.0))
+    for i in range(back_n):
+        j = (i + 1) % back_n
+        bm.faces.new((b0[i], b0[j], b1[j], b1[i]))
+        bm.faces.new((b1[i], b1[j], bmid))
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     if outside < 0:
         for v in bm.verts:
@@ -787,8 +823,6 @@ def build_rim_mesh(outside, detail='high'):
     mesh = bpy.data.meshes.new('h2-rim')
     bm.to_mesh(mesh)
     bm.free()
-    for poly in mesh.polygons:
-        poly.use_smooth = False
     return mesh
 
 
@@ -804,17 +838,19 @@ def rebuild_rims(objs, detail='high', mat=None):
             bpy.data.meshes.remove(old)
         if mat is not None:
             assign(obj, mat)
-        # Darken the cavity behind the spokes so the six windows read as openings.
+        # The disc behind the windows is a slightly darker silver. Spokes stay bright and flat.
         mesh = obj.data
         if 'Color' not in mesh.color_attributes:
             mesh.color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')
         colors = mesh.color_attributes['Color']
         for poly in mesh.polygons:
-            cavity = poly.center.y * sign < 0.008 and math.hypot(poly.center.x, poly.center.z) < 0.19
-            rgba = (0.12, 0.12, 0.13, 1) if cavity else (1, 1, 1, 1)
+            r = math.hypot(poly.center.x, poly.center.z)
+            face_y = poly.center.y * sign
+            cavity = face_y < 0.022 and 0.015 < r < 0.182
+            rgba = (0.42, 0.43, 0.45, 1) if cavity else (1, 1, 1, 1)
             for li in poly.loop_indices:
                 colors.data[li].color = rgba
-            poly.use_smooth = not cavity
+            poly.use_smooth = cavity or r > 0.185 or r < 0.050
         b = bounds(obj)
         d = dims(b)
         print(f'  rim {obj.name} {detail} {d[0]:.3f} {d[1]:.3f} {d[2]:.3f} tris {tri_count(obj)}')
@@ -1024,6 +1060,89 @@ def _box_cutter(sx, sy, sz, loc):
     return ob
 
 
+def _x_ring(bm, x0, x1, y, z, r_in, r_out, n):
+    """A short tube facing +X, centered at (y, z)."""
+    rings = []
+    for radius, x in ((r_in, x0), (r_out, x0), (r_out, x1), (r_in, x1)):
+        ring = []
+        for i in range(n):
+            a = 2 * math.pi * i / n
+            ring.append(bm.verts.new((x, y + math.cos(a) * radius, z + math.sin(a) * radius)))
+        rings.append(ring)
+    for a, b in ((0, 1), (1, 2), (2, 3), (3, 0)):
+        for i in range(n):
+            j = (i + 1) % n
+            bm.faces.new((rings[a][i], rings[a][j], rings[b][j], rings[b][i]))
+
+
+def _shaped_valance(nose, half, top):
+    """Black front cladding. Tall in the middle, swept up and back at the corners."""
+    import bmesh
+    bm = bmesh.new()
+    # fraction of half-width, bottom height, how far the face sits behind the nose
+    profile = (
+        (0.00, 0.50, 0.010),
+        (0.24, 0.51, 0.012),
+        (0.46, 0.55, 0.016),
+        (0.66, 0.62, 0.032),
+        (0.84, 0.70, 0.060),
+        (1.00, 0.76, 0.105),
+    )
+    order = [-f for f, _, _ in reversed(profile) if f != 0] 
+    order += [f for f, _, _ in profile]
+    lookup = {f: (bz, inset) for f, bz, inset in profile}
+    cols = []
+    for frac in order:
+        bz, inset = lookup[abs(frac)]
+        y = frac * half * 0.96
+        xf = nose - inset
+        # The chin kicks back, so the side view is a wedge rather than a vertical slab.
+        xb = xf - 0.07
+        cols.append([
+            bm.verts.new((xf, y, top)),
+            bm.verts.new((xf - 0.06, y, bz)),
+            bm.verts.new((xb - 0.03, y, bz + 0.02)),
+            bm.verts.new((xb, y, top - 0.012)),
+        ])
+    for i in range(len(cols) - 1):
+        a, b = cols[i], cols[i + 1]
+        for k in range(4):
+            nxt = (k + 1) % 4
+            bm.faces.new((a[k], b[k], b[nxt], a[nxt]))
+    bm.faces.new(list(reversed(cols[0])))
+    bm.faces.new(cols[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    # Face the volume forward. The center front quad should point +X.
+    front = max(bm.faces, key=lambda f: f.calc_center_median().x)
+    if front.normal.x < 0:
+        bmesh.ops.reverse_faces(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new('h2-fascia-bumper')
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new('h2-fascia-bumper', mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def _skid(bm, nose, y_half):
+    """Center chin. The bottom edge is kicked back, so it is not a hanging box."""
+    top_z, bot_z = 0.52, 0.40
+    y0, y1 = -y_half, y_half
+    top_x, bot_x, back_x = nose - 0.075, nose - 0.13, nose - 0.16
+    verts = [
+        bm.verts.new((top_x, y0, top_z)), bm.verts.new((top_x, y1, top_z)),
+        bm.verts.new((bot_x, y1, bot_z)), bm.verts.new((bot_x, y0, bot_z)),
+        bm.verts.new((back_x, y0, top_z - 0.02)), bm.verts.new((back_x, y1, top_z - 0.02)),
+        bm.verts.new((back_x, y1, bot_z)), bm.verts.new((back_x, y0, bot_z)),
+    ]
+    bm.faces.new((verts[0], verts[1], verts[2], verts[3]))
+    bm.faces.new((verts[4], verts[7], verts[6], verts[5]))
+    bm.faces.new((verts[0], verts[3], verts[7], verts[4]))
+    bm.faces.new((verts[1], verts[5], verts[6], verts[2]))
+    bm.faces.new((verts[0], verts[4], verts[5], verts[1]))
+    bm.faces.new((verts[3], verts[2], verts[6], verts[7]))
+
+
 def build_fascia(mats):
     """One chrome casting, flush with the nose, slots recessed into it.
 
@@ -1083,7 +1202,10 @@ def build_fascia(mats):
             old_lamp = obj.name.startswith('h2-headlamp') and not obj.name.startswith('h2-headlamp-lens') and c.x > 0.9 and c.z < 1.30
             # Black wedges and leftover lamp bits outboard of the casting.
             wedge = obj.get('bucket') in ('chrome', 'trim', 'lamp') and c.x > nose - 0.22 and half + 0.02 < abs(c.y) < 1.15 and 0.55 < c.z < 1.20
-            if (on_nose and not hood) or old_lamp or wedge:
+            # Source tow-hooks and lamp bits that sit beside the new valance.
+            low_junk = obj.get('bucket') in ('chrome', 'trim', 'lamp', 'accent') and c.x > nose - 0.48 and abs(c.y) < 1.15 and 0.20 < c.z < 0.92
+            chunk = c.x > nose - 0.30 and 0.35 < c.z < 0.85 and 0.45 < abs(c.y) < 1.08 and face.calc_area() < 0.06 and face.normal.x > 0.15
+            if (on_nose and not hood) or old_lamp or wedge or low_junk or chunk:
                 kill.append(face)
         if kill:
             bmesh.ops.delete(bm, geom=kill, context='FACES')
@@ -1132,6 +1254,14 @@ def build_fascia(mats):
     plate.data.name = 'h2-fascia'
     plate.data.materials.clear()
     plate.data.materials.append(mats['chrome'])
+    # Chrome bezel standing proud of each headlamp hole, so the lamp is recessed.
+    bm = bmesh.new()
+    bm.from_mesh(plate.data)
+    for sign in (1, -1):
+        _x_ring(bm, nose - 0.006, nose + 0.008, sign * lamp_y, zc, lamp_r * 0.72, lamp_r * 0.98, 28)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(plate.data)
+    bm.free()
     if 'Color' not in plate.data.color_attributes:
         plate.data.color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')
     colors = plate.data.color_attributes['Color']
@@ -1176,7 +1306,7 @@ def build_fascia(mats):
         bowl.data.materials.append(mats['lens'])
         # Lens: a thin disc just behind the chrome face.
         bpy.ops.mesh.primitive_cylinder_add(
-            radius=lamp_r * 0.9, depth=0.005, location=(nose - 0.014, sign * lamp_y, zc),
+            radius=lamp_r * 0.66, depth=0.006, location=(nose - 0.028, sign * lamp_y, zc),
             rotation=(0, math.pi / 2, 0), vertices=28,
         )
         lens = bpy.context.object
@@ -1220,18 +1350,14 @@ def build_fascia(mats):
     amber['role'] = 'body'
     made.append(amber)
 
-    # One black bumper: chunky bar, recessed warm fogs, a dark center intake, skid plate.
-    bz1 = zc - height / 2 - 0.012
-    bz0 = 0.40
-    bumper = _rounded_plate(half * 1.9, bz1 - bz0, depth, 0.02)
-    bumper.location.x = nose - depth / 2
-    bumper.location.z = (bz0 + bz1) / 2
-    bpy.context.view_layer.objects.active = bumper
-    bpy.ops.object.transform_apply(location=True)
-    fog_z = (bz0 + bz1) * 0.55
+    # Shaped valance: tallest in the center, sweeping up and back into the corners.
+    top_z = zc - height / 2 - 0.020
+    bumper = _shaped_valance(nose, half, top_z)
+    fog_y = half * 0.46
+    fog_z = 0.66
     for sign in (1, -1):
         bpy.ops.mesh.primitive_cylinder_add(
-            radius=0.055, depth=0.045, location=(nose - 0.01, sign * half * 0.48, fog_z),
+            radius=0.046, depth=0.12, location=(nose - 0.07, sign * fog_y, fog_z),
             rotation=(0, math.pi / 2, 0), vertices=20,
         )
         cutter = bpy.context.object
@@ -1242,9 +1368,9 @@ def build_fascia(mats):
         mod.solver = 'EXACT'
         bpy.ops.object.modifier_apply(modifier=mod.name)
         bpy.data.objects.remove(cutter, do_unlink=True)
-    bpy.ops.mesh.primitive_cube_add(size=1, location=(nose - 0.012, 0, (bz0 + bz1) * 0.42))
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(nose - 0.06, 0, 0.70))
     cutter = bpy.context.object
-    cutter.scale = (0.04, 0.34, 0.10)
+    cutter.scale = (0.09, 0.40, 0.13)
     bpy.ops.object.transform_apply(scale=True, location=True)
     bpy.context.view_layer.objects.active = bumper
     mod = bumper.modifiers.new('Intake', 'BOOLEAN')
@@ -1253,12 +1379,16 @@ def build_fascia(mats):
     mod.solver = 'EXACT'
     bpy.ops.object.modifier_apply(modifier=mod.name)
     bpy.data.objects.remove(cutter, do_unlink=True)
-    # Intake mesh and the skid plate share the bumper object.
+    # Pocket walls, intake slats, and a center skid that kicks backward.
     extra = bmesh.new()
-    for i in range(4):
-        zz = (bz0 + 0.08) + i * 0.028
-        _cube(extra, nose - 0.03, nose - 0.016, -0.15, 0.15, zz, zz + 0.008)
-    _cube(extra, nose - depth, nose - 0.06, -0.26, 0.26, bz0 - 0.10, bz0)
+    for sign in (1, -1):
+        _x_ring(extra, nose - 0.078, nose - 0.042, sign * fog_y, fog_z, 0.038, 0.050, 18)
+    for i in range(3):
+        zz = 0.645 + i * 0.028
+        _cube(extra, nose - 0.078, nose - 0.055, -0.16, 0.16, zz, zz + 0.007)
+    # Black wall behind the openings so the body color cannot show through.
+    _cube(extra, nose - 0.14, nose - 0.105, -0.62, 0.62, 0.46, 0.84)
+    _skid(extra, nose, 0.36)
     add_me = bpy.data.meshes.new('_bumpadd')
     extra.to_mesh(add_me)
     extra.free()
@@ -1274,16 +1404,16 @@ def build_fascia(mats):
     bumper['bucket'] = 'trim'
     bumper['role'] = 'body'
     made.append(bumper)
-    # Recessed fog lamps. Warm emissive discs, 2 cm behind the bumper face.
+    # Lamp discs sit at the back of the pockets, smaller than the bezel.
     bm = bmesh.new()
     for sign in (1, -1):
-        cy, cz = sign * (half * 0.48), fog_z
+        cy, cz = sign * fog_y, fog_z
         ring = []
-        segs = 18
+        segs = 16
         for i in range(segs):
             a = 2 * math.pi * i / segs
-            ring.append(bm.verts.new((nose - 0.022, cy + math.cos(a) * 0.048, cz + math.sin(a) * 0.048)))
-        hub = bm.verts.new((nose - 0.028, cy, cz))
+            ring.append(bm.verts.new((nose - 0.072, cy + math.cos(a) * 0.034, cz + math.sin(a) * 0.034)))
+        hub = bm.verts.new((nose - 0.074, cy, cz))
         for i in range(segs):
             bm.faces.new((hub, ring[i], ring[(i + 1) % segs]))
     mesh = bpy.data.meshes.new('h2-headlamp-fog')
