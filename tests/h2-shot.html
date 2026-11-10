@@ -25,20 +25,21 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8aa0b4);
 scene.environment = null;
 scene.add(new THREE.HemisphereLight(0xe7f1fb, 0x4a4036, 1.05));
-const key = new THREE.DirectionalLight(0xfff6ea, 2.4); key.position.set(6, 8, 5); scene.add(key);
+const key = new THREE.DirectionalLight(0xfff6ea, 1.65); key.position.set(6, 8, 5); scene.add(key);
 const fill = new THREE.DirectionalLight(0xc9d7e6, .85); fill.position.set(-6, 3, 2); scene.add(fill);
 const rim = new THREE.DirectionalLight(0xffe2b8, 1.1); rim.position.set(-3, 5, -6); scene.add(rim);
 const ground = new THREE.Mesh(new THREE.CircleGeometry(10, 48), new THREE.MeshStandardMaterial({ color: 0x2c3238, roughness: .9 }));
 ground.rotation.x = -Math.PI / 2; scene.add(ground);
 scene.add(h2);
-const cam = new THREE.PerspectiveCamera(42, 1280 / 720, .05, 40);
+const cam = new THREE.PerspectiveCamera(38, 1280 / 720, .05, 80);
+// 38° vertical is a 35mm full-frame lens. Match sits at about 1.2 m.
 const shots = {
-  front: [[4.15, 1.45, 3.55], [0.15, 0.95, 0], 34],
-  match: [[4.4, 1.25, -2.55], [0.55, 0.95, 0.05], 28],
-  fascia: [[4.6, 1.05, 0.02], [1.2, 0.95, 0], 32],
-  side: [[-0.05, 1.15, 11.5], [-0.05, 0.98, 0], 22],
-  rear: [[-5.15, 1.45, 3.35], [-0.35, 1.0, 0], 34],
-  wheel: [[2.55, 0.55, 2.15], [1.55, 0.48, 0.7], 36]
+  front: [[5.15, 1.20, 3.35], [0.15, 0.92, 0], 38],
+  match: [[3.35, 1.20, -4.65], [0.05, 0.92, 0.12], 38],
+  fascia: [[4.15, 1.05, 0.15], [1.55, 0.95, 0], 38],
+  side: [[-0.05, 1.15, 6.55], [-0.05, 0.95, 0], 38],
+  rear: [[-5.35, 1.20, 3.15], [-0.25, 0.95, 0], 38],
+  wheel: [[2.85, 0.62, 1.85], [1.56, 0.46, 0.88], 38]
 };
 const [pos, look, fov] = shots[view] || shots.front;
 if (fov) { cam.fov = fov; cam.updateProjectionMatrix(); }
@@ -47,7 +48,7 @@ const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl')
 renderer.setSize(1280, 720); renderer.setPixelRatio(1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.0;
 renderer.render(scene, cam);
 const log = document.getElementById('log');
 const ok = fails.length === 0;
