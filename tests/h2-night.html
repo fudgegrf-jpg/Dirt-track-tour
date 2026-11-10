@@ -35,13 +35,18 @@ try {
   };
   const race = new RaceScene(app, { track: TRACKS.find(t => t.id === 'salina') });
   for (let i = 0; i < 6; i++) race.update(1 / 30);
+  // Frame the pace car on the front straight so the shot shows the body, not the 26° bank.
+  race.paceCar.arc = race.trk.s1 * 0.45;
+  race.paceCar.d = 0;
+  race.paceCar.pose();
   const pace = race.paceCar.mesh, p = pace.position, cam = race.camera;
   const fwd = new THREE.Vector3(1, 0, 0).applyQuaternion(pace.quaternion);
-  const right = new THREE.Vector3(0, 0, 1).applyQuaternion(pace.quaternion);
-  cam.fov = 36; cam.updateProjectionMatrix();
-  cam.position.copy(p).addScaledVector(fwd, 6.4).addScaledVector(right, 3.6);
-  cam.position.y = p.y + 1.55;
-  cam.lookAt(p.x, p.y + .85, p.z);
+  fwd.y = 0; fwd.normalize();
+  const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
+  cam.fov = 32; cam.updateProjectionMatrix();
+  cam.position.copy(p).addScaledVector(fwd, 7.4).addScaledVector(right, 4.6);
+  cam.position.y = p.y + 2.15;
+  cam.lookAt(p.x, p.y + 0.95, p.z);
   renderer.render(race.scene, cam);
   window.race = race; window.renderer = renderer; window.THREE = THREE;
   log.textContent = `PASS tris ${pace.userData.triangles} at ${p.x.toFixed(1)},${p.z.toFixed(1)}`;

@@ -5,11 +5,21 @@
 <style>html,body{margin:0;background:#000}canvas{display:block}#log{display:none}</style>
 <div id="log"></div>
 <canvas id="gl"></canvas>
+<script>
+window.addEventListener('error', (e) => {
+  const log = document.getElementById('log');
+  log.textContent = (e.message || 'error') + '\n' + (e.error && e.error.stack || '');
+  document.title = 'ERR';
+  document.body.dataset.ready = '0';
+});
+</script>
 <script type="module">
 import * as THREE from 'three';
 import { makePaceCar, auditPaceCar } from '../js/pace-car.js';
-const view = new URLSearchParams(location.search).get('view') || 'front';
-const h2 = makePaceCar(false);
+try {
+const params = new URLSearchParams(location.search);
+const view = params.get('view') || 'front';
+const h2 = makePaceCar(params.get('low') === '1');
 const fails = auditPaceCar(h2);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8aa0b4);
@@ -23,13 +33,14 @@ ground.rotation.x = -Math.PI / 2; scene.add(ground);
 scene.add(h2);
 const cam = new THREE.PerspectiveCamera(42, 1280 / 720, .05, 40);
 const shots = {
-  front: [[3.35, 1.22, 2.85], [.25, .92, 0]],
-  fascia: [[4.4, .9, .02], [1.4, .9, 0]],
-  side: [[.05, 1.12, 6.1], [0, .92, 0]],
-  rear: [[-3.4, 1.28, 2.65], [-.25, .95, 0]],
-  wheel: [[2.35, .48, 1.85], [1.63, .42, .88]]
+  front: [[4.15, 1.45, 3.55], [0.15, 0.95, 0], 34],
+  fascia: [[4.6, 1.05, 0.02], [1.2, 0.95, 0], 32],
+  side: [[-0.05, 1.15, 11.5], [-0.05, 0.98, 0], 22],
+  rear: [[-5.15, 1.45, 3.35], [-0.35, 1.0, 0], 34],
+  wheel: [[2.55, 0.55, 2.15], [1.55, 0.48, 0.7], 36]
 };
-const [pos, look] = shots[view] || shots.front;
+const [pos, look, fov] = shots[view] || shots.front;
+if (fov) { cam.fov = fov; cam.updateProjectionMatrix(); }
 cam.position.set(...pos); cam.lookAt(...look);
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: true });
 renderer.setSize(1280, 720); renderer.setPixelRatio(1);
@@ -39,7 +50,13 @@ renderer.toneMappingExposure = 1.12;
 renderer.render(scene, cam);
 const log = document.getElementById('log');
 const ok = fails.length === 0;
-log.textContent = `tris ${h2.userData.triangles} view ${view}\n${ok ? 'PASS' : fails.join('\n')}`;
+log.textContent = `tris ${h2.userData.triangles} draws ${h2.userData.drawCalls} view ${view}\n${ok ? 'PASS' : fails.join('\n')}`;
 document.title = ok ? 'PASS' : 'FAIL';
 document.body.dataset.ready = ok ? '1' : '0';
+} catch (err) {
+  const log = document.getElementById('log');
+  log.textContent = String(err && err.stack || err);
+  document.title = 'ERR';
+  document.body.dataset.ready = '0';
+}
 </script>
