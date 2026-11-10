@@ -96,6 +96,7 @@ def build_materials():
         'chrome': make_mat('chrome', srgb(230, 232, 234), 1.0, 0.10),
         'glass': make_mat('glass', srgb(8, 12, 16), 0.85, 0.06),
         'lamp': make_mat('lamp', srgb(255, 246, 230), 0.0, 0.3, srgb(255, 248, 236), 8.0),
+        'fog': make_mat('fog', srgb(255, 186, 110), 0.0, 0.32, srgb(255, 150, 60), 5.0),
         'amber': make_mat('amber', srgb(255, 140, 20), 0.0, 0.35, srgb(255, 120, 0), 4.0),
         'tail': make_mat('tail', srgb(180, 8, 6), 0.0, 0.35, srgb(255, 16, 8), 5.0),
         'tire': make_mat('tire', srgb(16, 16, 16), 0.0, 0.78),
@@ -758,13 +759,15 @@ def build_rim_mesh(outside, detail='high'):
 
     for i in range(n):
         prism(r_i, r_o, 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n, y_b, y_f)
-    # Spokes as wide as the windows: 30 degrees of metal, 30 of opening.
+    # Exactly six spokes, each one prism about as wide as the window, with a small chamfer.
     for s in range(6):
         a = 2 * math.pi * s / 6
-        prism(0.078, r_i, a - math.radians(15), a + math.radians(15), 0.032, y_f, 3)
-    # Hub and raised cap.
-    prism(0.0, 0.086, 0, 2 * math.pi, 0.032, y_f, n)
-    prism(0.0, 0.052, 0, 2 * math.pi, y_f, y_f + 0.012, 16 if detail == 'high' else 10)
+        prism(0.082, r_i, a - math.radians(15), a + math.radians(15), 0.030, y_f - 0.008, 1)
+        prism(0.090, r_i - 0.004, a - math.radians(12), a + math.radians(12), y_f - 0.008, y_f, 1)
+    # Hub and cap stay coarse. A 48-slice hub reads as a turbine, not six spokes.
+    hub_n = 12 if detail == 'high' else 8
+    prism(0.012, 0.086, 0, 2 * math.pi, 0.032, y_f, hub_n)
+    prism(0.0, 0.050, 0, 2 * math.pi, y_f, y_f + 0.012, hub_n)
     for s in range(6):
         ang = 2 * math.pi * (s + 0.5) / 6
         ret = bmesh.ops.create_cone(
@@ -774,7 +777,7 @@ def build_rim_mesh(outside, detail='high'):
         bmesh.ops.rotate(bm, verts=ret['verts'], cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 2, 3, 'X'))
         bmesh.ops.translate(bm, verts=ret['verts'], vec=(math.cos(ang) * 0.032, y_f + 0.014, math.sin(ang) * 0.032))
     # Brake-colored disc behind the spokes, seen through the windows.
-    prism(0.02, 0.190, 0, 2 * math.pi, -0.004, 0.010, n)
+    prism(0.02, 0.190, 0, 2 * math.pi, -0.004, 0.010, hub_n)
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     if outside < 0:
@@ -835,8 +838,9 @@ def apply_tread(obj):
             radial = math.hypot(v.x, v.z) / r_max
             along = (v.y - y0) / span
             # Tread band sits in the middle of V. Sidewalls fall off to the edges.
-            if radial > 0.92:
-                vv = 0.38 + along * 0.24
+            # Crown and the shoulder you see from the side both carry the blocks.
+            if radial > 0.84:
+                vv = 0.32 + (radial - 0.84) / 0.16 * 0.36
             elif v.y >= 0:
                 vv = 0.62 + (1 - radial) * 0.34
             else:
@@ -856,7 +860,7 @@ def apply_tread(obj):
     tex.image = img
     tex.interpolation = 'Linear'
     normal = nt.nodes.new('ShaderNodeNormalMap')
-    normal.inputs['Strength'].default_value = 0.35
+    normal.inputs['Strength'].default_value = 2.2
     nt.links.new(tex.outputs['Color'], normal.inputs['Color'])
     nt.links.new(normal.outputs['Normal'], bsdf.inputs['Normal'])
 
@@ -869,11 +873,11 @@ def _tread_image():
         for x in range(w):
             u = x / w
             # Repeating tread blocks across the contact band.
-            if 0.34 < v < 0.66:
-                col = int(u * 18) % 2
-                row = int((v - 0.34) / 0.32 * 3)
-                if (col + row) % 2 == 0 and (x % 14) > 2 and ((y % 8) > 1):
-                    height[y * w + x] = 0.22
+            if 0.30 < v < 0.70:
+                col = int(u * 28) % 2
+                row = int((v - 0.30) / 0.40 * 4)
+                if (col + row) % 2 == 0 and (x % 9) > 1 and ((y % 6) > 1):
+                    height[y * w + x] = 1.0
             else:
                 # Two raised sidewall ribs.
                 band = abs(v - (0.18 if v < 0.5 else 0.82))
@@ -886,7 +890,7 @@ def _tread_image():
             r = height[y * w + (x + 1) % w]
             d = height[((y - 1) % h) * w + x]
             u = height[((y + 1) % h) * w + x]
-            nx, ny, nz = (l - r) * 0.7, (d - u) * 0.7, 1.0
+            nx, ny, nz = (l - r) * 3.2, (d - u) * 3.2, 1.0
             mag = math.sqrt(nx * nx + ny * ny + nz * nz)
             i = (y * w + x) * 4
             pixels[i] = (nx / mag + 1) * 0.5
@@ -1042,16 +1046,22 @@ def build_fascia(mats):
         return []
     xs.sort()
     nose = xs[int(len(xs) * 0.97)]
-    front_ys = []
+    # Width of the surface that actually faces forward, within 8 cm of the nose.
+    # Counting every vertex near the front pulled in the fender sides and made
+    # the casting wider than the truck.
+    bins = {}
     for obj in meshes():
         if obj.get('role') in ('tire', 'rim'):
             continue
         for v in obj.data.vertices:
-            if v.co.x > nose - 0.05 and 0.86 < v.co.z < 1.16:
-                front_ys.append(v.co.y)
-    if len(front_ys) < 8:
-        front_ys = ys
-    half = min(0.78, (max(front_ys) - min(front_ys)) * 0.5 * 0.96)
+            if 0.55 < v.co.z < 1.25:
+                key = round(v.co.y / 0.04)
+                bins[key] = max(bins.get(key, -9), v.co.x)
+    facing = [key * 0.04 for key, x in bins.items() if x > nose - 0.22]
+    measured = max((abs(y) for y in facing), default=0.9)
+    # Clamp so the casting spans the front without sticking past the fenders.
+    full_half = min(measured, 0.98)
+    half = min(max(full_half * 0.92, 0.80), 0.86)
     height = 0.22
     depth = 0.055
     zc = 0.99
@@ -1066,9 +1076,14 @@ def build_fascia(mats):
         kill = []
         for face in bm.faces:
             c = face.calc_center_median()
-            in_grille = abs(c.y) < half + 0.02 and abs(c.z - zc) < height * 0.55 and c.x > nose - 0.10
-            old_lamp = obj.name.startswith('h2-headlamp') and c.x > nose - 0.16 and c.z < zc - 0.06 and abs(c.y) < 0.95
-            if in_grille or old_lamp:
+            # The whole front skin the new casting and bumper replace, plus every
+            # leftover source lamp on the nose (the white hexagons and blocks).
+            on_nose = c.x > nose - 0.16 and abs(c.y) < full_half + 0.06 and 0.16 < c.z < zc + height * 0.55
+            hood = face.normal.z > 0.5 and c.z > zc + height * 0.4
+            old_lamp = obj.name.startswith('h2-headlamp') and not obj.name.startswith('h2-headlamp-lens') and c.x > 0.9 and c.z < 1.30
+            # Black wedges and leftover lamp bits outboard of the casting.
+            wedge = obj.get('bucket') in ('chrome', 'trim', 'lamp') and c.x > nose - 0.22 and half + 0.02 < abs(c.y) < 1.15 and 0.55 < c.z < 1.20
+            if (on_nose and not hood) or old_lamp or wedge:
                 kill.append(face)
         if kill:
             bmesh.ops.delete(bm, geom=kill, context='FACES')
@@ -1083,8 +1098,9 @@ def build_fascia(mats):
     bpy.context.view_layer.objects.active = plate
     bpy.ops.object.transform_apply(location=True)
 
-    lamp_y = half - 0.105
-    slot_half = lamp_y - 0.115
+    lamp_r = min(0.105, half * 0.14)
+    lamp_y = half - lamp_r - 0.045
+    slot_half = lamp_y - lamp_r - 0.03
     bar = 0.028
     opening = (slot_half * 2 - bar * 6) / 7
     # Slot floors stop 4 cm behind the front face.
@@ -1100,7 +1116,7 @@ def build_fascia(mats):
         bpy.data.objects.remove(cutter, do_unlink=True)
     for sign in (1, -1):
         bpy.ops.mesh.primitive_cylinder_add(
-            radius=0.078, depth=0.07, location=(nose - 0.02, sign * lamp_y, zc),
+            radius=lamp_r, depth=0.07, location=(nose - 0.02, sign * lamp_y, zc),
             rotation=(0, math.pi / 2, 0), vertices=28,
         )
         cutter = bpy.context.object
@@ -1134,7 +1150,7 @@ def build_fascia(mats):
     made = [plate]
     # Reflector bowl and a clear lens, one object per side so the audit ray hits glass-over-bowl.
     for sign in (1, -1):
-        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.062, location=(nose - 0.046, sign * lamp_y, zc), segments=24, ring_count=12)
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=lamp_r * 0.82, location=(nose - 0.046, sign * lamp_y, zc), segments=24, ring_count=12)
         bowl = bpy.context.object
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='SELECT')
@@ -1160,7 +1176,7 @@ def build_fascia(mats):
         bowl.data.materials.append(mats['lens'])
         # Lens: a thin disc just behind the chrome face.
         bpy.ops.mesh.primitive_cylinder_add(
-            radius=0.070, depth=0.005, location=(nose - 0.014, sign * lamp_y, zc),
+            radius=lamp_r * 0.9, depth=0.005, location=(nose - 0.014, sign * lamp_y, zc),
             rotation=(0, math.pi / 2, 0), vertices=28,
         )
         lens = bpy.context.object
@@ -1189,11 +1205,11 @@ def build_fascia(mats):
     accent['role'] = 'body'
     made.append(accent)
 
-    # Small amber lamps just outboard of the headlamps, on the casting line.
+    # Amber corner lamps sit in the sliver outboard of the casting, flush with the nose.
     bm = bmesh.new()
     for sign in (1, -1):
-        cy = sign * (half - 0.03)
-        _cube(bm, nose - 0.006, nose + 0.002, cy - 0.028, cy + 0.028, zc - 0.025, zc + 0.025)
+        cy = sign * (half - 0.038)
+        _cube(bm, nose - 0.008, nose + 0.001, cy - 0.022, cy + 0.022, zc - 0.018, zc + 0.018)
     mesh = bpy.data.meshes.new('h2-marker-fascia')
     bm.to_mesh(mesh)
     bm.free()
@@ -1203,6 +1219,83 @@ def build_fascia(mats):
     amber['bucket'] = 'amber'
     amber['role'] = 'body'
     made.append(amber)
+
+    # One black bumper: chunky bar, recessed warm fogs, a dark center intake, skid plate.
+    bz1 = zc - height / 2 - 0.012
+    bz0 = 0.40
+    bumper = _rounded_plate(half * 1.9, bz1 - bz0, depth, 0.02)
+    bumper.location.x = nose - depth / 2
+    bumper.location.z = (bz0 + bz1) / 2
+    bpy.context.view_layer.objects.active = bumper
+    bpy.ops.object.transform_apply(location=True)
+    fog_z = (bz0 + bz1) * 0.55
+    for sign in (1, -1):
+        bpy.ops.mesh.primitive_cylinder_add(
+            radius=0.055, depth=0.045, location=(nose - 0.01, sign * half * 0.48, fog_z),
+            rotation=(0, math.pi / 2, 0), vertices=20,
+        )
+        cutter = bpy.context.object
+        bpy.context.view_layer.objects.active = bumper
+        mod = bumper.modifiers.new('Fog', 'BOOLEAN')
+        mod.operation = 'DIFFERENCE'
+        mod.object = cutter
+        mod.solver = 'EXACT'
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+        bpy.data.objects.remove(cutter, do_unlink=True)
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(nose - 0.012, 0, (bz0 + bz1) * 0.42))
+    cutter = bpy.context.object
+    cutter.scale = (0.04, 0.34, 0.10)
+    bpy.ops.object.transform_apply(scale=True, location=True)
+    bpy.context.view_layer.objects.active = bumper
+    mod = bumper.modifiers.new('Intake', 'BOOLEAN')
+    mod.operation = 'DIFFERENCE'
+    mod.object = cutter
+    mod.solver = 'EXACT'
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    bpy.data.objects.remove(cutter, do_unlink=True)
+    # Intake mesh and the skid plate share the bumper object.
+    extra = bmesh.new()
+    for i in range(4):
+        zz = (bz0 + 0.08) + i * 0.028
+        _cube(extra, nose - 0.03, nose - 0.016, -0.15, 0.15, zz, zz + 0.008)
+    _cube(extra, nose - depth, nose - 0.06, -0.26, 0.26, bz0 - 0.10, bz0)
+    add_me = bpy.data.meshes.new('_bumpadd')
+    extra.to_mesh(add_me)
+    extra.free()
+    add = bpy.data.objects.new('_bumpadd', add_me)
+    bpy.context.scene.collection.objects.link(add)
+    bpy.ops.object.select_all(action='DESELECT')
+    bumper.select_set(True)
+    add.select_set(True)
+    bpy.context.view_layer.objects.active = bumper
+    bpy.ops.object.join()
+    bumper.name = 'h2-fascia-bumper'
+    assign(bumper, mats['trim'])
+    bumper['bucket'] = 'trim'
+    bumper['role'] = 'body'
+    made.append(bumper)
+    # Recessed fog lamps. Warm emissive discs, 2 cm behind the bumper face.
+    bm = bmesh.new()
+    for sign in (1, -1):
+        cy, cz = sign * (half * 0.48), fog_z
+        ring = []
+        segs = 18
+        for i in range(segs):
+            a = 2 * math.pi * i / segs
+            ring.append(bm.verts.new((nose - 0.022, cy + math.cos(a) * 0.048, cz + math.sin(a) * 0.048)))
+        hub = bm.verts.new((nose - 0.028, cy, cz))
+        for i in range(segs):
+            bm.faces.new((hub, ring[i], ring[(i + 1) % segs]))
+    mesh = bpy.data.meshes.new('h2-headlamp-fog')
+    bm.to_mesh(mesh)
+    bm.free()
+    fog = bpy.data.objects.new('h2-headlamp-fog', mesh)
+    bpy.context.scene.collection.objects.link(fog)
+    assign(fog, mats['fog'])
+    fog['bucket'] = 'lamp'
+    fog['role'] = 'body'
+    made.append(fog)
+    print(f'  bumper {tri_count(bumper)} tris fog {tri_count(fog)} tris')
     return made
 
 
@@ -1322,7 +1415,7 @@ def main():
             replace_tires([copy], 'low', mats['tire'])
             apply_tread(copy)
             count = tri_count(copy)
-        elif name.startswith('h2-fascia') or name.startswith('h2-headlamp-fascia') or name.startswith('h2-marker-fascia') or name.startswith('h2-step'):
+        elif name.startswith('h2-fascia') or name.startswith('h2-headlamp-lens') or name.startswith('h2-headlamp-fog') or name.startswith('h2-marker-fascia') or name.startswith('h2-step'):
             count = tri_count(copy)
         else:
             count = decimate_to(copy, LOW.get(obj.get('bucket'), 200))
