@@ -20,7 +20,7 @@ export function createPitWorld(race){
  const posts=[];for(const dx of[-w*.38,w*.38]){const post=new THREE.Mesh(new THREE.BoxGeometry(.10,y,.10),steel);post.position.set(dx,-y/2,-.08);m.add(post);posts.push(post);}
  m.userData.groundSign=()=>{for(const post of posts)groundFoot(race.groundSupports,post,(wx,wz)=>Math.abs(wx-origin.x)<=75&&wz>=-51&&wz<=41?0:(road.heightAt(wx,wz)??race.terrainHeight(wx,wz)),{kind:'pit sign post'});};
  return m;}
- const entrySign=sign('PITS / 25 MPH',gate.x-origin.x+7,gate.z-origin.z, h+3.7,10);entrySign.rotation.y=-gate.th+Math.PI/2;sign('PADDOCK / 25 MPH',52,-45,3.5,9);
+ const signAt=trk.point(gateS-14,trk.outer+3.2),entrySign=sign('PITS / 25 MPH',signAt.x-origin.x,signAt.z-origin.z,trk.height(gateS-14,trk.outer)+3.7,10);entrySign.rotation.y=-gate.th+Math.PI/2;sign('PADDOCK / 25 MPH',52,-45,3.5,9);
  const semi=makeSemi({team:st.team||'Red Clay Racing',num:st.num||'42',color:st.color??0xf1f0e7,accent:st.accent??0x135bc4,cabColor:st.accent??0x135bc4,scheme:st.scheme,detail:app.quality});semi.rotation.y=Math.PI;semi.position.x=-17.8;root.add(semi);semi.userData.rampPivot.scale.x=4.6/semi.userData.rampLen;semi.userData.rampPivot.rotation.z=Math.asin(1.25/4.6);
  obstacles.push({x:-31,z:0,w:5,d:1.8});
  // Player's parking bay and centerline are paint, never light flares.

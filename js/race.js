@@ -168,6 +168,19 @@ export class RaceScene {
     const fenceGeo = ribbon(trk, N, s => { const h = trk.height(s, trk.outer) + 1.15; return [[trk.outer + 0.15, h], [trk.outer + 0.15, h + 5.2]]; }, [0, 1], 1.6);
     const fence = new THREE.Mesh(fenceGeo, new THREE.MeshStandardMaterial({ map: ft, alphaTest: 0.4, transparent: false, side: THREE.DoubleSide, metalness: .15, roughness: .8, color: 0x9a9da2 }));
     scene.add(fence);
+    // Night20: the long pit-entry opening is a closed steel gate + catch fence while racing (physics treats it as
+    // wall until trk.pitOpen); the post-race paddock scene hides it so the lane is open.
+    { const gS=pitGateS(trk),gH=pitGateHalfArc(trk),M=16,wallP=[],fenceP=[],quad=(arr,a,b,c,d)=>arr.push(...a,...b,...c,...a,...c,...d);
+      const at=(s,d,y)=>{const p=trk.point(s,d);return [p.x,y,p.z];};
+      for(let i=0;i<M;i++){const s0=gS-gH+2*gH*i/M,s1=gS-gH+2*gH*(i+1)/M,h0=trk.height(s0,trk.outer),h1=trk.height(s1,trk.outer);
+        for(const [d0,d1,ya0,yb0,ya1,yb1] of [[trk.outer,trk.outer,h0,h0+1.15,h1,h1+1.15],[trk.outer+.35,trk.outer+.35,h0-.1,h0+1.15,h1-.1,h1+1.15],[trk.outer,trk.outer+.35,h0+1.15,h0+1.15,h1+1.15,h1+1.15]])quad(wallP,at(s0,d0,ya0),at(s1,d0,ya1),at(s1,d1,yb1),at(s0,d1,yb0));
+        quad(fenceP,at(s0,trk.outer+.15,h0+1.15),at(s1,trk.outer+.15,h1+1.15),at(s1,trk.outer+.15,h1+6.35),at(s0,trk.outer+.15,h0+6.35));}
+      const geo=arr=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(arr,3));const uv=[];for(let i=0;i<arr.length/3;i++){const k=i%6;uv.push([0,1,1,0,1,0][k]*1.6,[0,0,1,0,1,1][k]);}g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.computeVertexNormals();return g;};
+      const gate=new THREE.Group();gate.name='pit-entry-gate';
+      const panel=new THREE.Mesh(geo(wallP),new THREE.MeshStandardMaterial({color:0xc9a227,metalness:.35,roughness:.55,side:THREE.DoubleSide}));panel.name='pit-entry-gate-panel';panel.castShadow=true;panel.receiveShadow=true;
+      const mesh=new THREE.Mesh(geo(fenceP),fence.material);mesh.name='pit-entry-gate-fence';gate.add(panel,mesh);
+      for(const s of [gS-gH,gS,gS+gH]){const p=trk.point(s,trk.outer+.2),post=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,6.5,8),new THREE.MeshStandardMaterial({color:0x2b2f33,metalness:.4,roughness:.6}));post.position.set(p.x,trk.height(s,trk.outer)+3.25,p.z);gate.add(post);}
+      scene.add(gate);this.pitGateMesh=gate;trk.pitOpen=false; }
     // posts + top cable
     const postN = Math.floor(trk.P / 5);
     const posts = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.06, 5.4, 6), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: .15, roughness: .8 }), postN);
@@ -261,7 +274,7 @@ export class RaceScene {
     const lampMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2d0, emissiveIntensity: 2.0 });
     const towerPoses=[],nPoles=24;
     for(let i=0;i<nPoles;i++){
-      let s=(i+.5)/nPoles*trk.P;const gate=trk.s2-Math.min(25,trk.R*.35);if(Math.abs(s-gate)<10)s+=14;
+      let s=(i+.5)/nPoles*trk.P;const gate=pitGateS(trk);if(Math.abs(s-gate)<10)s=gate-12; /* Night20: keep towers upstream of the pit-lane split */
       const p=trk.point(s,trk.outer+13),c=trk.point(s,T.W*.18),h=this.terrainHeight(p.x,p.z);
       towerPoses.push({x:p.x,y:h,z:p.z,height:30+(i%3)*1.5,tx:c.x,tz:c.z});
       this.pools[i].set(c.x,c.z,Math.max(10,Math.min(20,trk.P/24*.48)));
@@ -281,8 +294,10 @@ export class RaceScene {
     // Keep foundations outside the real access lane and hauler parking bays;
     // grade to the completed terrain/lot, never to a pre-road height estimate.
     for(const p of towerPoses){const dx=p.x-p.tx,dz=p.z-p.tz,l=Math.hypot(dx,dz)||1;
-      for(let k=0;k<24;k++){const inLot=Math.abs(p.x-this.pits.origin.x)<80&&p.z>-58&&p.z<48;
-        if(this.pits.road.nearest(p.x,p.z).distance>=9&&!inLot)break;p.x+=dx/l*6;p.z+=dz/l*6;}
+      for(let k=0;k<24;k++){const inLot=Math.abs(p.x-this.pits.origin.x)<80&&p.z>-58&&p.z<48,near=this.pits.road.nearest(p.x,p.z);
+        if(near.distance>=9&&!inLot)break;
+        // Night20: step away from the lane itself (it runs alongside the turn-3 towers now), not always outward.
+        const sp=this.pits.road.samples[near.index],ax=p.x-sp.x,az=p.z-sp.z,al=Math.hypot(ax,az);if(inLot||al<.5){p.x+=dx/l*6;p.z+=dz/l*6;}else{p.x+=ax/al*3;p.z+=az/al*3;}}
       p.y=this.terrainHeight(p.x,p.z);
     }
     this.stadium=stadiumTowers(scene,towerPoses,{name:'night-towers'});

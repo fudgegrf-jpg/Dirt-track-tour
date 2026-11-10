@@ -24,6 +24,9 @@ export class PitReturn{
   const order=[...this.agents].sort((a,b)=>a.len-b.len);order.forEach((a,r)=>{a.delay=.5+r*1.1+rnd()*.8;});
   // cars that finished side by side leave well apart so the second one merges in behind
   order.forEach((a,r)=>{for(const b of order.slice(0,r))if(Math.hypot(a.x-b.x,a.z-b.z)<11&&a.delay<b.delay+2.6)a.delay=b.delay+2.6+rnd()*.7;});
+  // Night20: cars still rolling when the race ends keep their speed and coast down to pit speed in running
+  // order (the no-passing cool-down rule keeps them in line) instead of stopping and leaving from a standstill.
+  if(!settle)for(const a of this.agents){const v=a.c.speed||0;if(v>2&&!a.c.dnf){a.state='go';a.delay=0;a.v=Math.min(v,22);}}
   for(const a of this.agents){const m=a.mesh;m.traverse(o=>{if(o.isLOD){if(this.low){o.autoUpdate=false;o.levels[0].object.visible=false;o.levels[1].object.visible=true;}else o.autoUpdate=true;}});a.c.retirement?.hazards&&(a.c.retirement.hazards.visible=false);}
   // cars that finished the race already touching are exempt until they first separate
   this.contact0=new Map();for(let i=0;i<this.agents.length;i++)for(let j=i+1;j<this.agents.length;j++){const g=boxGap(this.agents[i],this.agents[j]);if(g<.3)this.contact0.set(i+','+j,g);}
@@ -46,7 +49,7 @@ export class PitReturn{
    const ds=pick??18;push(this.tp(q.s+ds*.45,lerp(q.d,-W/2-2.4,.6)),'track');s0=q.s+ds;d0=-W/2-2.4;push(this.tp(s0,d0),'track');
   }else{const h={x:start.x+Math.cos(c.th)*3,z:start.z+Math.sin(c.th)*3};push(h,'track');}
   // track: run the remaining arc to the approach point, blending to the exit lane
-  const sA=pits.gateS-35,dA=trk.outer-12;let run=((sA-s0)%P+P)%P;if(run<14)run+=P;
+  const sA=pits.road.entryS??pits.gateS-35,dA=pits.road.entryD??trk.outer-12;let run=((sA-s0)%P+P)%P;if(run<14)run+=P;
   for(let u=8;u<run;u+=4){const t=ease(clamp(u/Math.min(140,run*.8),0,1)),dl=lerp(d0,clamp(dA+lane*(1-ease(clamp((u-run+60)/60,0,1))),-W/2+1.6,W/2-1.6),t);push(this.tp(s0+u,dl),'track');}
   // pit road: the same graded lane the player follows, ending at the lot entrance
   for(let i=0;i<drive.length-4;i++)push(drive[i],i<6?'track':'road');
@@ -65,7 +68,7 @@ export class PitReturn{
   const kinds=pts.map(p=>p.kind),path=sp.map((v,i)=>({x:v.x,z:v.z,kind:'lot'})),cum=[0];
   // assign kinds from the nearest raw waypoint index (monotone walk)
   let j=0;for(let i=0;i<path.length;i++){const p=path[i];while(j<pts.length-1&&Math.hypot(pts[j+1].x-p.x,pts[j+1].z-p.z)<=Math.hypot(pts[j].x-p.x,pts[j].z-p.z)+.01)j++;p.kind=kinds[Math.min(pts.length-1,j+(Math.hypot(pts[j].x-p.x,pts[j].z-p.z)>1&&j<pts.length-1?1:0))]||'lot';if(i)cum.push(cum[i-1]+Math.hypot(p.x-path[i-1].x,p.z-path[i-1].z));}
-  const vk={track:15,road:10.8,lot:5.8,foot:2.2,ramp:1.35};
+  const vk={track:11.6,road:10.8,lot:5.8,foot:2.2,ramp:1.35};
   for(let i=0;i<path.length;i++){const a=path[Math.max(0,i-3)],b=path[i],cc=path[Math.min(path.length-1,i+3)],h1=Math.atan2(b.z-a.z,b.x-a.x),h2=Math.atan2(cc.z-b.z,cc.x-b.x),ds=Math.max(.3,cum[Math.min(path.length-1,i+3)]-cum[Math.max(0,i-3)]),k=Math.abs(wrapA(h2-h1))/ds;
    const lotZone=Math.abs(b.x)<75&&b.z>-51&&b.z<41&&b.kind==='road'?'lot':b.kind;b.v=Math.min(vk[lotZone]*spd,Math.sqrt(4/Math.max(k,1e-4)));b.v=Math.max(b.v,b.kind==='ramp'?1:2.2);}
   if(rig.side==='right')for(let i=Math.floor(path.length*.6);i<path.length;i++){const q=path[i];if(q.z>z0-7.5&&q.x>59)q.cross=true;}
@@ -114,7 +117,7 @@ export class PitReturn{
     // never brake for a player who is behind (or beside and behind) my centre: stopping would only get me rear-ended
     if(b.player&&(o.x-a.x)*Math.cos(a.th)+(o.z-a.z)*Math.sin(a.th)<.4)continue;
     for(let ds=.8;ds<=look+.01;ds+=1.4){const q=this.sample(a,a.u+ds),me=caps(q).slice(0,2);/* centre + nose: my tail is the follower job */let hit=false;for(const m of me){for(const pnt of o.pts)if(Math.hypot(m[0]-pnt[0],m[1]-pnt[1])<2.65){hit=true;break;}if(hit)break;}
-     if(hit){a.hits.push({b,lim:Math.max(0,(ds-1.2)*.9)});break;}}}
+     if(hit){const bv=b.player?Math.abs(pc.v||0):b.state==='go'?b.v||0:0,same=Math.cos(wrapA((b.th??0)-a.th));a.hits.push({b,lim:Math.max(0,(ds-1.2)*.9+(same>.7?bv*same:0))}); /* Night20: a car ahead that is rolling the same way is followed, not treated as parked */break;}}}
    // cool-down lap: no passing on the oval. Followers keep ~7 m to anything ahead in
    // track arc regardless of lane, so merges into the exit lane always happen in order.
    if(here.kind==='track'&&a.trackS!==undefined){const P=this.trk.P;for(const b of [...this.agents,playerTrack]){if(b===a||b.trackS===undefined||(b.player&&a.ignorePlayer))continue;const gap=((b.trackS-a.trackS)%P+P*1.5)%P-P*.5;if(gap>0&&gap<16){const lim=Math.max(0,(b.state==='wait'?0:b.v)+(gap-7.5)*.8);vt=Math.min(vt,lim);if(b.player&&lim<.3)a.hits.push({b:player,lim});}if(gap>0&&gap<7.5&&b.state==='wait'){b.holdT=(b.holdT||0)+dt;if(b.holdT>1.2)b.delay=Math.min(b.delay,this.t);}}}
@@ -138,7 +141,7 @@ export class PitReturn{
   // 2. integrate, LOD for far cars on mobile
   for(const a of moving){if(a.state==='wait'){this.gateUpdate(a,dt);continue;}
    a.acc+=dt;const far=this.low&&Math.hypot(a.x+o.x-cam.x,a.z+o.z-cam.z)>70&&!this.agents.some(b=>b!==a&&b.state!=='done'&&Math.hypot(b.x-a.x,b.z-a.z)<16);if(far&&(this.frame+a.k)%2)continue;const h=a.acc;a.acc=0;
-   const vt=a.vt??0;a.v+=clamp(vt-a.v,-4.5*h,(a.escape?5.5:2.6)*h);a.v=Math.max(0,a.v);a.u=Math.min(a.len,a.u+a.v*h);
+   const vt=a.vt??0;const here=this.sample(a,a.u),gentle=here.kind==='track'&&!(a.hits&&a.hits.length)&&(a.vbase??0)>=here.v-.3;a.v+=clamp(vt-a.v,-(gentle?1.3:4.5)*h,(a.escape?5.5:2.6)*h); /* Night20: off-throttle coast on the cool-down lap */a.v=Math.max(0,a.v);a.u=Math.min(a.len,a.u+a.v*h);
    const p=this.sample(a,a.u);a.x=p.x;a.z=p.z;
    // heading: path tangent; parkers rotate into their varied final angle over the last metres
    let th=p.th;if(a.park){const rem=a.len-a.u;if(rem<3.6)th=a.park.th+wrapA(p.th-a.park.th)*clamp(rem/3.6,0,1);}a.th=th;

@@ -9,20 +9,37 @@ export function makePaceCar(low=false){
  const g=new THREE.Group();g.name='pace-car';g.rotation.order='YXZ';
  const n=low?2:4,paint=new THREE.MeshStandardMaterial({color:0xf3f1ea,metalness:.35,roughness:.38}),black=new THREE.MeshStandardMaterial({color:0x141618,roughness:.6}),glass=new THREE.MeshStandardMaterial({color:0x10171d,metalness:.4,roughness:.15}),amberStripe=new THREE.MeshStandardMaterial({color:0xf0a21a,roughness:.5});
  const add=(geo,mat,x,y,z,p=g)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=!low;m.receiveShadow=!low;p.add(m);return m;};
- add(beveledBox(4.75,.62,1.9,.16,n),paint,0,.62,0);                       // lower body
- add(beveledBox(1.55,.16,1.78,.07,n),paint,1.55,.98,0);                    // hood bulge
- add(beveledBox(2.25,.56,1.66,.2,n),glass,-.35,1.2,0);                     // greenhouse
- add(beveledBox(2.05,.08,1.6,.04,n),paint,-.4,1.5,0);                      // roof skin
- for(const z of[-.96,.96])add(new THREE.BoxGeometry(4.2,.12,.02),amberStripe,-.05,.66,z);
+ // Night20: original lifted full-size 4x4 pace truck (generic design, no real-vehicle badges): tall slab-sided body,
+ // big off-road tires under black flares, steel bumpers, roof rack and the amber light bar.
+ const rubber=new THREE.MeshStandardMaterial({color:0x111213,roughness:.92}),rim=new THREE.MeshStandardMaterial({color:0x5d6166,metalness:.6,roughness:.4}),
+  steel=new THREE.MeshStandardMaterial({color:0x1d2022,metalness:.5,roughness:.55}),chrome=new THREE.MeshStandardMaterial({color:0xb8bec4,metalness:.85,roughness:.25});
+ add(beveledBox(5.0,.8,2.0,.12,n),paint,0,.96,0);                          // body sides / doors
+ add(beveledBox(1.55,.07,1.9,.03,n),paint,1.72,1.38,0);                    // flat hood
+ add(beveledBox(3.05,.62,1.86,.1,n),glass,-.62,1.67,0);                     // tall greenhouse
+ add(beveledBox(3.12,.08,1.92,.04,n),paint,-.62,2.0,0);                     // roof
+ for(const px of[.92,-.42,-1.98])add(new THREE.BoxGeometry(px>0?.12:.16,.62,1.9),paint,px,1.67,0); // A/B/D pillars
+ for(const z of[-.86,.86])add(new THREE.BoxGeometry(2.8,.05,.06),steel,-.62,2.08,z);           // roof rack rails
+ for(const px of[-1.7,.45])add(new THREE.BoxGeometry(.06,.05,1.74),steel,px,2.1,0);
+ for(const z of[-1.005,1.005])add(new THREE.BoxGeometry(4.5,.14,.02),amberStripe,-.05,1.14,z); // amber body stripe
+ // grille (horizontal bars), slim LED headlamps, steel bumpers with tow hooks, side steps, mirrors
+ add(new THREE.BoxGeometry(.06,.4,1.36),black,2.49,1.1,0);
+ for(const y of[.98,1.1,1.22])add(new THREE.BoxGeometry(.05,.035,1.32),chrome,2.52,y,0);
+ add(beveledBox(.32,.28,2.06,.05,2),steel,2.5,.66,0);add(beveledBox(.3,.28,2.06,.05,2),steel,-2.5,.7,0);
+ const hook=new THREE.MeshStandardMaterial({color:0xc4271d,roughness:.5});for(const z of[-.55,.55])add(new THREE.BoxGeometry(.12,.08,.1),hook,2.68,.62,z);
+ for(const z of[-1.07,1.07]){add(new THREE.BoxGeometry(2.3,.05,.2),steel,.05,.52,z);add(new THREE.BoxGeometry(.18,.16,.08),black,.95,1.52,z);}
  // door lettering
  const c=document.createElement('canvas');c.width=512;c.height=96;const x=c.getContext('2d');x.fillStyle='#000';x.font='900 64px Arial Black, Arial';x.textAlign='center';x.textBaseline='middle';x.fillText('PACE CAR',256,50);
  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;const label=new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false});
- for(const s of[-1,1]){const m=new THREE.Mesh(new THREE.PlaneGeometry(1.9,.36),label);m.position.set(-.1,.78,s*.955);if(s<0)m.rotation.y=Math.PI;g.add(m);}
- for(const [px,pz]of[[1.45,-.86],[1.45,.86],[-1.35,-.86],[-1.35,.86]]){const w=add(new THREE.CylinderGeometry(.34,.34,.26,low?10:16).rotateX(Math.PI/2),black,px,.34,pz);w.castShadow=false;}
+ for(const s of[-1,1]){const m=new THREE.Mesh(new THREE.PlaneGeometry(1.8,.34),label);m.position.set(-.35,.88,s*1.008);if(s<0)m.rotation.y=Math.PI;g.add(m);}
+ for(const [px,pz]of[[1.62,-.9],[1.62,.9],[-1.5,-.9],[-1.5,.9]]){
+  const w=add(new THREE.CylinderGeometry(.46,.46,.34,low?12:20).rotateX(Math.PI/2),rubber,px,.46,pz);w.castShadow=false;
+  add(new THREE.CylinderGeometry(.25,.25,.36,low?8:12).rotateX(Math.PI/2),rim,px,.46,pz).castShadow=false;
+  if(pz>0)add(beveledBox(1.22,.16,2.12,.05,2),black,px,1.0,0);             // fender flare over each axle
+ }
  const head=new THREE.MeshBasicMaterial({color:0xf4f6ff}),tail=new THREE.MeshBasicMaterial({color:0xff2a1a});
- for(const z of[-.62,.62]){add(new THREE.BoxGeometry(.04,.12,.34),head,2.38,.72,z).castShadow=false;add(new THREE.BoxGeometry(.04,.1,.4),tail,-2.38,.78,z).castShadow=false;}
+ for(const z of[-.82,.82]){add(new THREE.BoxGeometry(.04,.09,.3),head,2.51,1.27,z).castShadow=false;add(new THREE.BoxGeometry(.04,.34,.1),tail,-2.51,1.18,z*1.1).castShadow=false;}
  // roof light bar: two emissive halves + additive glow sprites (no real lights)
- const bar=new THREE.Group();bar.position.set(-.45,1.6,0);g.add(bar);add(beveledBox(.34,.1,1.42,.04,2),black,0,0,0,bar);
+ const bar=new THREE.Group();bar.position.set(-.1,2.17,0);g.add(bar);add(beveledBox(.34,.1,1.42,.04,2),black,0,0,0,bar);
  const lamps=[],sprites=[],tex=glowTexture();
  for(const s of[-1,1]){const mat=new THREE.MeshStandardMaterial({color:0x6b3e00,emissive:0xffa000,emissiveIntensity:2.5,roughness:.3});const lamp=add(new THREE.BoxGeometry(.28,.12,.6),mat,0,.09,s*.36,bar);lamp.castShadow=false;lamps.push(lamp);
   if(!low||s>0){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffa21c,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.9}));sp.scale.setScalar(low?2.4:1.9);sp.position.set(0,.2,low?0:s*.36);bar.add(sp);sprites.push(sp);}}
@@ -97,7 +114,7 @@ export class PaceCar{
  // Oriented-box clearance (metres) to every race car, for QA. Never alters cars.
  clearance(){
   const corners=(x,z,th,hl,hw)=>{const c=Math.cos(th),s=Math.sin(th);return[[hl,hw],[hl,-hw],[-hl,hw],[-hl,-hw]].map(([a,b])=>({x:x+c*a-s*b,z:z+s*a+c*b}));};
-  const A=corners(this.x,this.z,this.th,2.4,.97);let min=Infinity;
+  const A=corners(this.x,this.z,this.th,2.6,1.07);let min=Infinity;
   for(const c of this.race.cars){if(Math.hypot(c.x-this.x,c.z-this.z)>12)continue;const B=corners(c.x,c.z,c.th,2.7,1.05);let sep=-Infinity;
    for(const th of[this.th,this.th+Math.PI/2,c.th,c.th+Math.PI/2]){const ax=Math.cos(th),az=Math.sin(th),pa=A.map(p=>p.x*ax+p.z*az),pb=B.map(p=>p.x*ax+p.z*az);sep=Math.max(sep,Math.max(Math.min(...pa)-Math.max(...pb),Math.min(...pb)-Math.max(...pa)));}
    min=Math.min(min,sep);}

@@ -164,3 +164,13 @@ A visible pace car with a flashing yellow light bar now leads pace laps and caut
 After the checkered flag, all seven AI cars drive back to the paddock on staggered paths: about four load into their own haulers (ramp, winch, gate close) and about three park just outside the trailer opening so the lot does not look identical. AI yield to each other and to the player; the player winch assist also queues behind AI ahead.
 
 Paddock polish adds painted bay marks, pit-exit lettering, bollards, canopy/lot lighting and related props. Highway polish adds RPM markers, mile markers and median lights on the travel leg. AI paddock engine voices reuse the Night18 V8 pack pool. Classic 42 (scheme 8) / Jayden Fudge #42 and the career loop remain the defaults.
+
+## Night20 — pit lane before turn 3, rolling cool-down, pace truck, engine start fix
+
+**Pit lane:** the pit entry now peels straight off the end of the backstretch, right before turn 3 (like real ovals), runs on past the turn and curves down into the paddock entrance. It replaces the narrow gate late in turn 2 and the long loop behind the backstretch, so the post-race drive is shorter. While racing, the opening is a closed yellow steel gate with catch fence (solid to the physics); it opens only in the post-race paddock scene. Light towers near the lane step away from it, and Salina's two backstretch sheds moved west to stay clear. Saves made mid-pit-return on the old road resume on the new lane (`routeVersion` 4).
+
+**Rolling cool-down:** after Return to pits, nobody stops dead. AI cars keep their race-end speed, ease off to about 25 mph in running order and drive home. The player's car also keeps rolling: it eases to pit speed and follows the cool-down lap and pit lane on its own until you touch steering, gas or brake (or reach the paddock lot). The paid crew winch no longer zeroes your speed when you switch it on.
+
+**Pace truck:** the pace car is now an original lifted full-size 4x4 pace truck (big off-road tires, flares, steel bumpers, roof rack, amber light bar). Generic design, no real-vehicle badges.
+
+**Engine sound at the start:** the V8 sound pack loads behind the "Preparing the clay" screen, so races open on the real engine instead of the fallback synth swapping over mid pace lap. Gas on auto-paced laps loads the engine on wheel speed instead of ringing the rev limiter, so holding gas into the green no longer drops RPM at the flag.

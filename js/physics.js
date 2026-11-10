@@ -330,7 +330,7 @@ function wallContact(car,trk){
   const q=trk.project(car.x,car.z);if(q.d<trk.outer-3.3)return null;
   const cs=Math.cos(car.th),sn=Math.sin(car.th);let hit=null;
   for(const [x,z] of WALL_HULL){const rx=cs*x-sn*z,rz=sn*x+cs*z,p=trk.project(car.x+rx,car.z+rz),pen=p.d-trk.outer;
-    if(pen>0&&!inPitGate(trk,p.s)&&(!hit||pen>hit.pen))hit={pen,nx:p.nx,nz:p.nz,rx,rz};
+    if(pen>0&&!(trk.pitOpen&&inPitGate(trk,p.s))&&(!hit||pen>hit.pen))hit={pen,nx:p.nx,nz:p.nz,rx,rz}; /* Night20: pit gate is shut while racing */
   }return hit;
 }
 // Non-penetration is a hard constraint, NOT part of the shared 2 m/s cosmetic
