@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import {beveledBox} from './details.js';
 import {glowTexture} from './gfx.js';
 // Visible pace car on the existing pace logic (formation arc / pace leader).
 // Kinematic only: it is never in the race car list, never collides, and only
@@ -8,133 +7,202 @@ const wrapP=(v,P)=>((v%P)+P)%P,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 // Original low-poly Hummer H2 pace SUV. Proportions follow the published 2003 H2
 // spec (189.8 x 81.2 x 77.8 in, 122.8 in wheelbase, 69.4 in track, LT315/70R17).
 // No Hummer wordmark, badge, or copied mesh — shape only, plus the pace light bar.
-// Closed rounded section. Points run around YZ, z to the right, y up.
-function shellOutline(hw,top,bot,rad,crown,n){
- const r=Math.max(.02,Math.min(rad,(top-bot)*.45,hw*.45)),k=Math.max(1,n);
- const pts=[],arc=(cx,cy,a0,a1)=>{for(let i=0;i<=k;i++){const a=a0+(a1-a0)*i/k;pts.push([cx+Math.cos(a)*r,cy+Math.sin(a)*r]);}};
- arc(hw-r,bot+r,-Math.PI/2,0);
- arc(hw-r,top-r,0,Math.PI/2);
- arc(-hw+r,top-r,Math.PI/2,Math.PI);
- arc(-hw+r,bot+r,Math.PI,Math.PI*1.5);
- for(const p of pts)if(p[1]>top-r*1.4)p[1]+=crown*(1-Math.min(1,(p[0]/hw)**2));
- return pts;
-}
-function loftMesh(stations,around){
- const rings=stations.map(s=>shellOutline(s.hw,s.top,s.bot,s.rad,s.crown||0,around).map(([z,y])=>new THREE.Vector3(s.x,y,z)));
- const N=rings[0].length,pos=[],idx=[];
- for(const ring of rings)for(const p of ring)pos.push(p.x,p.y,p.z);
- for(let s=0;s<rings.length-1;s++)for(let i=0;i<N;i++){
-  const a=s*N+i,b=s*N+(i+1)%N,c=(s+1)*N+i,d=(s+1)*N+(i+1)%N;
+// Closed surface of revolution. Profile is [radius, axial] and is closed by the caller.
+// Revolution is around Y, then rotateX(PI/2) so the axle lies on Z. Indices are real triangles.
+function revolve(profile,seg){
+ const count=profile.length,pos=[],idx=[];
+ for(let i=0;i<=seg;i++){
+  const a=i/seg*Math.PI*2,c=Math.cos(a),s=Math.sin(a);
+  for(let k=0;k<count;k++){const [r,y]=profile[k];pos.push(c*r,y,s*r);}
+ }
+ for(let i=0;i<seg;i++)for(let k=0;k<count;k++){
+  const k2=(k+1)%count,a=i*count+k,b=i*count+k2,c=(i+1)*count+k,d=(i+1)*count+k2;
   idx.push(a,b,c,b,d,c);
  }
- const cap=(ring,sign)=>{const base=pos.length/3,c=new THREE.Vector3();for(const p of ring)c.add(p);c.multiplyScalar(1/ring.length);pos.push(c.x,c.y,c.z);const hub=pos.length/3-1;for(const p of ring)pos.push(p.x,p.y,p.z);for(let i=0;i<N;i++){const u=base+1+i,v=base+1+(i+1)%N;sign>0?idx.push(hub,v,u):idx.push(hub,u,v);}};
- cap(rings[0],1);cap(rings.at(-1),-1);
- const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();return g;
+ const g=new THREE.BufferGeometry();
+ g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+ g.setIndex(idx);g.computeVertexNormals();g.rotateX(Math.PI/2);g.computeVertexNormals();
+ return g;
 }
-function tireLathe(radius,width,seg){
- const pts=[];const n=10;
- for(let i=0;i<=n;i++){const u=i/n,side=(u-.5)*width,bulge=Math.sin(u*Math.PI);let r=radius-.03*(1-bulge);
-  if(u>.38&&u<.62){const tread=(u-.5)/.24;r-=.012*Math.pow(Math.sin(tread*Math.PI*3),2);}
-  pts.push(new THREE.Vector2(r,side));}
- return new THREE.LatheGeometry(pts,seg).rotateZ(Math.PI/2);
+// Watertight tire: sidewalls, tread, and the inner bead barrel. Axle is local Z.
+function tireGeo(radius,width,seg){
+ const hw=width*.5,bead=radius*.62,side=radius*.78;
+ const ring=[
+  [bead,-hw*.42],[side,-hw*.88],[radius*.93,-hw*.98],[radius*.995,-hw*.62],
+  [radius,-hw*.18],[radius,hw*.18],[radius*.995,hw*.62],[radius*.93,hw*.98],
+  [side,hw*.88],[bead,hw*.42],[bead*.98,hw*.22],[bead*.98,-hw*.22]
+ ];
+ return revolve(ring,seg);
 }
-function alloyGeo(low){
- const parts=[new THREE.CylinderGeometry(.2,.22,.12,low?10:16),new THREE.TorusGeometry(.2,.018,6,low?12:20)];
- const spoke=new THREE.BoxGeometry(.035,.16,.045);
- for(let i=0;i<6;i++){const g=spoke.clone();g.rotateZ(i*Math.PI/3);g.translate(.1,0,0);parts.push(g);}
- const lip=new THREE.TorusGeometry(.205,.028,6,low?14:22);parts.push(lip);
- const pos=[];
- for(const g of parts){g.rotateX(Math.PI/2);const p=g.attributes.position;for(let i=0;i<p.count;i++)pos.push(p.getX(i),p.getY(i),p.getZ(i));g.dispose();}
- const out=new THREE.BufferGeometry();out.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));out.computeVertexNormals();return out;
+// Squared fender lip. Local origin is the wheel center; +Z is outboard.
+// The arch runs over the tire from the front cheek to the rear cheek.
+function flareGeo(radius,seg){
+ const a0=Math.PI*.16,a1=Math.PI*.84,lip=.12,depth=.34;
+ const profile=[[radius+.01,0],[radius+.04,.02],[radius+lip,.05],[radius+lip+.01,.14],[radius+lip,depth],[radius+.025,depth-.02],[radius+.008,.1]];
+ const P=profile.length,pos=[],idx=[];
+ for(let i=0;i<=seg;i++){
+  const a=a0+(a1-a0)*i/seg,c=Math.cos(a),s=Math.sin(a);
+  for(const [r,z] of profile)pos.push(c*r,s*r,z);
+ }
+ for(let i=0;i<seg;i++)for(let k=0;k<P-1;k++){
+  const a=i*P+k,b=a+1,c=a+P,d=c+1;
+  idx.push(a,c,b,b,c,d);
+ }
+ const cap=(i,sign)=>{
+  const base=i*P;let cx=0,cy=0,cz=0;
+  for(let k=0;k<P;k++){cx+=pos[(base+k)*3];cy+=pos[(base+k)*3+1];cz+=pos[(base+k)*3+2];}
+  const hub=pos.length/3;pos.push(cx/P,cy/P,cz/P);
+  for(let k=0;k<P;k++){const u=base+k,v=base+(k+1)%P;sign>0?idx.push(hub,v,u):idx.push(hub,u,v);}
+ };
+ cap(0,-1);cap(seg,1);
+ const g=new THREE.BufferGeometry();
+ g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+ g.setIndex(idx);g.computeVertexNormals();return g;
 }
 export function makePaceCar(low=false){
  const g=new THREE.Group();g.name='pace-car';g.rotation.order='YXZ';
- const around=low?2:3;
- const L=4.821,WB=3.119,frontOH=.78,frontAxle=L/2-frontOH,rearAxle=frontAxle-WB,trackW=1.763,tireR=(17*0.0254+2*0.315*0.70)/2;
- const paint=new THREE.MeshPhysicalMaterial({color:0xc6b08a,metalness:.22,roughness:.42,clearcoat:.4,clearcoatRoughness:.28});
+ const L=4.821,WB=3.119,frontOH=.78,frontAxle=L/2-frontOH,rearAxle=frontAxle-WB,trackW=1.763;
+ const tireR=(17*0.0254+2*0.315*0.70)/2,tireW=.30;
+ const paint=new THREE.MeshPhysicalMaterial({color:0xc4a36a,metalness:.18,roughness:.46,clearcoat:.35,clearcoatRoughness:.3});
  const black=new THREE.MeshStandardMaterial({color:0x141618,roughness:.72});
- const glass=new THREE.MeshPhysicalMaterial({color:0x102028,metalness:.45,roughness:.06,clearcoat:1,clearcoatRoughness:.05,envMapIntensity:.8});
- const add=(geo,mat,x,y,z)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=!low;m.receiveShadow=!low;g.add(m);return m;};
- const rubber=new THREE.MeshStandardMaterial({color:0x161412,roughness:.97}),alloy=new THREE.MeshStandardMaterial({color:0xc5ccd2,metalness:.82,roughness:.24}),
-  chrome=new THREE.MeshStandardMaterial({color:0xdfe4e8,metalness:.9,roughness:.16});
- // Body is split around the axles so the side skin does not swallow the tires.
- const nose=loftMesh([
-  {x:2.34,top:1.22,bot:.44,hw:.96,rad:.04},
-  {x:2.06,top:1.24,bot:.78,hw:1.00,rad:.05}
- ],around);
- const hood=loftMesh([
-  {x:2.18,top:1.24,bot:.88,hw:.99,rad:.04,crown:.008},
-  {x:1.35,top:1.30,bot:.90,hw:1.00,rad:.05,crown:.014},
-  {x:.42,top:1.32,bot:1.06,hw:1.00,rad:.04,crown:.008}
- ],around);
- const doors=loftMesh([
-  {x:1.02,top:1.32,bot:.40,hw:1.00,rad:.05,crown:.01},
-  {x:.1,top:1.30,bot:.42,hw:1.00,rad:.05},
-  {x:-.88,top:1.30,bot:.42,hw:1.00,rad:.05}
- ],around);
- const quarter=loftMesh([
-  {x:-.95,top:1.28,bot:.90,hw:1.00,rad:.04},
-  {x:-2.16,top:1.16,bot:.88,hw:.98,rad:.04}
- ],around);
- const tail=loftMesh([
-  {x:-2.08,top:1.16,bot:.38,hw:.98,rad:.05},
-  {x:-2.46,top:1.04,bot:.32,hw:.94,rad:.04}
- ],around);
- for(const part of [nose,hood,doors,quarter,tail])add(part,paint,0,0,0);
- const roof=loftMesh([
-  {x:.36,top:1.86,bot:1.66,hw:.86,rad:.035},
-  {x:.02,top:1.96,bot:1.74,hw:.94,rad:.04,crown:.01},
-  {x:-1.05,top:1.97,bot:1.76,hw:.95,rad:.04,crown:.012},
-  {x:-1.58,top:1.86,bot:1.64,hw:.86,rad:.035}
- ],around);
- add(roof,paint,0,0,0);
- add(new THREE.BoxGeometry(.36,.2,1.55),paint,.42,1.40,0);
- add(new THREE.BoxGeometry(.2,.12,1.7),paint,0,1.82,0);
- const glassPane=(x0,y0,z0,x1,y1,z1)=>{const geo=new THREE.BufferGeometry();const dx=x1-x0,dy=y1-y0,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len;const hw=.76;geo.setAttribute('position',new THREE.Float32BufferAttribute([x0+nx*.02,y0+ny*.02,-hw,x0,y0,hw,x1,y1,hw,x0+nx*.02,y0+ny*.02,-hw,x1,y1,hw,x1+nx*.02,y1+ny*.02,-hw,x0,y0,-hw,x0-nx*.02,y0-ny*.02,hw,x1-nx*.02,y1-ny*.02,hw,x0,y0,-hw,x1-nx*.02,y1-ny*.02,hw,x1,y1,-hw],3));geo.computeVertexNormals();return add(geo,glass,0,0,z0||0);};
- glassPane(.34,1.46,0,.08,1.80,0);
- for(const s of[-1,1])for(const [x0,x1] of [[.18,-.5],[-.7,-1.32]]){const h=.44,pane=add(new THREE.PlaneGeometry(x0-x1,h),glass,(x0+x1)/2,1.32+h/2,s*.9);pane.castShadow=false;if(s<0)pane.rotation.y=Math.PI;}
- const rearWin=add(new THREE.PlaneGeometry(1.36,.4),glass,-1.52,1.54,0);rearWin.rotation.y=-Math.PI/2;rearWin.castShadow=false;
- const pillar=(x,z,h,w)=>add(new THREE.BoxGeometry(w,h,.12),paint,x,1.30+h/2,z);
- for(const z of[-.9,.9]){pillar(.28,z,.52,.16);pillar(-.6,z,.54,.12);pillar(-1.4,z,.5,.16);}
- // Fender belts close the seam over each wheel and leave the tire visible below.
+ const glass=new THREE.MeshPhysicalMaterial({color:0x0b1216,metalness:.55,roughness:.08,clearcoat:1,clearcoatRoughness:.06,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
+ const add=(geo,mat,x,y,z,name)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);if(name)m.name=name;m.castShadow=!low&&mat!==glass;m.receiveShadow=!low;g.add(m);return m;};
+ const rubber=new THREE.MeshStandardMaterial({color:0x1a1816,roughness:.96}),alloy=new THREE.MeshStandardMaterial({color:0xd5dbe0,metalness:.84,roughness:.22}),
+  chrome=new THREE.MeshStandardMaterial({color:0xe6ebef,metalness:.92,roughness:.14});
+ const box=(w,h,d)=>new THREE.BoxGeometry(w,h,d);
+ const pane=(name,ax,ay,az,bx,by,bz,cx,cy,cz,dx,dy,dz)=>{
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute([ax,ay,az,bx,by,bz,cx,cy,cz,dx,dy,dz],3));
+  geo.setIndex([0,1,2,0,2,3]);geo.computeVertexNormals();
+  const m=add(geo,glass,0,0,0,name);m.castShadow=false;return m;
+ };
+ const seg=low?14:22,halfT=trackW/2,doorHw=.74,belt=1.30,roofTop=1.97;
+ // Door shell sits inboard of the tires. Flares, not the door skin, make the width.
+ add(box(2.05,.92,doorHw*2),paint,.08,.84,0,'h2-doors');
+ add(box(1.9,.12,doorHw*2-.04),black,.08,.46,0,'h2-rocker');
+ // Thin flat hood between the fenders. Short nose: the face is the grille, not a wall.
+ const hood=add(box(1.55,.06,1.36),paint,1.18,1.16,0,'h2-hood');hood.rotation.z=-.02;
+ // Dark cabin behind the glass so the panes read as glazing.
+ add(box(1.4,.56,1.5),black,-.52,1.62,0,'h2-cabin');
+ add(box(1.52,.1,1.7),paint,-.66,1.92,0,'h2-roof');
+ // Frames overlap the glass edges. Nothing crosses the middle of a pane.
+ add(box(.24,.14,1.7),paint,.44,1.28,0,'h2-cowl');
+ add(box(.1,.08,1.55),paint,.06,1.90,0,'h2-header');
  for(const s of[-1,1]){
-  add(new THREE.BoxGeometry(1.55,.5,.2),paint,frontAxle,1.02,s*.99);
-  add(new THREE.BoxGeometry(1.4,.46,.2),paint,rearAxle,.98,s*.99);
+  const pillar=(x,h,w)=>add(box(w,h,.14),paint,x,1.28+h/2,s*.92);
+  pillar(.18,.7,.12);pillar(-.55,.7,.11);pillar(-1.28,.68,.16);
+  add(box(1.85,.1,.12),paint,-.5,1.92,s*.86);
+  add(box(2.0,.1,.1),paint,.02,1.30,s*(doorHw-.01));
  }
- add(beveledBox(1.7,.14,1.9,.03,2),black,.06,.48,0);
- if(!low)for(const z of[-.34,.34])add(new THREE.BoxGeometry(.34,.03,.12),black,.78,1.345,z);
- // Recessed seven-slot grille and round lamps, set back from the bumper face.
- add(new THREE.BoxGeometry(.06,.46,.92),black,2.36,.98,0);
- const bars=new THREE.InstancedMesh(new THREE.BoxGeometry(.025,.48,.032),chrome,7),bm=new THREE.Matrix4();
- for(let i=0;i<7;i++){bm.makeTranslation(2.39,.98,-.32+i*(.64/6));bars.setMatrixAt(i,bm);}bars.name='h2-vertical-grille';g.add(bars);
- const headMat=new THREE.MeshStandardMaterial({color:0xf4f7ff,emissive:0xe7eef8,emissiveIntensity:.55,roughness:.18,metalness:.12});
- const turnMat=new THREE.MeshBasicMaterial({color:0xffb03a}),tailMat=new THREE.MeshStandardMaterial({color:0x6a1010,emissive:0xff2a1a,emissiveIntensity:.7,roughness:.35});
- for(const z of[-.72,.72]){
-  add(new THREE.CylinderGeometry(.125,.125,.05,low?12:20).rotateZ(Math.PI/2),headMat,2.40,1.02,z).castShadow=false;
-  add(new THREE.TorusGeometry(.145,.02,6,low?12:18).rotateY(Math.PI/2),chrome,2.42,1.02,z).castShadow=false;
-  add(new THREE.CylinderGeometry(.045,.045,.04,low?8:12).rotateZ(Math.PI/2),turnMat,2.40,.78,z*1.22).castShadow=false;
+ pane('h2-glass-wind',.50,1.26,-.84,.50,1.26,.84,.16,1.96,.8,.16,1.96,-.8);
+ for(const s of[-1,1])pane('h2-glass-side',.12,1.26,s*.78,-1.32,1.26,s*.78,-1.32,1.96,s*.78,.12,1.96,s*.78);
+ pane('h2-glass-rear',-1.38,1.30,-.74,-1.38,1.30,.74,-1.38,1.96,.72,-1.38,1.96,-.72);
+ // Roof rails sit on the roof skin. The pace lamp is a low bar, not a floating rack.
+ for(const s of[-1,1])add(box(1.2,.02,.04),black,-.55,roofTop+.01,s*.62,'h2-rail');
+ // Squared flares over each tire, outboard of the door.
+ const flare=flareGeo(tireR+.015,low?8:14);
+ const wheels=[[frontAxle,halfT],[frontAxle,-halfT],[rearAxle,halfT],[rearAxle,-halfT]];
+ for(const [x,z] of wheels){
+  const lip=add(flare,paint,x,tireR,Math.sign(z)* (doorHw-.02),'h2-flare');
+  if(z<0)lip.rotation.y=Math.PI;
  }
- add(beveledBox(.22,.28,1.96,.04,2),black,2.38,.5,0);
- add(beveledBox(.28,.28,2.04,.04,2),black,-2.28,.5,0);
- for(const z of[-.88,.88])add(beveledBox(.04,.5,.18,.015,2),tailMat,-2.4,1.12,z).castShadow=false;
- const tires=new THREE.InstancedMesh(tireLathe(tireR,.34,low?14:22),rubber,4);
- const rims=new THREE.InstancedMesh(alloyGeo(low),alloy,4),wm=new THREE.Matrix4();
- [[frontAxle,trackW/2],[frontAxle,-trackW/2],[rearAxle,trackW/2],[rearAxle,-trackW/2]].forEach(([x,z],i)=>{wm.makeTranslation(x,tireR,z);tires.setMatrixAt(i,wm);rims.setMatrixAt(i,wm);});
- g.add(tires,rims);
- for(const z of[-1,1]){add(beveledBox(.22,.16,.14,.03,2),paint,.55,1.38,z*1.02);add(new THREE.BoxGeometry(.08,.04,.04),black,z>0?.15:-.95,1.16,z*.995);}
- const spare=add(new THREE.CylinderGeometry(.42,.42,.16,low?12:20).rotateZ(Math.PI/2),rubber,-2.55,1.12,0);spare.castShadow=false;
- add(new THREE.CylinderGeometry(.24,.24,.18,low?10:16).rotateZ(Math.PI/2),paint,-2.62,1.12,0).castShadow=false;
- if(!low){for(const x of[-1.2,-.3,.5])add(new THREE.BoxGeometry(.04,.025,1.55),black,x,2.03,0);}
+ // Front fender caps beside a recessed grille. They stop short of a full-width slab.
+ for(const s of[-1,1]){
+  add(box(.50,.42,.40),paint,1.76,.96,s*.72,'h2-fender');
+  add(box(.42,.28,.34),paint,-1.85,.98,s*.72,'h2-quarter');
+ }
+ add(box(.12,.1,1.2),paint,1.86,1.16,0,'h2-hood-nose');
+ // One fascia plate closes the gaps between the fender caps. The grille sits in front of it.
+ add(box(.1,.62,1.62),paint,1.84,.9,0,'h2-fascia');
+ add(box(.05,.4,.48),black,1.92,.94,0,'h2-grille-pocket');
+ add(box(.04,.48,.05),paint,1.96,.94,-.26);add(box(.04,.48,.05),paint,1.96,.94,.26);
+ add(box(.04,.05,.56),paint,1.96,1.16,0);add(box(.04,.05,.56),paint,1.96,.72,0);
+ const bars=new THREE.InstancedMesh(box(.02,.40,.028),chrome,7),bm=new THREE.Matrix4();
+ for(let i=0;i<7;i++)bm.compose(new THREE.Vector3(1.95,.94,-.18+i*(.36/6)),new THREE.Quaternion(),new THREE.Vector3(1,1,1)),bars.setMatrixAt(i,bm);
+ bars.name='h2-vertical-grille';g.add(bars);
+ const headMat=new THREE.MeshStandardMaterial({color:0xf7f8ff,emissive:0xe7eef8,emissiveIntensity:.45,roughness:.16,metalness:.08});
+ const turnMat=new THREE.MeshBasicMaterial({color:0xffb03a}),tailMat=new THREE.MeshStandardMaterial({color:0x6a1010,emissive:0xff2a1a,emissiveIntensity:.65,roughness:.35});
+ const lampGeo=new THREE.CylinderGeometry(.082,.082,.04,low?12:18).rotateZ(Math.PI/2);
+ const bezelGeo=new THREE.TorusGeometry(.098,.012,6,low?14:20).rotateY(Math.PI/2);
+ const turnGeo=new THREE.CylinderGeometry(.032,.032,.03,low?8:12).rotateZ(Math.PI/2);
+ for(const s of[-1,1]){
+  const lamp=add(lampGeo,headMat,2.12,.98,s*.70,'h2-headlamp');lamp.castShadow=false;
+  add(bezelGeo,chrome,2.09,.98,s*.70).castShadow=false;
+  add(turnGeo,turnMat,2.08,.76,s*.78).castShadow=false;
+  add(box(.04,.32,.1),tailMat,-2.22,1.02,s*.78).castShadow=false;
+ }
+ add(box(.18,.26,1.72),black,2.08,.52,0,'h2-bumper');
+ add(box(.12,.2,1.55),black,-2.22,.46,0,'h2-rear-bumper');
+ // Closed tires on Z, rims as real indexed meshes (not a stripped vertex soup).
+ const tread=tireGeo(tireR,tireW,seg);
+ const lipGeo=new THREE.TorusGeometry(.205,.015,low?5:7,low?16:22);
+ const hubGeo=new THREE.CylinderGeometry(.055,.055,.04,low?8:12).rotateX(Math.PI/2);
+ const spokeGeo=box(.15,.034,.02);spokeGeo.translate(.085,0,.02);
+ for(const [x,z] of wheels){
+  add(tread,rubber,x,tireR,z,'h2-tire');
+  const oz=z+Math.sign(z)*.08;
+  add(lipGeo,alloy,x,tireR,oz,'h2-rim');
+  add(hubGeo,alloy,x,tireR,oz+.01,'h2-hub');
+  for(let i=0;i<6;i++){const s=add(spokeGeo,alloy,x,tireR,oz,'h2-spoke');s.rotation.z=i*Math.PI/3;}
+ }
+ for(const s of[-1,1])add(box(.14,.1,.12),paint,.40,1.40,s*1.02,'h2-mirror');
+ const spare=add(tread,rubber,-2.42,1.0,0,'h2-spare');spare.rotation.y=Math.PI/2;spare.scale.setScalar(.88);
+ add(new THREE.CylinderGeometry(.22,.22,.08,low?10:14).rotateZ(Math.PI/2),paint,-2.46,1.0,0,'h2-spare-cover');
  const c=document.createElement('canvas');c.width=512;c.height=80;const ctx=c.getContext('2d');ctx.fillStyle='#1a140c';ctx.font='700 54px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('PACE CAR',256,42);
  const texLabel=new THREE.CanvasTexture(c);texLabel.colorSpace=THREE.SRGBColorSpace;const label=new THREE.MeshBasicMaterial({map:texLabel,transparent:true,depthWrite:false});
- for(const s of[-1,1]){const m=new THREE.Mesh(new THREE.PlaneGeometry(1.05,.2),label);m.position.set(.05,1.05,s*1.01);if(s<0)m.rotation.y=Math.PI;g.add(m);}
- for(const z of[-1.005,1.005])add(new THREE.BoxGeometry(1.7,.03,.012),new THREE.MeshStandardMaterial({color:0xe0a020,roughness:.5}),.05,.95,z);
- const bar=new THREE.Group();bar.position.set(-.2,2.08,0);g.add(bar);add(beveledBox(.55,.05,.72,.015,2),black,0,.02,0);
+ for(const s of[-1,1]){const m=new THREE.Mesh(new THREE.PlaneGeometry(.9,.16),label);m.name='h2-label';m.position.set(.15,1.02,s*(doorHw+.01));if(s<0)m.rotation.y=Math.PI;g.add(m);}
+ const stripe=new THREE.MeshStandardMaterial({color:0xd7a441,roughness:.5});
+ for(const s of[-1,1])add(box(1.7,.025,.012),stripe,.05,1.08,s*(doorHw+.004));
+ const bar=new THREE.Group();bar.position.set(-.35,roofTop+.03,0);g.add(bar);
+ add(box(.5,.04,.36),black,-.35,roofTop+.05,0,'h2-lightbar');
  const lamps=[],sprites=[],tex=glowTexture();
- for(const s of[-1,1]){const mat=new THREE.MeshStandardMaterial({color:0x6a3a00,emissive:0xffa000,emissiveIntensity:2.2,roughness:.3});const lamp=add(new THREE.BoxGeometry(.22,.045,.28),mat,0,.06,s*.16);lamp.castShadow=false;lamps.push(lamp);
-  if(!low||s>0){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffb020,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.75}));sp.scale.setScalar(low?1.1:.7);sp.position.set(0,.08,low?0:s*.16);bar.add(sp);sprites.push(sp);}}
+ for(const s of[-1,1]){const mat=new THREE.MeshStandardMaterial({color:0x6a3a00,emissive:0xffa000,emissiveIntensity:2.2,roughness:.3});const lamp=add(box(.16,.035,.14),mat,-.35,roofTop+.08,s*.08,'h2-pace-lamp');lamp.castShadow=false;lamps.push(lamp);
+  if(!low||s>0){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffb020,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.7}));sp.scale.setScalar(low?.9:.55);sp.position.set(-.35,roofTop+.1,low?0:s*.08);g.add(sp);sprites.push(sp);}}
  let tris=0;g.traverse(o=>{if(o.isMesh||o.isInstancedMesh){const n=o.geometry?.index?o.geometry.index.count/3:(o.geometry?.attributes.position.count||0)/3;tris+=n*(o.isInstancedMesh?o.count:1);}});
  g.userData={lamps,sprites,bar,frontAxle,rearAxle,trackWidth:trackW,halfLength:2.85,halfWidth:1.1,bodyLength:L,bodyWidth:2.062,bodyHeight:1.976,grille:'seven-vertical',lampsShape:'round',triangles:Math.round(tris)};return g;
+}
+export function auditPaceCar(group){
+ const fails=[],size=new THREE.Vector3();
+ let tires=0,rims=0,glass=0;
+ group.updateMatrixWorld(true);
+ group.traverse(o=>{
+  if(!o.isMesh)return;
+  const geo=o.geometry,n=geo?.attributes?.normal,p=geo?.attributes?.position;
+  if(!p||p.count<3){fails.push((o.name||'mesh')+' empty');return;}
+  if(!n||n.count!==p.count)fails.push((o.name||'mesh')+' normals');
+  else for(let i=0;i<n.count;i+=Math.max(1,n.count/24|0)){
+   const l=Math.hypot(n.getX(i),n.getY(i),n.getZ(i));
+   if(!Number.isFinite(l)||l<.5||l>1.5){fails.push((o.name||'mesh')+' bad normal');break;}
+  }
+  if(o.name==='h2-tire'||o.name==='h2-spare'){
+   if(o.name==='h2-tire')tires++;
+   geo.computeBoundingBox();size.subVectors(geo.boundingBox.max,geo.boundingBox.min);
+   if(!(size.z<size.x*.55&&size.z<size.y*.55&&size.x>.7&&size.y>.7))fails.push(`tire axis ${size.x.toFixed(2)} ${size.y.toFixed(2)} ${size.z.toFixed(2)}`);
+  }
+  if(o.name==='h2-rim'){
+   rims++;geo.computeBoundingBox();size.subVectors(geo.boundingBox.max,geo.boundingBox.min);
+   if(!(size.z<size.x*.5&&size.z<size.y*.5&&size.x>.35&&size.y>.35))fails.push(`rim axis ${size.x.toFixed(2)} ${size.y.toFixed(2)} ${size.z.toFixed(2)}`);
+  }
+  if(o.name.startsWith('h2-glass')){
+   glass++;
+   if(o.material.side!==THREE.DoubleSide)fails.push(o.name+' side');
+   if(o.material.transparent||o.material.opacity<1)fails.push(o.name+' hole');
+  }
+ });
+ if(tires!==4)fails.push('tires '+tires);
+ if(rims!==4)fails.push('rims '+rims);
+ if(glass<4)fails.push('glass '+glass);
+ const ray=new THREE.Raycaster(),meshes=[];
+ group.traverse(o=>{if(o.isMesh)meshes.push(o);});
+ const probe=(origin,dir,expect)=>{
+  ray.set(origin,dir.clone().normalize());
+  const hit=ray.intersectObjects(meshes,false)[0];
+  if(!hit||!hit.object.name.startsWith(expect))fails.push(`ray ${expect} hit ${hit?.object.name||'nothing'}`);
+ };
+ probe(new THREE.Vector3(1.35,1.55,0),new THREE.Vector3(-1,.04,0),'h2-glass');
+ probe(new THREE.Vector3(-.4,1.6,1.6),new THREE.Vector3(0,0,-1),'h2-glass');
+ probe(new THREE.Vector3(3.2,.98,.70),new THREE.Vector3(-1,0,0),'h2-headlamp');
+ return fails;
 }
 export class PaceCar{
  constructor(race){

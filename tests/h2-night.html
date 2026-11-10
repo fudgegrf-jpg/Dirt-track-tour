@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>h2-night</title>
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.js", "three/addons/": "../vendor/addons/" } }</script>
+<style>html,body{margin:0;background:#000}canvas{display:block}#log{display:none}#ui{position:absolute;left:-9999px}</style>
+<div id="log"></div>
+<div id="ui"></div>
+<canvas id="gl"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { RaceScene } from '../js/race.js';
+import { TRACKS } from '../js/data.js';
+const log = document.getElementById('log');
+const fail = (m) => { log.textContent = String(m); document.title = 'FAIL'; document.body.dataset.ready = '0'; };
+window.addEventListener('error', (e) => fail(e.error?.stack || e.message));
+try {
+  const canvas = document.getElementById('gl');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setSize(1280, 720);
+  renderer.setPixelRatio(1);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.95;
+  renderer.shadowMap.enabled = true;
+  const app = {
+    quality: 'low', isMobile: true, canvas, renderer,
+    bloom: { strength: 0.05, radius: 0.2, threshold: 3 },
+    settings: { cam: 'chase', shake: 0, assist: 'high', autoPace: true, tutorialSeen: true, volume: 0 },
+    ui: document.getElementById('ui'),
+    state: { round: 0, driver: 'Pace', num: '42', late: false, color: 0xc41212, accent: 0x111111, scheme: 0, sponsor: 'RED CLAY RACING', carDmg: 0, crew: [], up: { engine: 0, tires: 0, shocks: 0 } },
+    carParams(){ return { power: 1, grip: 1, stab: 0.3, damage: 0 }; },
+    audio: { crowdCheer(){}, update(){} },
+    autopilot: true, saveSettings(){}, keys: new Set(), profile: {},
+    tap(){ return false; }, input(){ return { steer: 0, throttle: 0, brake: 0 }; }
+  };
+  const race = new RaceScene(app, { track: TRACKS.find(t => t.id === 'salina') });
+  for (let i = 0; i < 6; i++) race.update(1 / 30);
+  const pace = race.paceCar.mesh, p = pace.position, cam = race.camera;
+  const fwd = new THREE.Vector3(1, 0, 0).applyQuaternion(pace.quaternion);
+  const right = new THREE.Vector3(0, 0, 1).applyQuaternion(pace.quaternion);
+  cam.fov = 36; cam.updateProjectionMatrix();
+  cam.position.copy(p).addScaledVector(fwd, 6.4).addScaledVector(right, 3.6);
+  cam.position.y = p.y + 1.55;
+  cam.lookAt(p.x, p.y + .85, p.z);
+  renderer.render(race.scene, cam);
+  window.race = race; window.renderer = renderer; window.THREE = THREE;
+  log.textContent = `PASS tris ${pace.userData.triangles} at ${p.x.toFixed(1)},${p.z.toFixed(1)}`;
+  document.title = 'PASS';
+  document.body.dataset.ready = '1';
+} catch (e) { fail(e.stack || e.message); }
+</script>
