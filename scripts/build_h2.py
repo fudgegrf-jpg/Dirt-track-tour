@@ -180,8 +180,7 @@ def apply_bool(target, cutter, op='DIFFERENCE'):
     except Exception as exc:
         print('bool failed', target.name, op, exc)
     target.select_set(False)
-    cutter.hide_set(True)
-    cutter.hide_render = True
+    bpy.data.objects.remove(cutter, do_unlink=True)
     return target
 
 
@@ -275,135 +274,49 @@ def arch_z(x, axle, rad=0.62):
 
 
 def build_body(paint, trim, chrome, glass, lamp, amber, fog, tail, low):
-    bevel = 0.007 if low else 0.011
+    bevel = 0.008 if low else 0.012
     segs = 1 if low else 2
-    nu = 8 if low else 14
+    # Solid lower body. Booleans only work on a closed mesh, so this starts as a box.
+    body = box('h2-body', (-0.02, 0, (0.42 + BELT) / 2), (4.54, HALF_W * 2, BELT - 0.42), paint)
     bm = bmesh.new()
+    bm.from_mesh(body.data)
+    bmesh.ops.subdivide_edges(bm, edges=list(bm.edges), cuts=2 if low else 3, use_grid_fill=True)
+    # Hood: flat center, shut-line drop, cowl-corner bulges.
+    for v in bm.verts:
+        if v.co.z > BELT - 0.08 and v.co.x > 1.05:
+            v.co.z = hood_z(v.co.x, v.co.y)
+    bm.to_mesh(body.data)
+    bm.free()
+    body.data.update()
+    for axle in (FA, RA):
+        cutter = cyl('arch-cut', 0.60, 3.2, (axle, 0, 0.46), (math.pi / 2, 0, 0), None, 24 if low else 32)
+        apply_bool(body, cutter, 'DIFFERENCE')
+    # Closed cabin, raked windshield, sitting on the belt. Union keeps the body solid.
+    cabin = box('cabin', (-0.46, 0, (BELT + ROOF) / 2), (3.24, 1.76, ROOF - BELT), paint)
+    bm = bmesh.new()
+    bm.from_mesh(cabin.data)
+    for v in bm.verts:
+        if v.co.z > (BELT + ROOF) * 0.5 and v.co.x > 0.2:
+            v.co.x = 0.78
+        if v.co.z > (BELT + ROOF) * 0.5 and v.co.x < -1.0:
+            v.co.x = -1.96
+        if v.co.z > ROOF - 0.04:
+            v.co.z = ROOF + 0.016 * (1 - min(1.0, (abs(v.co.y) / 0.9) ** 2))
+    bm.to_mesh(cabin.data)
+    bm.free()
+    apply_bool(body, cabin, 'UNION')
+    # Window recesses. Cutters stop at y=0.72 so they do not pierce the cabin.
+    windows = ((0.78, 1.34, 1.80), (-0.34, 1.34, 1.76), (-1.32, 1.50, 1.70))
+    sizes = ((0.50, 0.36, 0.44), (1.16, 0.36, 0.40), (0.30, 0.36, 0.20))
+    for (cx, z0, z1), (sx, sy, sz) in zip(windows, sizes):
+        for s in (1, -1):
+            cutter = box('win-cut', (cx, 0.90 * s, (z0 + z1) / 2), (sx, sy, sz), None)
+            apply_bool(body, cutter, 'DIFFERENCE')
+    me = body.data
+    me.calc_loop_triangles()
+    print('solid body tris', len(me.loop_triangles), 'verts', len(me.vertices))
     yw = 1.02
 
-    def side(y_sign, x0, x1, z0, z1, n=None):
-        flip = y_sign > 0
-        def fn(u, v):
-            x = lerp(x0, x1, u)
-            zlo = z0(x) if callable(z0) else z0
-            zhi = z1(x) if callable(z1) else z1
-            return (x, yw * y_sign, lerp(zlo, zhi, v))
-        ggrid(bm, n or nu, 3 if low else 4, fn, flip=flip)
-
-    for s in (1, -1):
-        # Door skin between the arches, belt at the top.
-        side(s, RA + 0.60, FA - 0.60, ROCK, BELT, 10 if low else 16)
-        # Skin over each arch. The bottom edge is the opening.
-        for axle in (FA, RA):
-            def over(u, v, axle=axle, s=s):
-                x = lerp(axle - 0.56, axle + 0.56, u)
-                zlo = arch_z(x, axle) or (0.42 + 0.02)
-                top = BELT if x < 1.12 else min(BELT, hood_z(x, yw) + 0.02)
-                return (x, yw * s, lerp(zlo, top, v))
-            ggrid(bm, 8 if low else 12, 3, over, flip=s > 0)
-        side(s, FA + 0.56, 2.22, ROCK, lambda x: min(BELT, hood_z(x, yw)), 6 if low else 8)
-        side(s, -2.28, RA - 0.56, ROCK, BELT, 4)
-
-    # Closed cabin. Eight corners, top front pulled back into the windshield rake,
-    # then the big side faces are split and the three window cells are left open.
-    cab = bmesh.new()
-    bmesh.ops.create_cube(cab, size=1.0)
-    for v in cab.verts:
-        v.co.x = -0.46 + v.co.x * 3.24   # -2.08 .. 1.16
-        v.co.y = v.co.y * 1.80            # -0.90 .. 0.90
-        v.co.z = BELT + (v.co.z + 0.5) * (ROOF - BELT)
-    for v in cab.verts:
-        if v.co.z > (BELT + ROOF) / 2 and v.co.x > 0:
-            v.co.x = 0.78
-        if v.co.z > (BELT + ROOF) / 2 and v.co.x < -1.2:
-            v.co.x = -1.96
-        if v.co.z > ROOF - 0.05:
-            v.co.z = ROOF + 0.015 * (1 - min(1, (abs(v.co.y) / 0.9) ** 2))
-    # Subdivide the side faces so windows can be deleted as cells.
-    side_edges = [e for e in cab.edges if abs(e.verts[0].co.y - e.verts[1].co.y) < 1e-4 and abs(e.verts[0].co.y) > 0.5]
-    bmesh.ops.subdivide_edges(cab, edges=side_edges, cuts=8 if not low else 5, use_grid_fill=True)
-    windows = ((0.46, 1.05, GLASS_BOT, GLASS_TOP), (-1.00, 0.30, GLASS_BOT, GLASS_TOP - 0.02), (-1.55, -1.14, 1.50, 1.72))
-    drop = []
-    for f in cab.faces:
-        c = f.calc_center_median()
-        if abs(c.y) < 0.7:
-            continue
-        if any(a < c.x < b and d0 < c.z < d1 for a, b, d0, d1 in windows):
-            drop.append(f)
-    bmesh.ops.delete(cab, geom=drop, context='FACES')
-    print('cabin faces', len(cab.faces), 'window faces removed', len(drop))
-    # Copy the closed cabin into the body mesh.
-    offset = {}
-    for v in cab.verts:
-        offset[v.index] = bm.verts.new(v.co.copy())
-    for f in cab.faces:
-        try:
-            bm.faces.new([offset[v.index] for v in f.verts])
-        except ValueError:
-            pass
-    cab.free()
-    def cowl(u, v):
-        y = lerp(-0.96, 0.96, u)
-        x = lerp(1.10, 1.22, v)
-        return (x, y, lerp(hood_z(1.12, y), GLASS_BOT, smooth(v)))
-    ggrid(bm, 8, 2, cowl, flip=True)
-
-    # Hood: flat center, shut-line drop, cowl-corner bulges.
-    def hood_fn(u, v):
-        x = lerp(1.12, 2.22, u)
-        y = lerp(-0.86, 0.86, v)
-        return (x, y, hood_z(x, y))
-    ggrid(bm, 12 if low else 18, 10 if low else 14, hood_fn, flip=True)
-    for s in (1, -1):
-        def fender(u, v, s=s):
-            x = lerp(1.12, 2.20, u)
-            y = lerp(0.82, yw + 0.01, v) * s
-            z = hood_z(x, 0.82) - 0.02 - v * 0.03
-            return (x, y, z)
-        ggrid(bm, 8, 2, fender, flip=s < 0)
-
-    # Nose valence above the grille, and the tailgate.
-    for s in (1, -1):
-        def nose(u, v, s=s):
-            ang = u * math.pi / 2
-            z = lerp(0.88, hood_z(2.1, yw), v)
-            x = 2.16 + math.sin(ang) * 0.14
-            y = (1.02 - (1 - math.cos(ang)) * 0.12) * s
-            return (x, y, z)
-        ggrid(bm, 4, 3, nose, flip=s > 0)
-    def tailgate(u, v):
-        return (-2.32, lerp(-0.90, 0.90, u), lerp(0.62, BELT, v))
-    ggrid(bm, 6, 4, tailgate, flip=True)
-    def rear_header(u, v):
-        return (lerp(-2.02, -1.88, v), lerp(-0.70, 0.70, u), lerp(1.80, ROOF, v))
-    ggrid(bm, 6, 2, rear_header, flip=False)
-
-    # Wheel-well walls so the arches are dark, not open to the sky.
-    for axle in (FA, RA):
-        for s in (1, -1):
-            def well(u, v, axle=axle, s=s):
-                a = math.pi * u
-                return (axle + math.cos(a) * 0.50, lerp(0.45, 0.98, v) * s, 0.44 + math.sin(a) * 0.50)
-            ggrid(bm, 8 if low else 12, 1, well, flip=s < 0)
-
-    bmesh.ops.remove_doubles(bm, verts=list(bm.verts), dist=0.006)
-    bm.normal_update()
-    # Open shells don't have an inside. Point each face at the outside.
-    bad = []
-    for f in bm.faces:
-        c = f.calc_center_median()
-        n = f.normal
-        if c.z > 1.55 and n.z < 0:
-            bad.append(f)
-        elif abs(c.y) > 0.85 and c.z < 1.85 and n.y * c.y < 0:
-            bad.append(f)
-        elif c.x > 2.15 and n.x < 0:
-            bad.append(f)
-        elif c.x < -2.2 and n.x > 0:
-            bad.append(f)
-    if bad:
-        bmesh.ops.reverse_faces(bm, faces=bad)
-    body = mesh_obj('h2-body', bm, paint)
     finish(body, bevel=bevel, segs=segs, angle=40)
 
     # Glass sits in the openings, just proud enough to seal them.
@@ -445,7 +358,7 @@ def build_body(paint, trim, chrome, glass, lamp, amber, fog, tail, low):
             bm.faces.new((grid[i][j], grid[i + 1][j], grid[i + 1][j + 1], grid[i][j + 1]))
     glass_obj_parts.append(mesh_obj('h2-glass-rear', bm, glass))
     for s in (1, -1):
-        y = 1.045 * s
+        y = 0.86 * s
         # Slightly larger than the holes, and just outboard of the cabin wall.
         quads = [
             [(1.08, y, GLASS_BOT), (0.42, y, GLASS_BOT), (0.42, y, GLASS_TOP), (0.78, y, GLASS_TOP + 0.02)],
