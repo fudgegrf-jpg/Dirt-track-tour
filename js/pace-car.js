@@ -34,141 +34,145 @@ function tireGeo(radius,width,seg){
  ];
  return revolve(ring,seg);
 }
-// One continuous H2 shell. Stations share a ring so the hood, fenders, cabin and roof
-// are a single surface. The greenhouse is the upper band of that surface, not posts.
+// One shell with hard panel breaks. Door columns on the reference photo put the side
+// glass at about a quarter of the body height under a black roof. The hood stays flat
+// and the grille top stays below that line. Flat shading stops the fenders melting.
 function sampleKeys(keys,x){
  if(x>=keys[0][0])return keys[0][1];
  for(let i=0;i<keys.length-1;i++){
   const [x0,y0]=keys[i],[x1,y1]=keys[i+1];
-  if(x<=x0&&x>=x1){const t=(x0-x)/(x0-x1||1),s=t*t*(3-2*t);return y0+(y1-y0)*s;}
+  if(x<=x0&&x>=x1)return y0+(y1-y0)*((x0-x)/(x0-x1||1));
  }
  return keys.at(-1)[1];
 }
 function h2Shell(){
  const fa=4.821/2-.78,ra=fa-3.119,axles=[fa,ra];
  const xs=[];
- const span=(a,b,n)=>{for(let i=0;i<=n;i++){const x=a+(b-a)*i/n;if(!xs.length||Math.abs(xs.at(-1)-x)>.012)xs.push(x);}};
- span(2.36,1.9,4);span(1.9,1.2,5);span(1.2,.5,5);span(.5,-.15,6);span(-.15,-1.25,7);span(-1.25,-1.9,5);span(-1.9,-2.4,4);
- const topKeys=[[2.36,1.18],[.75,1.26],[.58,1.32],[.06,1.90],[-.06,1.95],[-1.22,1.95],[-1.48,1.62],[-1.78,1.26],[-2.4,1.16]];
- const wheelW=x=>{let w=0;for(const a of axles){const d=Math.abs(x-a),R=.78;if(d<R)w=Math.max(w,Math.cos(d/R*Math.PI/2));}return w;};
- const botY=x=>{let y=.40;for(const a of axles){const d=Math.abs(x-a),R=.64;if(d<R)y=Math.max(y,.38+Math.sqrt(Math.max(0,1-(d/R)**2))*.58);}return y;};
- // Convex rounded rectangle. Width stays broad so the nose cannot pinch to a point.
+ const span=(a,b,n)=>{for(let i=0;i<=n;i++){const x=+(a+(b-a)*i/n).toFixed(4);if(!xs.length||Math.abs(xs.at(-1)-x)>.01)xs.push(x);}};
+ span(2.30,1.55,3);span(1.55,.62,3);span(.62,.08,3);span(.08,-1.28,5);span(-1.28,-1.72,3);span(-1.72,-2.36,3);
+ // Flat hood until 0.62, then a steep windshield up to the roof. Linear, so the break stays sharp.
+ const topKeys=[[2.30,1.14],[.62,1.18],[.50,1.34],[.10,1.88],[-.02,1.95],[-1.22,1.95],[-1.42,1.68],[-1.72,1.28],[-2.36,1.14]];
+ const flared=x=>axles.some(a=>Math.abs(x-a)<.52);
+ const botY=x=>{let y=.42;for(const a of axles){const d=Math.abs(x-a),R=.60;if(d<R)y=Math.max(y,.40+Math.sqrt(Math.max(0,1-(d/R)**2))*.56);}return y;};
  const ring=x=>{
-  const flare=wheelW(x),bot=botY(x),top=sampleKeys(topKeys,x),hw=.98+flare*.08;
-  const right=[[bot,.04],[bot,hw*.78],[bot+.05,hw],[(bot+top)*.42,hw],[top-.05,hw],[top,hw*.78],[top,hw*.22],[top+.012,0]];
+  const bot=botY(x),top=sampleKeys(topKeys,x),hw=flared(x)?1.06:.94;
+  const right=[[bot,.03],[bot,hw*.8],[bot+.04,hw],[(bot+Math.min(top,1.32))*.5,hw],[Math.min(top-.04,1.32),hw],[top,hw*.82],[top,hw*.2],[top+.008,0]];
   const full=right.slice();
   for(let i=right.length-2;i>=0;i--)full.push([right[i][0],-right[i][1]]);
   return full.map(([y,z])=>[x,y,z]);
  };
  const rings=xs.map(ring),N=rings[0].length,pos=[],iy=[],ib=[];
  for(const r of rings)for(const p of r)pos.push(p[0],p[1],p[2]);
- const faceBlack=(quad)=>{let y=0,x=0,minY=Infinity;for(const p of quad){x+=p[0];y+=p[1];minY=Math.min(minY,p[1]);}x/=4;y/=4;
-  const cabin=x<.15&&x>-1.5;
-  return (cabin&&minY>1.72)||y<.52;
+ const faceBlack=quad=>{let y=0,x=0,minY=1e9;for(const p of quad){x+=p[0];y+=p[1];minY=Math.min(minY,p[1]);}x/=4;y/=4;
+  const cabin=x<.12&&x>-1.35;
+  return y<.50||(cabin&&minY>1.84);
  };
  for(let s=0;s<rings.length-1;s++){
   const base=s*N;
   for(let i=0;i<N;i++){
    const a=base+i,b=base+(i+1)%N,c=base+N+i,d=base+N+(i+1)%N;
    const quad=[rings[s][i],rings[s][(i+1)%N],rings[s+1][i],rings[s+1][(i+1)%N]];
-   const e0=Math.hypot(quad[1][0]-quad[0][0],quad[1][1]-quad[0][1],quad[1][2]-quad[0][2]);
-   const e1=Math.hypot(quad[2][0]-quad[0][0],quad[2][1]-quad[0][1],quad[2][2]-quad[0][2]);
-   if(e0<.004||e1<.004)continue;
+   if(Math.hypot(quad[1][1]-quad[0][1],quad[1][2]-quad[0][2])<.003)continue;
    (faceBlack(quad)?ib:iy).push(a,b,c,b,d,c);
   }
  }
- // Horizontal bands across the nose and tail so the bumper stays a band, not a fan.
  const cap=(si,sign)=>{
   const ring=rings[si],base=si*N;
   for(let i=0;i<6;i++){
    const a=base+i,b=base+i+1,d=base+(N-1-i),c=base+(N-1-(i+1));
-   const y=(ring[i][1]+ring[i+1][1])/2,bucket=y<.60?ib:iy;
+   const y=(ring[i][1]+ring[i+1][1])/2,bucket=y<.55?ib:iy;
    sign>0?bucket.push(a,d,b,b,d,c):bucket.push(a,b,d,b,c,d);
   }
-  const a=base+6,b=base+7,c=base+8,y=(ring[6][1]+ring[7][1])/2,bucket=y<.60?ib:iy;
+  const a=base+6,b=base+7,c=base+8,y=(ring[6][1]+ring[7][1])/2,bucket=y<.55?ib:iy;
   sign>0?bucket.push(a,c,b):bucket.push(a,b,c);
  };
  cap(0,1);cap(rings.length-1,-1);
  const geo=()=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));return g;};
- const tidy=g=>{g.computeVertexNormals();const n=g.attributes.normal;if(!n)return g;for(let i=0;i<n.count;i++){const l=Math.hypot(n.getX(i),n.getY(i),n.getZ(i));if(!Number.isFinite(l)||l<.5)n.setXYZ(i,0,1,0);}return g;};
+ const tidy=g=>{g.computeVertexNormals();const n=g.attributes.normal;for(let i=0;i<n.count;i++){const l=Math.hypot(n.getX(i),n.getY(i),n.getZ(i));if(!Number.isFinite(l)||l<.5)n.setXYZ(i,0,1,0);}return g;};
  const paint=geo();paint.setIndex(iy);tidy(paint);
  const black=geo();black.setIndex(ib);tidy(black);
- return {paint,black,top:(x)=>sampleKeys(topKeys,x),axles:[fa,ra]};
+ return {paint,black,top:x=>sampleKeys(topKeys,x)};
 }
 export function makePaceCar(low=false){
  const g=new THREE.Group();g.name='pace-car';g.rotation.order='YXZ';
  const L=4.821,WB=3.119,frontOH=.78,frontAxle=L/2-frontOH,rearAxle=frontAxle-WB,trackW=1.763;
- const tireR=(17*0.0254+2*0.315*0.70)/2,tireW=.30;
- const paint=new THREE.MeshPhysicalMaterial({color:0xf0c400,metalness:.42,roughness:.28,clearcoat:.72,clearcoatRoughness:.18});
- const blackMat=new THREE.MeshStandardMaterial({color:0x12110f,roughness:.55,metalness:.08});
- const glass=new THREE.MeshPhysicalMaterial({color:0x163040,metalness:.72,roughness:.06,clearcoat:1,clearcoatRoughness:.04,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
+ const tireR=(17*0.0254+2*0.315*0.70)/2,tireW=.32,halfT=trackW/2;
+ const paint=new THREE.MeshPhysicalMaterial({color:0xf0c400,metalness:.28,roughness:.38,clearcoat:.45,clearcoatRoughness:.3,flatShading:true});
+ const blackMat=new THREE.MeshStandardMaterial({color:0x161411,roughness:.7,metalness:.02,flatShading:true});
+ const glass=new THREE.MeshPhysicalMaterial({color:0x1c3344,metalness:.5,roughness:.07,clearcoat:1,clearcoatRoughness:.05,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
  const add=(geo,mat,x,y,z,name)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);if(name)m.name=name;m.castShadow=!low&&mat!==glass;m.receiveShadow=!low;g.add(m);return m;};
- const rubber=new THREE.MeshStandardMaterial({color:0x1c1a17,roughness:.92}),alloy=new THREE.MeshStandardMaterial({color:0xd5dbe0,metalness:.86,roughness:.2}),
-  chrome=new THREE.MeshStandardMaterial({color:0xe7ecef,metalness:.94,roughness:.12});
+ const rubber=new THREE.MeshStandardMaterial({color:0x1c1a17,roughness:.94}),alloy=new THREE.MeshStandardMaterial({color:0xd5dbe0,metalness:.86,roughness:.22}),
+  chrome=new THREE.MeshStandardMaterial({color:0xe8eef2,metalness:.9,roughness:.16});
  const box=(w,h,d)=>new THREE.BoxGeometry(w,h,d);
- const shell=h2Shell(),halfT=trackW/2,roofTop=1.94;
- add(shell.paint,paint,0,0,0,'h2-body');
- add(shell.black,blackMat,0,0,0,'h2-trim');
  const pane=(name,ax,ay,az,bx,by,bz,cx,cy,cz,dx,dy,dz)=>{
   const geo=new THREE.BufferGeometry();
   geo.setAttribute('position',new THREE.Float32BufferAttribute([ax,ay,az,bx,by,bz,cx,cy,cz,dx,dy,dz],3));
-  geo.setIndex([0,1,2,0,2,3,0,2,1,0,3,2]);geo.computeVertexNormals();
+  geo.setIndex([0,1,2,0,2,3]);geo.computeVertexNormals();const nn=geo.attributes.normal;for(let i=0;i<nn.count;i++){const l=Math.hypot(nn.getX(i),nn.getY(i),nn.getZ(i));if(!Number.isFinite(l)||l<.5)nn.setXYZ(i,0,0,1);}
   const m=add(geo,glass,0,0,0,name);m.castShadow=false;return m;
  };
- // Glass sits on the shell, inset from the black roof band. Frames are the shell itself.
- pane('h2-glass-wind',.52,shell.top(.52)+.02,-.78,.52,shell.top(.52)+.02,.78,.02,shell.top(.02)+.02,.76,.02,shell.top(.02)+.02,-.76);
+ const shell=h2Shell();
+ add(shell.paint,paint,0,0,0,'h2-body');
+ add(shell.black,blackMat,0,0,0,'h2-trim');
+ // Windshield is the steep face: 0.52 m of rise over 0.36 m of run, 1.46 m wide.
+ pane('h2-glass-wind',.56,1.36,-.82,.56,1.36,.82,.16,1.88,.76,.16,1.88,-.76);
+ const frame=(x0,x1,y0,y1,z,name)=>{
+  const s=Math.sign(z)||1,cx=(x0+x1)/2,cy=(y0+y1)/2;
+  add(box(Math.abs(x1-x0)+.07,(y1-y0)+.07,.03),blackMat,cx,cy,z,'h2-frame');
+  pane(name,x0,y0,z+s*.016,x1,y0,z+s*.016,x1,y1,z+s*.016,x0,y1,z+s*.016);
+ };
  for(const s of[-1,1]){
-  pane('h2-glass-side',-.02,1.42,s*1.07,-.5,1.42,s*1.07,-.5,1.74,s*1.07,-.02,1.74,s*1.07);
-  pane('h2-glass-side',-.68,1.42,s*1.07,-1.16,1.42,s*1.07,-1.16,1.74,s*1.07,-.68,1.74,s*1.07);
+  frame(.18,-.38,1.40,1.78,s*1.0,'h2-glass-side');
+  frame(-.52,-1.02,1.40,1.78,s*1.0,'h2-glass-side');
+  frame(-1.16,-1.38,1.48,1.76,s*.98,'h2-glass-quarter');
+  add(box(.09,.46,.05),blackMat,-.45,1.59,s*1.02,'h2-bpillar');
+  add(box(.09,.42,.05),blackMat,-1.09,1.60,s*1.0,'h2-cpillar');
+  add(box(.18,.14,.24),blackMat,.22,1.55,s*1.12,'h2-mirror');
+  add(box(1.1,.04,.045),blackMat,-.55,1.97,s*.55,'h2-rail');
  }
- pane('h2-glass-rear',-1.30,1.78,-.7,-1.30,1.78,.7,-1.62,1.38,.66,-1.62,1.38,-.66);
- // Wide recessed grille on the nose, lamps flush in the fenders.
- add(box(.04,.50,.92),blackMat,2.34,.98,0,'h2-grille-pocket');
- add(box(.03,.56,.045),chrome,2.39,.98,-.48);add(box(.03,.56,.045),chrome,2.39,.98,.48);
- add(box(.03,.04,.98),chrome,2.39,1.25,0);add(box(.03,.04,.98),chrome,2.39,.71,0);
- const bars=new THREE.InstancedMesh(box(.022,.44,.05),chrome,7),bm=new THREE.Matrix4();
- for(let i=0;i<7;i++)bm.makeTranslation(2.37,.98,-.36+i*(.72/6)),bars.setMatrixAt(i,bm);
+ pane('h2-glass-rear',-1.48,1.78,-.6,-1.48,1.78,.6,-1.66,1.42,.55,-1.66,1.42,-.55);
+ add(box(.045,.045,1.0),blackMat,-.2,1.985,0,'h2-crossbar');
+ add(box(.045,.045,1.0),blackMat,-.9,1.985,0,'h2-crossbar');
+ // Grille is on the nose and ends below the hood (hood line is y=1.14).
+ const gTop=1.05,gBot=.66;
+ add(box(.05,gTop-gBot,.90),blackMat,2.36,(gTop+gBot)/2,0,'h2-grille-pocket');
+ add(box(.02,gTop-gBot+.05,.028),chrome,2.40,(gTop+gBot)/2,-.47);add(box(.02,gTop-gBot+.05,.028),chrome,2.40,(gTop+gBot)/2,.47);
+ add(box(.02,.028,.96),chrome,2.40,gTop+.01,0);add(box(.02,.028,.96),chrome,2.40,gBot-.01,0);
+ const bars=new THREE.InstancedMesh(box(.016,gTop-gBot-.05,.028),chrome,7),bm=new THREE.Matrix4();
+ for(let i=0;i<7;i++)bm.makeTranslation(2.385,(gTop+gBot)/2,-.32+i*(.64/6)),bars.setMatrixAt(i,bm);
  bars.name='h2-vertical-grille';g.add(bars);
- const headMat=new THREE.MeshStandardMaterial({color:0xf4f7fb,emissive:0xdfe7f2,emissiveIntensity:.35,roughness:.12,metalness:.05});
+ const headMat=new THREE.MeshStandardMaterial({color:0xf4f7fb,emissive:0xdfe7f2,emissiveIntensity:.35,roughness:.14,metalness:.04});
  const turnMat=new THREE.MeshBasicMaterial({color:0xffb03a}),tailMat=new THREE.MeshStandardMaterial({color:0x8a1814,emissive:0xff2a1a,emissiveIntensity:.45,roughness:.35});
- const lampGeo=new THREE.CylinderGeometry(.078,.078,.035,low?12:18).rotateZ(Math.PI/2);
- const bezelGeo=new THREE.TorusGeometry(.092,.011,6,low?14:20).rotateY(Math.PI/2);
- const turnGeo=new THREE.CylinderGeometry(.028,.028,.025,low?8:12).rotateZ(Math.PI/2);
+ const lampGeo=new THREE.CylinderGeometry(.07,.07,.028,low?12:18).rotateZ(Math.PI/2);
+ const bezelGeo=new THREE.TorusGeometry(.082,.01,6,low?14:20).rotateY(Math.PI/2);
  for(const s of[-1,1]){
-  const lamp=add(lampGeo,headMat,2.40,1.02,s*.72,'h2-headlamp');lamp.castShadow=false;
-  add(bezelGeo,chrome,2.385,1.02,s*.72).castShadow=false;
-  add(turnGeo,turnMat,2.37,.78,s*.86).castShadow=false;
-  add(box(.035,.42,.09),tailMat,-2.385,1.12,s*.78).castShadow=false;
-  add(box(1.7,.045,.07),new THREE.MeshStandardMaterial({color:0xc5ccd1,metalness:.7,roughness:.28}),-.15,.36,s*1.06,'h2-step');
-  add(box(.12,.08,.1),blackMat,.12,1.52,s*1.02,'h2-mirror');
-  add(box(.08,.035,.035),blackMat,.2,1.16,s*1.0);
-  add(box(.08,.035,.035),blackMat,-.85,1.16,s*1.0);
+  const lamp=add(lampGeo,headMat,2.40,.90,s*.72,'h2-headlamp');lamp.castShadow=false;
+  add(bezelGeo,chrome,2.39,.90,s*.72).castShadow=false;
+  add(new THREE.CylinderGeometry(.024,.024,.02,10).rotateZ(Math.PI/2),turnMat,2.31,.72,s*.84).castShadow=false;
+  add(box(.03,.36,.08),tailMat,-2.36,1.08,s*.78).castShadow=false;
  }
- add(box(.22,.035,.16),blackMat,1.85,shell.top(1.85)+.02,-.28);
- add(box(.22,.035,.16),blackMat,1.85,shell.top(1.85)+.02,.28);
- for(const s of[-1,1])add(box(1.05,.028,.045),blackMat,-.62,roofTop+.02,s*.52,'h2-rail');
- const seg=low?16:24;
- const tread=tireGeo(tireR,tireW+.02,seg);
+ add(box(.7,.05,.24),blackMat,-.45,1.99,0,'h2-lightbar');
+ const lamps=[],sprites=[],tex=glowTexture();
+ for(const s of[-1,1]){
+  const mat=new THREE.MeshStandardMaterial({color:0xffb000,emissive:0xffaa00,emissiveIntensity:1.4,roughness:.4});
+  const lamp=add(box(.18,.045,.09),mat,-.45,2.03,s*.06,'h2-pace-lamp');lamp.castShadow=false;lamps.push(lamp);
+  if(!low||s>0){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffb020,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.4}));sp.scale.setScalar(.28);sp.position.set(-.45,2.05,s*.06);g.add(sp);sprites.push(sp);}
+ }
+ const seg=low?16:24,tread=tireGeo(tireR,tireW,seg);
  const lipGeo=new THREE.TorusGeometry(.20,.016,low?5:7,low?18:24);
- const hubGeo=new THREE.CylinderGeometry(.05,.05,.035,low?8:12).rotateX(Math.PI/2);
- const spokeGeo=box(.145,.032,.018);spokeGeo.translate(.08,0,.015);
- const wheels=[[frontAxle,halfT],[frontAxle,-halfT],[rearAxle,halfT],[rearAxle,-halfT]];
- for(const [x,z] of wheels){
+ const hubGeo=new THREE.CylinderGeometry(.05,.05,.03,low?8:12).rotateX(Math.PI/2);
+ const spokeGeo=box(.14,.028,.016);spokeGeo.translate(.078,0,.01);
+ for(const [x,z] of [[frontAxle,halfT],[frontAxle,-halfT],[rearAxle,halfT],[rearAxle,-halfT]]){
   add(tread,rubber,x,tireR,z,'h2-tire');
-  const oz=z+Math.sign(z)*.07;
+  const oz=z+Math.sign(z)*.06;
   add(lipGeo,alloy,x,tireR,oz,'h2-rim');
-  add(hubGeo,alloy,x,tireR,oz+.012,'h2-hub');
+  add(hubGeo,alloy,x,tireR,oz+.01,'h2-hub');
   for(let i=0;i<6;i++){const sp=add(spokeGeo,alloy,x,tireR,oz,'h2-spoke');sp.rotation.z=i*Math.PI/3;}
  }
- const spare=add(tread,rubber,-2.62,1.05,0,'h2-spare');spare.rotation.y=Math.PI/2;spare.scale.setScalar(.92);
- add(new THREE.CylinderGeometry(.2,.2,.07,low?10:16).rotateZ(Math.PI/2),alloy,-2.68,1.05,0,'h2-spare-cover');
+ const spare=add(tread,rubber,-2.52,1.05,0,'h2-spare');spare.rotation.y=Math.PI/2;spare.scale.setScalar(.9);
+ add(new THREE.CylinderGeometry(.17,.17,.05,low?10:14).rotateZ(Math.PI/2),alloy,-2.56,1.05,0);
  const c=document.createElement('canvas');c.width=512;c.height=64;const ctx=c.getContext('2d');ctx.fillStyle='#1a1408';ctx.font='700 46px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('PACE CAR',256,34);
  const texLabel=new THREE.CanvasTexture(c);texLabel.colorSpace=THREE.SRGBColorSpace;const label=new THREE.MeshBasicMaterial({map:texLabel,transparent:true,depthWrite:false});
- for(const s of[-1,1]){const m=new THREE.Mesh(new THREE.PlaneGeometry(.85,.14),label);m.name='h2-label';m.position.set(-.15,1.08,s*1.005);if(s<0)m.rotation.y=Math.PI;g.add(m);}
- add(box(.46,.04,.28),blackMat,-.4,roofTop+.035,0,'h2-lightbar');
- const lamps=[],sprites=[],tex=glowTexture();
- for(const s of[-1,1]){const mat=new THREE.MeshStandardMaterial({color:0x6a3a00,emissive:0xffa000,emissiveIntensity:2.2,roughness:.3});const lamp=add(box(.14,.03,.1),mat,-.4,roofTop+.06,s*.07,'h2-pace-lamp');lamp.castShadow=false;lamps.push(lamp);
-  if(!low||s>0){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffb020,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.65}));sp.scale.setScalar(low?.85:.5);sp.position.set(-.4,roofTop+.08,low?0:s*.07);g.add(sp);sprites.push(sp);}}
+ for(const s of[-1,1]){const m=new THREE.Mesh(new THREE.PlaneGeometry(.78,.12),label);m.position.set(-.05,1.08,s*1.0);if(s<0)m.rotation.y=Math.PI;g.add(m);}
  let tris=0;g.traverse(o=>{if(o.isMesh||o.isInstancedMesh){const n=o.geometry?.index?o.geometry.index.count/3:(o.geometry?.attributes.position.count||0)/3;tris+=n*(o.isInstancedMesh?o.count:1);}});
  g.userData={lamps,sprites,bar:lamps[0],frontAxle,rearAxle,trackWidth:trackW,halfLength:2.85,halfWidth:1.1,bodyLength:L,bodyWidth:2.062,bodyHeight:1.976,grille:'seven-vertical',lampsShape:'round',triangles:Math.round(tris)};return g;
 }
@@ -210,9 +214,9 @@ export function auditPaceCar(group){
   const hit=ray.intersectObjects(meshes,false)[0];
   if(!hit||!hit.object.name.startsWith(expect))fails.push(`ray ${expect} hit ${hit?.object.name||'nothing'}`);
  };
- probe(new THREE.Vector3(-.25,1.55,1.8),new THREE.Vector3(0,0,-1),'h2-glass');
- probe(new THREE.Vector3(-.9,1.55,-1.8),new THREE.Vector3(0,0,1),'h2-glass');
- probe(new THREE.Vector3(3.4,1.02,.72),new THREE.Vector3(-1,0,0),'h2-headlamp');
+ probe(new THREE.Vector3(-.1,1.58,1.7),new THREE.Vector3(0,0,-1),'h2-glass');
+ probe(new THREE.Vector3(-.8,1.58,-1.7),new THREE.Vector3(0,0,1),'h2-glass');
+ probe(new THREE.Vector3(3.4,.90,.72),new THREE.Vector3(-1,0,0),'h2-headlamp');
  return fails;
 }
 export class PaceCar{
