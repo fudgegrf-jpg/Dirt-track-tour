@@ -181,4 +181,4 @@ The pit lane on both Salina and Batesville now runs parallel to the backstretch 
 
 The large pit-entrance billboard is gone. A small flashing amber beacon stands just off the driving line at the opening. The catch fence stays.
 
-The pace car is an original low-poly SUV proportioned to the 2003 Hummer H2 (published length, width, height, wheelbase and track). It keeps the amber roof bar, the two-wide caution lead and the infield pull-off. There is no Hummer badge or copied vehicle mesh.
+The pace car is an original low-poly SUV in the shape of the 2003 Hummer H2: published proportions, seven vertical grille slots, round headlights, a flat hood, dark glass, squared fenders and chunky tires. It keeps the amber roof bar, the two-wide caution lead and the infield pull-off. There is no Hummer badge or copied vehicle mesh.

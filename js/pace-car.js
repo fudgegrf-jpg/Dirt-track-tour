@@ -11,47 +11,67 @@ const wrapP=(v,P)=>((v%P)+P)%P,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 export function makePaceCar(low=false){
  const g=new THREE.Group();g.name='pace-car';g.rotation.order='YXZ';
  const n=low?2:3;
+ // 2003 H2 published size. The face follows the civilian H2: seven vertical grille
+ // slots and round lamps, not a horizontal-bar truck grille. No name badge.
  const L=4.821,WB=3.119,frontOH=.78,frontAxle=L/2-frontOH,rearAxle=frontAxle-WB,trackW=1.763,tireR=(17*0.0254+2*0.315*0.70)/2;
- const paint=new THREE.MeshStandardMaterial({color:0xf3f1ea,metalness:.28,roughness:.42}),black=new THREE.MeshStandardMaterial({color:0x141618,roughness:.72}),glass=new THREE.MeshStandardMaterial({color:0x243848,metalness:.35,roughness:.18}),amber=new THREE.MeshStandardMaterial({color:0xf0a21a,roughness:.5});
+ const paint=new THREE.MeshStandardMaterial({color:0xc8b89a,metalness:.22,roughness:.48});
+ const black=new THREE.MeshStandardMaterial({color:0x121416,roughness:.78});
+ const glass=new THREE.MeshStandardMaterial({color:0x070b10,metalness:.62,roughness:.06,envMapIntensity:1.1});
+ const amber=new THREE.MeshStandardMaterial({color:0xf0a21a,roughness:.45,emissive:0x5a3208,emissiveIntensity:.35});
  const add=(geo,mat,x,y,z,p=g)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=!low;m.receiveShadow=!low;p.add(m);return m;};
- const rubber=new THREE.MeshStandardMaterial({color:0x111213,roughness:.94}),rim=new THREE.MeshStandardMaterial({color:0xb7bcc2,metalness:.72,roughness:.32}),
-  steel=new THREE.MeshStandardMaterial({color:0x1a1e20,metalness:.45,roughness:.55}),chrome=new THREE.MeshStandardMaterial({color:0xc5ccd2,metalness:.82,roughness:.22});
- // High beltline, short flat hood, black cladding, upright glass band. Roof at the 77.8 in spec.
- add(beveledBox(4.62,.32,2.06,.05,n),black,-.04,.56,0);
- add(beveledBox(4.35,.62,1.98,.06,n),paint,-.12,1.05,0);
- add(beveledBox(1.28,.06,1.92,.02,2),paint,1.48,1.28,0);
- add(beveledBox(2.05,.5,1.8,.04,n),glass,-.32,1.64,0);
- add(beveledBox(2.28,.06,1.92,.02,2),paint,-.28,1.94,0);
- add(new THREE.BoxGeometry(.1,.52,1.82),paint,.72,1.64,0);
- add(new THREE.BoxGeometry(.12,.52,1.82),paint,-1.38,1.64,0);
- if(!low)for(const z of[-.88,.88])add(new THREE.BoxGeometry(1.9,.04,.045),steel,-.28,2.01,z);
- for(const z of[-1.0,1.0])add(new THREE.BoxGeometry(3.9,.055,.02),amber,-.15,.74,z);
- // Squared grille of horizontal slats between rectangular lamps. No name badge.
- add(new THREE.BoxGeometry(.07,.58,1.16),black,2.4,1.02,0);
- const bars=low?5:7;for(let i=0;i<bars;i++)add(new THREE.BoxGeometry(.045,.028,1.08),chrome,2.45,.78+i*(.46/(bars-1)),0);
- const head=new THREE.MeshBasicMaterial({color:0xf4f6ff}),tail=new THREE.MeshBasicMaterial({color:0xff2a1a}),turn=new THREE.MeshBasicMaterial({color:0xffb03a});
- for(const z of[-.78,.78]){add(new THREE.BoxGeometry(.05,.22,.3),head,2.42,1.16,z).castShadow=false;add(new THREE.BoxGeometry(.04,.08,.28),turn,2.43,.96,z).castShadow=false;}
- add(beveledBox(.34,.28,2.06,.04,2),steel,2.34,.52,0);
- add(beveledBox(.22,.26,2.02,.04,2),steel,-2.28,.54,0);
- for(const z of[-.82,.82])add(new THREE.BoxGeometry(.04,.36,.18),tail,-2.4,1.16,z).castShadow=false;
- for(const [px,pz]of[[frontAxle,-trackW/2],[frontAxle,trackW/2],[rearAxle,-trackW/2],[rearAxle,trackW/2]]){
-  add(new THREE.CylinderGeometry(tireR,tireR,.3,low?12:18).rotateX(Math.PI/2),rubber,px,tireR,pz).castShadow=false;
-  add(new THREE.CylinderGeometry(.2,.2,.32,low?8:12).rotateX(Math.PI/2),rim,px,tireR,pz).castShadow=false;
+ const rubber=new THREE.MeshStandardMaterial({color:0x14120f,roughness:.96}),rim=new THREE.MeshStandardMaterial({color:0xd5dbe0,metalness:.78,roughness:.28}),
+  steel=new THREE.MeshStandardMaterial({color:0x1a1e20,metalness:.4,roughness:.58}),chrome=new THREE.MeshStandardMaterial({color:0xd7dde2,metalness:.88,roughness:.18});
+ // Tall body stops at the belt so the glass is the cabin, not a beige panel.
+ add(beveledBox(4.55,.34,2.08,.05,n),black,-.06,.52,0);
+ add(beveledBox(2.85,.58,1.96,.05,n),paint,-.62,1.02,0);
+ add(beveledBox(1.42,.07,1.86,.02,2),paint,1.28,1.30,0);
+ add(beveledBox(.55,.16,1.7,.03,2),paint,1.85,1.16,0);
+ if(!low)for(const z of[-.32,.32])add(new THREE.BoxGeometry(.28,.025,.1),black,.72,1.345,z);
+ const windshield=add(new THREE.BoxGeometry(.045,.7,1.68),glass,.48,1.66,0);windshield.rotation.z=-.36;windshield.castShadow=false;
+ add(new THREE.BoxGeometry(1.75,.48,1.72),new THREE.MeshStandardMaterial({color:0x07080a,roughness:1}),-.35,1.64,0);
+ for(const s of[-1,1]){const side=add(new THREE.PlaneGeometry(1.95,.5),glass,-.38,1.66,s*1.005);side.castShadow=false;if(s<0)side.rotation.y=Math.PI;}
+ const rearGlass=add(new THREE.PlaneGeometry(1.55,.46),glass,-1.78,1.64,0);rearGlass.rotation.y=-Math.PI/2;rearGlass.castShadow=false;
+ add(beveledBox(2.15,.06,1.9,.02,2),paint,-.45,1.95,0);
+ for(const z of[-.84,.84])add(new THREE.BoxGeometry(.07,.5,.08),paint,.5,1.62,z);
+ for(const z of[-.84,.84])add(new THREE.BoxGeometry(.08,.48,.08),paint,-1.5,1.58,z);
+ if(!low){for(const z of[-.86,.86])add(new THREE.BoxGeometry(1.7,.035,.04),steel,-.4,2.02,z);add(new THREE.BoxGeometry(.04,.03,1.64),steel,-.15,2.03,0);}
+ for(const z of[-1.02,1.02])add(new THREE.BoxGeometry(3.6,.05,.018),amber,-.2,.76,z);
+ // Seven vertical slots: black opening, chrome dividers. Round lamps outboard.
+ add(new THREE.BoxGeometry(.05,.5,1.02),black,2.36,1.02,0);
+ const bars=new THREE.InstancedMesh(new THREE.BoxGeometry(.06,.52,.028),chrome,8),bm=new THREE.Matrix4();
+ for(let i=0;i<8;i++){bm.makeTranslation(2.4,1.02,-.44+i*(.88/7));bars.setMatrixAt(i,bm);}bars.name='h2-vertical-grille';bars.castShadow=false;g.add(bars);
+ const lampGeo=new THREE.CylinderGeometry(.115,.115,.05,low?12:18).rotateZ(Math.PI/2);
+ const bezelGeo=new THREE.TorusGeometry(.132,.022,6,low?12:18).rotateY(Math.PI/2);
+ const headMat=new THREE.MeshStandardMaterial({color:0xf7f8ff,emissive:0xdde4ee,emissiveIntensity:.45,roughness:.2,metalness:.15});
+ const tailMat=new THREE.MeshBasicMaterial({color:0xff2a1a}),turnMat=new THREE.MeshBasicMaterial({color:0xffb03a});
+ for(const z of[-.7,.7]){
+  add(new THREE.BoxGeometry(.04,.32,.32),black,2.34,1.06,z);
+  add(lampGeo,headMat,2.4,1.06,z).castShadow=false;
+  add(bezelGeo,chrome,2.41,1.06,z).castShadow=false;
+  add(new THREE.CylinderGeometry(.055,.055,.04,low?10:14).rotateZ(Math.PI/2),turnMat,2.4,.84,z*1.22).castShadow=false;
  }
- for(const px of[frontAxle,rearAxle])add(beveledBox(.98,.18,2.08,.04,2),black,px,.98,0);
- for(const z of[-1.04,1.04])add(new THREE.BoxGeometry(1.9,.05,.14),steel,.1,.4,z);
- for(const z of[-1,1])add(new THREE.BoxGeometry(.14,.1,.16),black,.7,1.5,z*1.02).castShadow=false;
- // Tailgate-mounted spare, the H2's rear silhouette, without a logo cover.
- add(new THREE.CylinderGeometry(.42,.42,.2,low?12:16).rotateZ(Math.PI/2),rubber,-2.58,1.18,0).castShadow=false;
- if(!low)add(new THREE.TorusGeometry(.42,.045,6,14).rotateY(Math.PI/2),steel,-2.66,1.18,0).castShadow=false;
+ add(beveledBox(.36,.3,2.1,.04,2),black,2.28,.5,0);
+ add(beveledBox(.24,.26,2.02,.04,2),black,-2.3,.52,0);
+ for(const z of[-.86,.86])add(new THREE.BoxGeometry(.04,.42,.16),tailMat,-2.42,1.14,z).castShadow=false;
+ const tireGeo=new THREE.CylinderGeometry(tireR,tireR,.36,low?12:18).rotateX(Math.PI/2);
+ const rimGeo=new THREE.CylinderGeometry(.2,.2,.38,low?8:12).rotateX(Math.PI/2);
+ for(const [px,pz]of[[frontAxle,-trackW/2],[frontAxle,trackW/2],[rearAxle,-trackW/2],[rearAxle,trackW/2]]){
+  add(tireGeo,rubber,px,tireR,pz).castShadow=false;
+  add(rimGeo,rim,px,tireR,pz).castShadow=false;
+ }
+ for(const px of[frontAxle,rearAxle])add(beveledBox(1.02,.2,2.12,.04,2),black,px,.96,0);
+ for(const z of[-1.05,1.05])add(new THREE.BoxGeometry(1.85,.055,.16),steel,.05,.4,z);
+ for(const z of[-1,1])add(new THREE.BoxGeometry(.16,.18,.12),black,.62,1.42,z*1.08).castShadow=false;
+ add(new THREE.CylinderGeometry(.46,.46,.22,low?12:18).rotateZ(Math.PI/2),rubber,-2.62,1.16,0).castShadow=false;
+ if(!low)add(new THREE.TorusGeometry(.46,.04,6,16).rotateY(Math.PI/2),chrome,-2.72,1.16,0).castShadow=false;
  const c=document.createElement('canvas');c.width=512;c.height=96;const ctx=c.getContext('2d');ctx.fillStyle='#111';ctx.font='900 64px Arial Black, Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('PACE CAR',256,50);
  const texLabel=new THREE.CanvasTexture(c);texLabel.colorSpace=THREE.SRGBColorSpace;const label=new THREE.MeshBasicMaterial({map:texLabel,transparent:true,depthWrite:false});
- for(const s of[-1,1]){const m=new THREE.Mesh(new THREE.PlaneGeometry(1.2,.26),label);m.position.set(-.25,1.05,s*0.995);if(s<0)m.rotation.y=Math.PI;g.add(m);}
- const bar=new THREE.Group();bar.position.set(-.2,2.04,0);g.add(bar);add(beveledBox(.28,.07,1.05,.03,2),black,0,0,0,bar);
+ for(const s of[-1,1]){const m=new THREE.Mesh(new THREE.PlaneGeometry(1.15,.24),label);m.position.set(-.45,1.02,s*1.0);if(s<0)m.rotation.y=Math.PI;g.add(m);}
+ const bar=new THREE.Group();bar.position.set(-.35,2.06,0);g.add(bar);add(beveledBox(.26,.06,.9,.02,2),black,0,0,0,bar);
  const lamps=[],sprites=[],tex=glowTexture();
- for(const s of[-1,1]){const mat=new THREE.MeshStandardMaterial({color:0x6b3e00,emissive:0xffa000,emissiveIntensity:2.5,roughness:.3});const lamp=add(new THREE.BoxGeometry(.22,.08,.42),mat,0,.07,s*.24,bar);lamp.castShadow=false;lamps.push(lamp);
-  if(!low||s>0){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffa21c,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.85}));sp.scale.setScalar(low?1.5:1.05);sp.position.set(0,.12,low?0:s*.24);bar.add(sp);sprites.push(sp);}}
- g.userData={lamps,sprites,bar,frontAxle,rearAxle,trackWidth:trackW,halfLength:2.7,halfWidth:1.08,bodyLength:L,bodyWidth:2.062,bodyHeight:1.976};return g;
+ for(const s of[-1,1]){const mat=new THREE.MeshStandardMaterial({color:0x6b3e00,emissive:0xffa000,emissiveIntensity:2.4,roughness:.3});const lamp=add(new THREE.BoxGeometry(.2,.07,.36),mat,0,.06,s*.2,bar);lamp.castShadow=false;lamps.push(lamp);
+  if(!low||s>0){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffa21c,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.8}));sp.scale.setScalar(low?1.3:.85);sp.position.set(0,.1,low?0:s*.2);bar.add(sp);sprites.push(sp);}}
+ g.userData={lamps,sprites,bar,frontAxle,rearAxle,trackWidth:trackW,halfLength:2.75,halfWidth:1.08,bodyLength:L,bodyWidth:2.062,bodyHeight:1.976,grille:'seven-vertical',lampsShape:'round'};return g;
 }
 export class PaceCar{
  constructor(race){
