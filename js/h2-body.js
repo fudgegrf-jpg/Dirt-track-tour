@@ -12,35 +12,36 @@ const W = 81.2 * IN, H = 77.8 * IN, TRACK = 69.4 * IN;
 const FA = WB / 2, RA = -WB / 2;
 const NOSE = FA + FOH, TAIL = RA - ROH;
 const TIRE_R = (17 * IN) / 2 + 0.315 * 0.70, TIRE_W = 0.318;
-export const H2_LAMP = { x: 2.355, y: 0.95, z: 0.70 };
+export const H2_LAMP = { x: 2.378, y: 1.01, z: 0.76 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
 
 function yBottom(x) {
-  let y = 0.40;
+  let y = 0.42;
   for (const axle of [FA, RA]) {
-    const dx = x - axle, R = 0.515, cy = 0.45;
+    const dx = x - axle, R = 0.47, cy = 0.44;
     if (Math.abs(dx) < R) y = Math.max(y, cy + Math.sqrt(R * R - dx * dx));
   }
   return y;
 }
 function yTop(x) {
-  if (x < 1.00) return 1.355;
-  if (x < 1.62) return lerp(1.355, 1.24, smooth((x - 1.00) / 0.62));
-  return lerp(1.24, 1.145, smooth((x - 1.62) / (2.28 - 1.62)));
+  // High beltline. The hood is a separate surface that slopes down ahead of the cowl.
+  if (x < 1.20) return 1.48;
+  if (x < 1.70) return lerp(1.48, 1.36, smooth((x - 1.20) / 0.50));
+  return lerp(1.36, 1.24, smooth((x - 1.70) / 0.55));
 }
 function yClad(x) {
   const yb = yBottom(x);
-  if (yb > 0.84) return yb;
-  let clad = 0.60;
+  if (yb > 0.78) return yb;
+  let clad = 0.52;
   for (const axle of [FA, RA]) {
     const dx = Math.abs(x - axle);
-    if (dx < 0.66) clad = Math.max(clad, 0.60 + 0.16 * (1 - dx / 0.66));
+    if (dx < 0.55) clad = Math.max(clad, 0.52 + 0.10 * (1 - dx / 0.55));
   }
-  if (x > 1.92) clad = Math.max(clad, lerp(0.60, 0.78, smooth((x - 1.92) / 0.36)));
-  if (x < -1.98) clad = Math.max(clad, lerp(0.60, 0.72, smooth((-1.98 - x) / 0.30)));
+  if (x > 1.95) clad = Math.max(clad, lerp(0.52, 0.72, smooth((x - 1.95) / 0.32)));
+  if (x < -2.00) clad = Math.max(clad, lerp(0.52, 0.68, smooth((-2.00 - x) / 0.28)));
   return clamp(Math.max(clad, yb), yb, yTop(x) - 0.05);
 }
 function zPlan(x) {
@@ -62,7 +63,7 @@ function flareAdd(x, y) {
     if (box > 0.10) continue;
     const u = od / 0.16;
     const lip = u < 0.16 ? smooth(u / 0.16) : u < 0.52 ? 1 : 1 - smooth((u - 0.52) / 0.48);
-    add = Math.max(add, 0.078 * lip * (1 - smooth(box / 0.10)));
+    add = Math.max(add, 0.018 * lip * (1 - smooth(box / 0.10)));
   }
   return add;
 }
@@ -186,23 +187,28 @@ function treadMaps() {
   const g = c.getContext('2d');
   g.fillStyle = '#3c3a37'; g.fillRect(0, 0, 512, 256);
   g.fillStyle = '#2a2826'; g.fillRect(0, 78, 512, 100);
-  g.fillStyle = '#161514';
-  for (let i = 0; i < 28; i++) {
-    const x = i * (512 / 28);
-    g.fillRect(x, 92, 7, 72);
-    if (i % 2) g.fillRect(x + 10, 108, 8, 18);
-    g.fillRect(x + 4, 86, 16, 5); g.fillRect(x + 4, 164, 16, 5);
+  g.fillStyle = '#141210';
+  for (let i = 0; i < 16; i++) {
+    const x = i * 32;
+    g.fillRect(x + 4, 88, 14, 78);
+    g.fillRect(x + 18, 100, 10, 28);
+    g.fillRect(x + 18, 136, 10, 22);
   }
-  g.strokeStyle = '#4a4742'; g.lineWidth = 3;
-  for (const y of [46, 210]) { g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke(); }
+  g.fillStyle = '#d8d4cc';
+  g.font = '700 22px Arial, sans-serif';
+  g.fillText('ALL TERRAIN', 18, 214);
+  g.fillText('ALL TERRAIN', 270, 214);
+  g.strokeStyle = '#3a3834'; g.lineWidth = 3;
+  for (const y of [70, 170]) { g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke(); }
   const map = new THREE.CanvasTexture(c); map.colorSpace = THREE.SRGBColorSpace; map.wrapS = THREE.RepeatWrapping; map.anisotropy = 4;
   const b = document.createElement('canvas'); b.width = 512; b.height = 256;
   const bg = b.getContext('2d'); bg.fillStyle = '#9a9a9a'; bg.fillRect(0, 0, 512, 256);
   bg.fillStyle = '#e8e8e8'; bg.fillRect(0, 78, 512, 100);
-  bg.fillStyle = '#2a2a2a';
-  for (let i = 0; i < 28; i++) {
-    const x = i * (512 / 28);
-    bg.fillRect(x, 92, 7, 72); if (i % 2) bg.fillRect(x + 10, 108, 8, 18);
+  bg.fillStyle = '#1a1a1a';
+  for (let i = 0; i < 16; i++) {
+    const x = i * 32;
+    bg.fillRect(x + 4, 88, 14, 78);
+    bg.fillRect(x + 18, 100, 10, 50);
   }
   const bump = new THREE.CanvasTexture(b); bump.colorSpace = THREE.NoColorSpace; bump.wrapS = THREE.RepeatWrapping;
   return { map, bump };
@@ -222,31 +228,35 @@ function band(x0, x1, y0, y1, s, nx, ny) {
 // Windshield and rear glass share these edges with the black frame so the pane
 // overlaps the pillars, cowl, and roof instead of stopping short of them.
 export function windAt(u, v) {
-  const bow = 0.016 * (1 - u * u);
-  return [lerp(1.15, 0.74, v) + bow, lerp(1.30, 1.86, v), u * lerp(0.86, 0.80, v)];
+  const bow = 0.010 * (1 - u * u);
+  // Nearly vertical: about 0.14 m of run over 0.50 m of rise.
+  return [lerp(1.30, 1.16, v) + bow, lerp(1.40, 1.90, v), u * lerp(0.72, 0.66, v)];
 }
 export function rearGlassAt(u, v) {
-  return [lerp(-2.32, -1.92, v), lerp(1.36, 1.86, v), u * lerp(0.74, 0.68, v)];
+  return [lerp(-2.30, -2.08, v), lerp(1.46, 1.88, v), u * lerp(0.62, 0.56, v)];
 }
 function yHood(x, z) {
-  const t = clamp((x - 1.18) / (2.30 - 1.18), 0, 1);
-  const edge = lerp(1.305, 1.15, smooth(t));
-  const hw = lerp(0.74, 0.60, t);
-  const crown = 0.02 * (1 - Math.min(1, (z / hw) ** 2));
-  const scoop = 0.018 * Math.exp(-(((x - 1.52) / 0.22) ** 2)) * Math.exp(-(((z / 0.16) ** 2)));
-  const lip = t > 0.94 ? (t - 0.94) / 0.06 * 0.02 : 0;
-  return edge + crown + scoop - lip;
+  const t = clamp((x - 1.28) / (2.28 - 1.28), 0, 1);
+  const edge = lerp(1.42, 1.22, smooth(t));
+  const hw = lerp(0.78, 0.66, t);
+  const zn = Math.min(1, (z / hw) ** 2);
+  const crown = 0.012 * (1 - zn);
+  // Hood-corner bulges near the cowl, and a raised center under the scoop.
+  const corner = 0.045 * Math.exp(-(((Math.abs(z) - 0.55) / 0.16) ** 2)) * Math.exp(-(((x - 1.42) / 0.22) ** 2));
+  const center = 0.028 * Math.exp(-(((x - 1.78) / 0.38) ** 2)) * Math.exp(-((z / 0.28) ** 2));
+  const lip = t > 0.92 ? (t - 0.92) / 0.08 * 0.018 : 0;
+  return edge + crown + corner + center - lip;
 }
 
 export function buildH2(group, low) {
   const env = envTex(), tread = treadMaps();
-  const paint = new THREE.MeshPhysicalMaterial({ color: 0xf5c40a, metalness: 0.06, roughness: 0.30, clearcoat: 0.72, clearcoatRoughness: 0.26, envMap: env, envMapIntensity: 0.62 });
+  const paint = new THREE.MeshPhysicalMaterial({ color: 0xf6c000, metalness: 0.04, roughness: 0.24, clearcoat: 0.82, clearcoatRoughness: 0.18, envMap: env, envMapIntensity: 0.7 });
   const gloss = new THREE.MeshPhysicalMaterial({ color: 0x14161a, metalness: 0.08, roughness: 0.38, clearcoat: 0.35, clearcoatRoughness: 0.4, envMap: env, envMapIntensity: 0.35 });
   const matte = new THREE.MeshStandardMaterial({ color: 0x1a1c1f, roughness: 0.78, metalness: 0.04, envMap: env, envMapIntensity: 0.18 });
   const glass = new THREE.MeshPhysicalMaterial({ color: 0x102028, metalness: 0.55, roughness: 0.06, clearcoat: 1, clearcoatRoughness: 0.04, envMap: env, envMapIntensity: 0.9, side: THREE.DoubleSide });
-  const chrome = new THREE.MeshStandardMaterial({ color: 0xe4eaee, metalness: 0.94, roughness: 0.16, envMap: env, envMapIntensity: 1.05 });
+  const chrome = new THREE.MeshStandardMaterial({ color: 0xf4f7f8, metalness: 1, roughness: 0.08, envMap: env, envMapIntensity: 1.25 });
   const alloy = new THREE.MeshStandardMaterial({ color: 0xc5ccd1, metalness: 0.86, roughness: 0.28, envMap: env, envMapIntensity: 0.85 });
-  const rubber = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tread.map, bumpMap: tread.bump, bumpScale: 0.018, roughness: 0.9, metalness: 0.02 });
+  const rubber = new THREE.MeshStandardMaterial({ color: 0xffffff, map: tread.map, bumpMap: tread.bump, bumpScale: 0.04, roughness: 0.92, metalness: 0.02 });
   const headMat = new THREE.MeshStandardMaterial({ color: 0xf7f8fb, emissive: 0xd5e2f2, emissiveIntensity: 0.55, roughness: 0.12, metalness: 0.05, envMap: env });
   const tailMat = new THREE.MeshStandardMaterial({ color: 0x8d1612, emissive: 0xff2418, emissiveIntensity: 0.55, roughness: 0.35 });
   const amberMat = new THREE.MeshStandardMaterial({ color: 0xffb03a, emissive: 0xff8a00, emissiveIntensity: 0.7, roughness: 0.35 });
@@ -275,19 +285,27 @@ export function buildH2(group, low) {
       const y = lerp(yHood(x, Math.min(Math.abs(z), 0.74)) - 0.012, yTop(x) + 0.004, smooth(v));
       return [x, y, z * s];
     }), 'paint', [0, 1, 0]);
-    // squared flare lip: a hard shelf around the upper arch, not a melted bulge
+    // thick black squared flare cladding. The yellow skin stays slab-sided.
     for (const axle of [FA, RA]) {
-      put(surf(low ? 14 : 20, 1, (u, v) => {
-        const a = Math.PI * lerp(0.18, 0.82, u);
-        const x = axle + Math.cos(a) * 0.60, y = 0.52 + Math.sin(a) * 0.50;
-        const z0 = Math.min(zPlan(x) + 0.015, 1.01);
-        return [x, y + v * 0.02, (z0 + v * 0.085) * s];
-      }), 'paint', [0, 0.4, s]);
-      put(surf(low ? 14 : 20, 1, (u, v) => {
-        const a = Math.PI * lerp(0.18, 0.82, u);
-        const x = axle + Math.cos(a) * lerp(0.60, 0.52, v), y = 0.52 + Math.sin(a) * 0.50 - v * 0.05;
-        return [x, y, Math.min(zPlan(x) + 0.10, 1.09) * s];
-      }), 'paint', [0, 0, s]);
+      put(surf(low ? 16 : 22, 2, (u, v) => {
+        const a = Math.PI * lerp(0.08, 0.92, u);
+        const c = Math.cos(a), sn = Math.sin(a);
+        const ex = Math.sign(c) * Math.pow(Math.abs(c), 0.72);
+        const ey = Math.pow(sn, 0.72);
+        const x = axle + ex * 0.55;
+        const y = 0.46 + ey * 0.48;
+        const z = 1.00 + v * 0.06;
+        return [x, y - v * 0.012, z * s];
+      }), 'matte', [0, 0.3, s]);
+      put(surf(low ? 16 : 22, 1, (u, v) => {
+        const a = Math.PI * lerp(0.08, 0.92, u);
+        const c = Math.cos(a), sn = Math.sin(a);
+        const ex = Math.sign(c) * Math.pow(Math.abs(c), 0.72);
+        const ey = Math.pow(sn, 0.72);
+        const x = axle + ex * lerp(0.55, 0.46, v);
+        const y = 0.46 + ey * lerp(0.48, 0.44, v) - v * 0.055;
+        return [x, y, 1.06 * s];
+      }), 'matte', [0, 0, s]);
     }
     // rear corner onto the tailgate
     put(surf(6, ny, (u, v) => {
@@ -310,27 +328,25 @@ export function buildH2(group, low) {
     box(0.08, 0.62, 0.42, 0.02, 1, 'matte', [RA + 0.34, 0.62, s * 0.55]);
   }
 
-  // hood
+  // hood: high, slight nose-down slope, raised corners, black center intake
   put(surf(low ? 16 : 24, low ? 10 : 14, (u, v) => {
-    const x = lerp(1.18, 2.30, u), hw = lerp(0.76, 0.60, u), z = (v - 0.5) * 2 * hw;
+    const x = lerp(1.18, 2.32, u), hw = lerp(0.82, 0.70, u), z = (v - 0.5) * 2 * hw;
     return [x, yHood(x, z), z];
   }), 'paint', [0, 1, 0]);
-  // black bay under the hood shut gaps
-  box(1.05, 0.04, 1.55, 0.01, 1, 'matte', [1.72, 1.20, 0]);
-  // hood louver pad
-  box(0.46, 0.028, 0.40, 0.012, 2, 'gloss', [1.52, 1.335, 0]);
-  for (let i = 0; i < 5; i++) box(0.36, 0.012, 0.012, 0.002, 1, 'intake', [1.50 + (i - 2) * 0.07, 1.352, 0], [0, Math.PI / 2, 0]);
+  const scoopY = yHood(1.72, 0) + 0.004;
+  box(0.92, 0.016, 0.50, 0.006, 2, 'gloss', [1.72, scoopY, 0]);
+  for (let i = 0; i < 6; i++) box(0.46, 0.005, 0.012, 0.001, 1, 'intake', [1.48 + i * 0.08, scoopY + 0.01, 0], [0, Math.PI / 2, 0]);
 
   // one wrapped fascia. Grille and lamps are holes, not panels stuck on a slab.
   {
     const nz = 28, ny = 16, zs = [], ys = [];
     for (let i = 0; i <= nz; i++) zs.push(lerp(-1.04, 1.04, i / nz));
-    for (let j = 0; j <= ny; j++) ys.push(lerp(0.74, 1.17, j / ny));
-    const hole = (z, y) => Math.abs(z) < 0.50 && y > 0.77 && y < 1.135;
+    for (let j = 0; j <= ny; j++) ys.push(lerp(0.70, 1.28, j / ny));
+    const hole = (z, y) => Math.abs(z) < 1.02 && y > 0.80 && y < 1.22;
     const P = [], I = [];
     const at = (z, y) => {
-      const az = Math.abs(z); let x = 2.345;
-      if (az > 0.80) { const t = clamp((az - 0.80) / 0.22, 0, 1); x = 2.345 - (1 - Math.cos(t * Math.PI / 2)) * 0.30; }
+      const az = Math.abs(z); let x = 2.34;
+      if (az > 0.88) { const t = clamp((az - 0.88) / 0.18, 0, 1); x = 2.34 - (1 - Math.cos(t * Math.PI / 2)) * 0.22; }
       return [x, y, z];
     };
     for (let i = 0; i <= nz; i++) for (let j = 0; j <= ny; j++) P.push(...at(zs[i], ys[j]));
@@ -356,34 +372,36 @@ export function buildH2(group, low) {
     }), 'paint', [1, 0.25, s]);
   }
 
-  // grille cavity, frame, seven slots
-  box(0.07, 0.38, 0.96, 0.012, 1, 'intake', [2.26, 0.955, 0]);
-  box(0.02, 0.40, 0.018, 0.003, 1, 'chrome', [2.345, 0.955, -0.49]);
-  box(0.02, 0.40, 0.018, 0.003, 1, 'chrome', [2.345, 0.955, 0.49]);
-  box(0.02, 0.016, 1.00, 0.003, 1, 'chrome', [2.345, 1.15, 0]);
-  box(0.02, 0.016, 1.00, 0.003, 1, 'chrome', [2.345, 0.76, 0]);
-  for (let i = 0; i < 7; i++) box(0.018, 0.34, 0.034, 0.004, 1, 'chrome', [2.335, 0.955, -0.36 + i * (0.72 / 6)]);
+  // Full-width chrome surround. Round lamps sit inside it; seven slots sit between them.
+  const gx = 2.392, gy0 = 0.84, gy1 = 1.20, gz = 0.96, gcy = (gy0 + gy1) / 2, gh = gy1 - gy0;
+  box(0.045, 0.05, gz * 2 + 0.06, 0.01, 2, 'chrome', [gx, gy1 - 0.012, 0]);
+  box(0.045, 0.042, gz * 2 + 0.06, 0.01, 2, 'chrome', [gx, gy0 + 0.01, 0]);
+  for (const s of [1, -1]) box(0.045, gh, 0.055, 0.01, 2, 'chrome', [gx, gcy, s * gz]);
+  for (const s of [1, -1]) box(0.03, gh - 0.08, 0.028, 0.004, 1, 'chrome', [gx - 0.004, gcy, s * 0.52]);
+  box(0.06, gh - 0.09, 0.98, 0.008, 1, 'intake', [gx - 0.03, gcy, 0]);
+  for (let i = 0; i < 7; i++) box(0.022, gh - 0.11, 0.036, 0.004, 1, 'chrome', [gx - 0.006, gcy, -0.36 + i * (0.72 / 6)]);
+  box(0.012, 0.014, 1.84, 0.002, 1, 'tail', [gx + 0.01, gy0 - 0.012, 0]);
 
-  // lamps
-  const lensGeo = new THREE.CylinderGeometry(0.098, 0.098, 0.02, low ? 16 : 24);
+  const lensGeo = new THREE.CylinderGeometry(0.105, 0.105, 0.018, low ? 16 : 24);
   lensGeo.rotateZ(-Math.PI / 2);
   const lenses = [];
   for (const s of [1, -1]) {
     const lens = new THREE.Mesh(lensGeo, headMat); lens.position.set(H2_LAMP.x, H2_LAMP.y, H2_LAMP.z * s); lenses.push(lens);
-    const bezel = new THREE.TorusGeometry(0.112, 0.014, low ? 6 : 8, low ? 20 : 28); bezel.rotateY(Math.PI / 2);
-    put(bezel, 'chrome', null, [H2_LAMP.x + 0.012, H2_LAMP.y, H2_LAMP.z * s]);
-    const bucket = new THREE.CylinderGeometry(0.09, 0.07, 0.04, low ? 12 : 16); bucket.rotateZ(-Math.PI / 2);
-    put(bucket, 'intake', null, [H2_LAMP.x - 0.035, H2_LAMP.y, H2_LAMP.z * s]);
-    box(0.03, 0.055, 0.09, 0.01, 2, 'amber', [2.34, 0.93, s * 0.86]);
-    const fog = new THREE.CylinderGeometry(0.042, 0.042, 0.02, low ? 12 : 16); fog.rotateZ(-Math.PI / 2);
-    put(fog, 'fog', null, [2.445, 0.50, s * 0.36]);
-    put(new THREE.TorusGeometry(0.048, 0.008, 5, 14).rotateY(Math.PI / 2), 'chrome', null, [2.452, 0.50, s * 0.36]);
+    const bezel = new THREE.TorusGeometry(0.122, 0.016, low ? 6 : 8, low ? 20 : 28); bezel.rotateY(Math.PI / 2);
+    put(bezel, 'chrome', null, [2.40, H2_LAMP.y, H2_LAMP.z * s]);
+    const bucket = new THREE.CylinderGeometry(0.10, 0.08, 0.035, low ? 12 : 16); bucket.rotateZ(-Math.PI / 2);
+    put(bucket, 'intake', null, [H2_LAMP.x - 0.03, H2_LAMP.y, H2_LAMP.z * s]);
+    box(0.035, 0.055, 0.10, 0.008, 2, 'amber', [2.36, 0.98, s * 1.06]);
+    const fog = new THREE.CylinderGeometry(0.048, 0.048, 0.02, low ? 12 : 16); fog.rotateZ(-Math.PI / 2);
+    put(fog, 'fog', null, [2.46, 0.50, s * 0.62]);
+    put(new THREE.TorusGeometry(0.055, 0.008, 5, 16).rotateY(Math.PI / 2), 'chrome', null, [2.468, 0.50, s * 0.62]);
   }
 
-  // front bumper
-  box(0.26, 0.46, 1.96, 0.07, low ? 2 : 3, 'matte', [2.29, 0.52, 0]);
-  box(0.04, 0.20, 0.62, 0.01, 1, 'intake', [2.43, 0.48, 0]);
-  for (let i = 0; i < 3; i++) box(0.012, 0.012, 0.50, 0.002, 1, 'gloss', [2.45, 0.42 + i * 0.06, 0]);
+  // chunky bumper, mesh intake, skid plate. No license plate.
+  box(0.28, 0.42, 2.02, 0.06, low ? 2 : 3, 'matte', [2.30, 0.50, 0]);
+  box(0.05, 0.16, 0.70, 0.01, 1, 'intake', [2.45, 0.48, 0]);
+  for (let i = 0; i < 4; i++) box(0.012, 0.008, 0.58, 0.001, 1, 'gloss', [2.47, 0.43 + i * 0.035, 0]);
+  box(0.22, 0.06, 1.15, 0.012, 1, 'matte', [2.22, 0.30, 0]);
 
   // tailgate, rear bumper, spare stays with the wheels
   put(surf(low ? 10 : 14, 10, (u, v) => {
@@ -401,16 +419,16 @@ export function buildH2(group, low) {
 
   // closed greenhouse: solid roof and side walls, glass set into the openings
   put(surf(low ? 16 : 22, low ? 8 : 12, (u, v) => {
-    const x = lerp(0.98, -2.08, u), z = lerp(-0.86, 0.86, v);
+    const x = lerp(1.22, -2.08, u), z = lerp(-0.82, 0.82, v);
     const crown = 0.05 * (1 - Math.min(1, (z / 0.86) ** 2));
     return [x, 1.90 + crown, z];
   }), 'gloss', [0, 1, 0]);
   for (const s of [1, -1]) {
     put(surf(low ? 16 : 24, 5, (u, v) => {
-      const y = lerp(1.33, 1.92, v);
-      const x0 = lerp(1.12, 0.68, v);
-      const x = lerp(x0, -1.72, u);
-      const z = (0.80 - 0.02 * v) * s;
+      const y = lerp(1.46, 1.94, v);
+      const x0 = lerp(1.32, 1.12, v);
+      const x = lerp(x0, -1.55, u);
+      const z = (0.76 - 0.02 * v) * s;
       return [x, y, z];
     }), 'gloss', [0, 0.3, s]);
     // sail from the side wall back to the rear glass, so the cabin is closed
@@ -482,32 +500,32 @@ export function buildH2(group, low) {
   const rail = (w, h, x, y, z) => box(w, h, 0.028, 0.006, 1, 'gloss', [x, y, z]);
   for (const s of [1, -1]) {
     const zf = 0.892 * s;
-    sideGlass(s, 0.78, 0.20, 1.44, 1.80);
-    sideGlass(s, 0.02, -0.84, 1.44, 1.80);
-    sideGlass(s, -1.02, -1.40, 1.48, 1.78);
-    rail(0.64, 0.045, 0.49, 1.415, zf); rail(0.64, 0.05, 0.49, 1.825, zf);
-    rail(0.045, 0.42, 0.78, 1.62, zf); rail(0.05, 0.42, 0.20, 1.62, zf);
-    rail(0.92, 0.045, -0.41, 1.415, zf); rail(0.92, 0.05, -0.41, 1.825, zf);
-    rail(0.05, 0.42, 0.02, 1.62, zf); rail(0.05, 0.42, -0.84, 1.62, zf);
-    rail(0.42, 0.042, -1.21, 1.455, zf); rail(0.42, 0.046, -1.21, 1.805, zf);
-    rail(0.045, 0.36, -1.02, 1.63, zf); rail(0.045, 0.36, -1.40, 1.63, zf);
+    sideGlass(s, 1.02, 0.22, 1.52, 1.80);
+    sideGlass(s, 0.06, -0.86, 1.52, 1.80);
+    sideGlass(s, -1.08, -1.30, 1.56, 1.76);
+    rail(0.86, 0.04, 0.62, 1.50, zf); rail(0.86, 0.045, 0.62, 1.82, zf);
+    rail(0.045, 0.32, 1.02, 1.66, zf); rail(0.05, 0.32, 0.22, 1.66, zf);
+    rail(0.98, 0.04, -0.40, 1.50, zf); rail(0.98, 0.045, -0.40, 1.82, zf);
+    rail(0.05, 0.32, 0.06, 1.66, zf); rail(0.05, 0.32, -0.86, 1.66, zf);
+    rail(0.28, 0.035, -1.19, 1.545, zf); rail(0.28, 0.04, -1.19, 1.78, zf);
+    rail(0.04, 0.24, -1.08, 1.66, zf); rail(0.04, 0.24, -1.30, 1.66, zf);
     // D-pillar gills
     for (let i = 0; i < 8; i++) box(0.012, 0.012, 0.055, 0.002, 1, 'chrome', [-1.46, 1.46 + i * 0.038, s * 0.90]);
     // door gaps read as dark seams
-    for (const x of [1.00, 0.15, -0.90]) box(0.008, 0.70, 0.012, 0.001, 1, 'intake', [x, 0.98, s * 0.978]);
+    for (const x of [1.05, 0.18, -0.92]) box(0.006, 0.55, 0.008, 0.001, 1, 'intake', [x, 1.05, s * 0.985]);
     // handles, marker, mirror
-    box(0.13, 0.032, 0.028, 0.008, 1, 'gloss', [0.32, 1.16, s * 0.995]);
-    box(0.13, 0.032, 0.028, 0.008, 1, 'gloss', [-0.42, 1.16, s * 0.995]);
+    box(0.14, 0.028, 0.018, 0.006, 1, 'gloss', [0.28, 1.22, s * 0.988]);
+    box(0.14, 0.028, 0.018, 0.006, 1, 'gloss', [-0.48, 1.22, s * 0.988]);
     box(0.05, 0.035, 0.02, 0.006, 1, s > 0 ? 'amber' : 'tail', [s > 0 ? 1.55 : -1.7, 0.95, s * 1.01]);
     box(0.07, 0.20, 0.02, 0.004, 1, 'gloss', [1.10, 1.02, s * 1.02]);
     for (let i = 0; i < 4; i++) box(0.055, 0.008, 0.012, 0.001, 1, 'intake', [1.10, 0.95 + i * 0.04, s * 1.028]);
     // mirror
-    box(0.20, 0.15, 0.09, 0.02, 2, 'gloss', [0.78, 1.52, s * 1.08]);
-    box(0.06, 0.04, 0.10, 0.01, 1, 'gloss', [0.84, 1.46, s * 0.98]);
-    put(new THREE.PlaneGeometry(0.15, 0.11), 'chrome', null, [0.78, 1.525, s * 1.128], s > 0 ? [0, 0, 0] : [0, Math.PI, 0]);
-    // running board
-    const tube = new THREE.CylinderGeometry(0.032, 0.032, 1.85, low ? 8 : 12); tube.rotateZ(Math.PI / 2);
-    put(tube, 'chrome', null, [0.02, 0.36, s * 1.01]);
+    box(0.14, 0.18, 0.07, 0.014, 2, 'chrome', [1.18, 1.46, s * 1.14]);
+    box(0.04, 0.05, 0.06, 0.008, 1, 'gloss', [1.16, 1.40, s * 1.06]);
+    put(new THREE.PlaneGeometry(0.10, 0.13), 'glass', null, [1.18, 1.47, s * 1.18], s > 0 ? [0, 0, 0] : [0, Math.PI, 0]);
+    // black tubular rock slider
+    const tube = new THREE.CylinderGeometry(0.034, 0.034, 1.90, low ? 8 : 12); tube.rotateZ(Math.PI / 2);
+    put(tube, 'matte', null, [0.05, 0.38, s * 1.02]);
     box(0.70, 0.012, 0.10, 0.004, 1, 'matte', [0.05, 0.392, s * 1.00]);
     for (const x of [0.55, -0.45]) box(0.04, 0.08, 0.04, 0.008, 1, 'gloss', [x, 0.40, s * 0.96]);
     // mud flap behind the rear tire
@@ -518,8 +536,8 @@ export function buildH2(group, low) {
   put(new THREE.TorusGeometry(0.078, 0.008, 6, 18).rotateY(-Math.PI / 2), 'chrome', null, [-1.18, 1.02, -1.0]);
 
   // wipers
-  box(0.62, 0.012, 0.02, 0.003, 1, 'gloss', [1.08, 1.36, 0.28], [0.4, 0.15, 0.15]);
-  box(0.62, 0.012, 0.02, 0.003, 1, 'gloss', [1.08, 1.36, -0.22], [-0.3, -0.1, -0.12]);
+  box(0.52, 0.01, 0.018, 0.002, 1, 'gloss', [1.26, 1.43, 0.22], [0.15, 0.1, 0.08]);
+  box(0.52, 0.01, 0.018, 0.002, 1, 'gloss', [1.26, 1.43, -0.18], [-0.12, -0.08, -0.06]);
 
   // roof rack and pace bar sit on the roof crown, with feet so nothing floats
   const roofY = (x, z) => 1.90 + 0.05 * (1 - Math.min(1, (z / 0.86) ** 2));
@@ -533,25 +551,25 @@ export function buildH2(group, low) {
     const barR = new THREE.CylinderGeometry(0.014, 0.014, 1.10, 8); barR.rotateX(Math.PI / 2);
     put(barR, 'gloss', null, [x, railY + 0.01, 0]);
   }
-  for (const s of [-1, -0.5, 0, 0.5, 1]) {
-    box(0.05, 0.02, 0.07, 0.004, 1, 'amber', [0.88, 1.935, s * 0.18]);
-    box(0.045, 0.018, 0.06, 0.004, 1, 'tail', [-1.90, 1.932, s * 0.16]);
+  for (const s of [-0.62, -0.31, 0, 0.31, 0.62]) {
+    box(0.045, 0.028, 0.07, 0.006, 1, 'amber', [1.14, 1.935, s]);
   }
-  const barY = roofY(0.12, 0) + 0.02;
-  box(0.16, 0.04, 0.72, 0.01, 2, 'gloss', [0.12, barY, 0]);
-  for (const s of [-1, 1]) box(0.05, 0.028, 0.05, 0.006, 1, 'gloss', [0.12, roofY(0.12, 0) + 0.012, s * 0.28]);
+  for (const s of [-0.4, 0, 0.4]) box(0.04, 0.02, 0.055, 0.004, 1, 'tail', [-1.95, 1.93, s]);
+  const barY = roofY(0.45, 0) + 0.018;
+  box(0.14, 0.035, 0.62, 0.008, 2, 'gloss', [0.45, barY, 0]);
+  for (const s of [-1, 1]) box(0.04, 0.02, 0.04, 0.005, 1, 'gloss', [0.45, roofY(0.45, 0) + 0.008, s * 0.24]);
   const paceMat = [0, 1].map(() => new THREE.MeshStandardMaterial({ color: 0xffb000, emissive: 0xffaa00, emissiveIntensity: 1.5, roughness: 0.35 }));
   const lamps = [], sprites = [], tex = glowTexture();
   for (const side of [1, -1]) {
     const pods = [];
     for (const k of [0, 1]) {
       const pod = new THREE.Mesh(beveledBox(0.11, 0.028, 0.14, 0.008, 2), paceMat[side > 0 ? 0 : 1]);
-      pod.position.set(0.12, barY + 0.028, side * (0.12 + k * 0.20));
+      pod.position.set(0.45, barY + 0.026, side * (0.10 + k * 0.16));
       pod.name = 'h2-pace-lamp'; pod.castShadow = false; pods.push(pod); group.add(pod);
     }
     lamps.push(pods[0]);
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xffb020, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55 }));
-    sp.scale.setScalar(low ? 0.4 : 0.62); sp.position.set(0.12, barY + 0.05, side * 0.22); group.add(sp);
+    sp.scale.setScalar(low ? 0.35 : 0.5); sp.position.set(0.45, barY + 0.04, side * 0.18); group.add(sp);
     if (!low || side > 0) sprites.push(sp); else sp.visible = false;
   }
 
@@ -561,19 +579,23 @@ export function buildH2(group, low) {
     [0.56, -TIRE_W * 0.08], [0.60, -TIRE_W * 0.42], [0.74, -TIRE_W * 0.50], [0.90, -TIRE_W * 0.49],
     [0.975, -TIRE_W * 0.36], [1, -TIRE_W * 0.20], [1, TIRE_W * 0.20], [0.975, TIRE_W * 0.36],
     [0.90, TIRE_W * 0.49], [0.74, TIRE_W * 0.50], [0.60, TIRE_W * 0.42], [0.56, TIRE_W * 0.08]
-  ].map(([k, z]) => [TIRE_R * k, z]), seg);
+  ].map(([k, z]) => [TIRE_R * k, z]), seg, (pt, i) => {
+    const onTread = Math.abs(pt[1]) < TIRE_W * 0.22;
+    return pt[0] - (onTread && i % 3 === 0 ? 0.016 : 0);
+  });
   const rimParts = [];
-  const lip = new THREE.TorusGeometry(0.208, 0.020, low ? 6 : 8, seg); lip.translate(0, 0, TIRE_W * 0.20); lip.computeVertexNormals(); rimParts.push(lip);
-  const cap = new THREE.CylinderGeometry(0.048, 0.056, 0.028, low ? 12 : 16); cap.rotateX(Math.PI / 2); cap.translate(0, 0, TIRE_W * 0.21); rimParts.push(cap);
-  for (let i = 0; i < 6; i++) {
-    const a = i / 6 * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
-    const spoke = new THREE.BoxGeometry(0.150, 0.052, 0.030);
-    spoke.translate(0.112, 0, TIRE_W * 0.175);
+  const lip = new THREE.TorusGeometry(0.198, 0.018, low ? 6 : 8, seg); lip.translate(0, 0, TIRE_W * 0.08); lip.computeVertexNormals(); rimParts.push(lip);
+  const cap = new THREE.CylinderGeometry(0.042, 0.05, 0.02, low ? 12 : 16); cap.rotateX(Math.PI / 2); cap.translate(0, 0, TIRE_W * 0.10); rimParts.push(cap);
+  const nSpoke = low ? 6 : 8;
+  for (let i = 0; i < nSpoke; i++) {
+    const a = i / nSpoke * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    const spoke = new THREE.BoxGeometry(0.145, 0.036, 0.022);
+    spoke.translate(0.108, 0, TIRE_W * 0.075);
     spoke.rotateZ(a);
     rimParts.push(spoke);
     if (!low) {
-      const lug = new THREE.CylinderGeometry(0.012, 0.012, 0.012, 6);
-      lug.rotateX(Math.PI / 2); lug.translate(c * 0.038, s * 0.038, TIRE_W * 0.235); rimParts.push(lug);
+      const lug = new THREE.CylinderGeometry(0.01, 0.01, 0.01, 6);
+      lug.rotateX(Math.PI / 2); lug.translate(c * 0.032, s * 0.032, TIRE_W * 0.112); rimParts.push(lug);
     }
   }
   const rimGeo = pack(rimParts.map(g => new THREE.Mesh(g)), 'h2-rim-geo', alloy).geometry;
@@ -608,8 +630,18 @@ export function buildH2(group, low) {
   const labelTex = new THREE.CanvasTexture(cv); labelTex.colorSpace = THREE.SRGBColorSpace;
   const labelMat = new THREE.MeshBasicMaterial({ map: labelTex, transparent: true, alphaTest: 0.35, depthWrite: false });
   for (const s of [1, -1]) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.105), labelMat);
-    m.position.set(0.52, 1.08, s * 1.0); if (s < 0) m.rotation.y = Math.PI; m.name = 'h2-decal'; group.add(m);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.09), labelMat);
+    m.position.set(0.35, 1.18, s * 0.995); if (s < 0) m.rotation.y = Math.PI; m.name = 'h2-decal'; group.add(m);
+  }
+  const badge = document.createElement('canvas'); badge.width = 128; badge.height = 64;
+  const bctx = badge.getContext('2d'); bctx.clearRect(0, 0, 128, 64);
+  bctx.fillStyle = '#2a2a2a'; bctx.font = '700 40px Arial, sans-serif'; bctx.textAlign = 'center'; bctx.textBaseline = 'middle';
+  bctx.fillText('H2', 64, 34);
+  const badgeTex = new THREE.CanvasTexture(badge); badgeTex.colorSpace = THREE.SRGBColorSpace;
+  const badgeMat = new THREE.MeshBasicMaterial({ map: badgeTex, transparent: true, alphaTest: 0.3, depthWrite: false });
+  for (const s of [1, -1]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.06), badgeMat);
+    m.position.set(1.35, 1.22, s * 1.0); if (s < 0) m.rotation.y = Math.PI; group.add(m);
   }
 
   const cast = !low;
