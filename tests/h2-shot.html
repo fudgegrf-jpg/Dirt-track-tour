@@ -15,7 +15,7 @@ window.addEventListener('error', (e) => {
 </script>
 <script type="module">
 import * as THREE from 'three';
-import { makePaceCar, auditPaceCar, preloadH2 } from '../js/pace-car.js';
+import { makePaceCar, auditPaceCar, preloadH2, bindPaceEnv } from '../js/pace-car.js';
 try {
 await preloadH2();
 const params = new URLSearchParams(location.search);
@@ -24,7 +24,6 @@ const h2 = makePaceCar(params.get('low') === '1');
 const fails = auditPaceCar(h2);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8aa0b4);
-scene.environment = null;
 scene.add(new THREE.HemisphereLight(0xe7f1fb, 0x4a4036, 1.05));
 const key = new THREE.DirectionalLight(0xfff6ea, 1.65); key.position.set(6, 8, 5); scene.add(key);
 const fill = new THREE.DirectionalLight(0xc9d7e6, .85); fill.position.set(-6, 3, 2); scene.add(fill);
@@ -48,6 +47,7 @@ if (fov) { cam.fov = fov; cam.updateProjectionMatrix(); }
 cam.position.set(...pos); cam.lookAt(...look);
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: true });
 renderer.setSize(1280, 720); renderer.setPixelRatio(1);
+scene.environment = bindPaceEnv(renderer, h2);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;

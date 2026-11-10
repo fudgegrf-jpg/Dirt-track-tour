@@ -38,10 +38,15 @@ function dressGlb(src,low){
     m.metalness=Math.max(m.metalness??0,.8);m.roughness=Math.min(m.roughness??1,.08);
     m.envMapIntensity=1.1;
    }else if(m.name==='paint'||m.name==='h2-paint'){
-    m.envMapIntensity=.45;
-    if('clearcoat' in m){m.clearcoat=Math.max(m.clearcoat??0,.5);m.clearcoatRoughness=m.clearcoatRoughness??.22;}
-   }else if(m.name==='chrome'||m.metalness>.8){
-    m.envMapIntensity=1.2;m.roughness=Math.min(m.roughness??.2,.16);
+    m.envMapIntensity=.4;
+    if('clearcoat' in m){m.clearcoat=1;m.clearcoatRoughness=.06;}
+   }else if(m.name==='chrome'){
+    m.metalness=1;m.roughness=.1;m.envMapIntensity=1.25;
+   }else if(m.name==='rim'){
+    m.metalness=.6;m.roughness=.35;m.envMapIntensity=.9;
+   }else if(m.name==='lens'){
+    m.metalness=0;m.roughness=.04;m.transparent=true;m.opacity=.25;m.depthWrite=false;
+    if('transmission' in m){m.transmission=.92;m.thickness=.02;m.transparent=false;m.opacity=1;m.depthWrite=true;}
    }
    m.needsUpdate=true;
   }
@@ -67,6 +72,32 @@ function dressGlb(src,low){
  return g;
 }
 const WB=()=>122.8*0.0254;
+// Chrome with no environment renders as flat gray. This is a small room with
+// a bright skylight, filtered through PMREM so the surround and the wheels reflect.
+export function bindPaceEnv(renderer, root, night=false){
+ const scene=new THREE.Scene();
+ const wall=(c)=>new THREE.MeshBasicMaterial({color:c,side:THREE.BackSide});
+ scene.add(new THREE.Mesh(new THREE.BoxGeometry(14,8,14),[
+  wall(night?0x243040:0xd7e0e8), wall(night?0x1a2430:0xb7c3ce),
+  wall(night?0x101820:0xf5f8fc), wall(night?0x3a2a1c:0x6e6556),
+  wall(night?0x243040:0xe8eef3), wall(night?0x1a2430:0xc9d3dc),
+ ]));
+ const panel=new THREE.Mesh(new THREE.PlaneGeometry(5,.7), new THREE.MeshBasicMaterial({color:night?0xffe1a8:0xffffff}));
+ panel.position.set(1.5,2.4,-5); scene.add(panel);
+ const pmrem=new THREE.PMREMGenerator(renderer);
+ const env=pmrem.fromScene(scene,0.04).texture;
+ pmrem.dispose();
+ root.traverse(o=>{
+  if(!o.isMesh)return;
+  for(const m of [].concat(o.material)){
+   if(!m)continue;
+   if(m.name==='chrome'||m.name==='rim'||m.name==='paint'||m.name==='bowl'||m.name==='lens'){
+    m.envMap=env; m.needsUpdate=true;
+   }
+  }
+ });
+ return env;
+}
 export function preloadH2(){
  if(glbPromise)return glbPromise;
  const loader=new GLTFLoader();
@@ -221,7 +252,9 @@ export function auditPaceCar(group){
 export class PaceCar{
  constructor(race){
   this.race=race;const trk=race.trk,T=race.T,low=race.app.quality==='low';
-  this.mesh=makePaceCar(low);race.scene.add(this.mesh);
+  this.mesh=makePaceCar(low);
+  if(race.app?.renderer)bindPaceEnv(race.app.renderer,this.mesh,race.skyPreset==='night'||race.app.quality==='low');
+  race.scene.add(this.mesh);
   this.apronD=-T.W/2-2.6;this.spotD=-T.W/2-11;this.gap=16;this.low=low;
   this.spot=this.pickSpot();
   const lead=race.formationOrder?.[0]||race.cars[0];this.lArc=lead.s;this.lPrev=lead.s;this.lead=lead;

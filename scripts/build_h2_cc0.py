@@ -51,7 +51,7 @@ BUCKET_NAME = {
 
 # Triangle budgets. Wheels are per corner so the decimate keeps them round.
 HIGH = {'paint': 12400, 'trim': 3800, 'chrome': 3000, 'glass': 1100, 'lamp': 500, 'amber': 280, 'tail': 280, 'tire': 1000, 'rim': 650, 'decal': 400}
-LOW = {'paint': 4900, 'trim': 1400, 'chrome': 1100, 'glass': 480, 'lamp': 800, 'amber': 240, 'tail': 420, 'tire': 500, 'rim': 360, 'decal': 200}
+LOW = {'paint': 3800, 'trim': 1000, 'chrome': 750, 'glass': 420, 'lamp': 640, 'amber': 200, 'tail': 320, 'tire': 500, 'rim': 360, 'decal': 200}
 
 
 def srgb(r, g, b):
@@ -88,21 +88,27 @@ def make_mat(name, color, metallic, roughness, emission=None, strength=0, coat=0
 
 def build_materials():
     # Garrett's H2 yellow, sampled from the reference photo (~224, 180, 65).
-    return {
+    mats = {
         # Cleaner and brighter than the shaded sample. The photo's lit panel is a
         # clear yellow, not the mustard the old base color rendered as.
         'paint': make_mat('paint', srgb(246, 198, 42), 0.04, 0.18, coat=1.0),
         'trim': make_mat('trim', srgb(22, 22, 24), 0.0, 0.62),
-        'chrome': make_mat('chrome', srgb(214, 216, 218), 1.0, 0.16),
+        'chrome': make_mat('chrome', srgb(230, 232, 234), 1.0, 0.10),
         'glass': make_mat('glass', srgb(8, 12, 16), 0.85, 0.06),
         'lamp': make_mat('lamp', srgb(255, 246, 230), 0.0, 0.3, srgb(255, 248, 236), 8.0),
         'amber': make_mat('amber', srgb(255, 140, 20), 0.0, 0.35, srgb(255, 120, 0), 4.0),
         'tail': make_mat('tail', srgb(180, 8, 6), 0.0, 0.35, srgb(255, 16, 8), 5.0),
-        'tire': make_mat('tire', srgb(18, 18, 18), 0.0, 0.72),
-        'rim': make_mat('rim', srgb(176, 180, 184), 1.0, 0.38),
+        'tire': make_mat('tire', srgb(16, 16, 16), 0.0, 0.78),
+        'rim': make_mat('rim', srgb(168, 172, 176), 0.6, 0.35),
+        'bowl': make_mat('bowl', srgb(186, 188, 190), 0.45, 0.38),
+        'lens': make_mat('lens', srgb(235, 240, 242), 0.0, 0.04),
         'accent': make_mat('accent', srgb(176, 22, 28), 0.15, 0.4),
         'decal': make_mat('decal', srgb(12, 12, 12), 0.0, 0.62),
     }
+    lens = next(n for n in mats['lens'].node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    set_in(lens, ['Transmission Weight', 'Transmission'], 0.92)
+    set_in(lens, ['IOR'], 1.45)
+    return mats
 
 
 def activate(obj):
@@ -725,59 +731,51 @@ def _disc(bm, radius, y, n=20, z_axis=False):
 
 
 def build_rim_mesh(outside, detail='high'):
-    """Stock H2 6-spoke. outside is +1 or -1 along the axle (local Y).
+    """One 17-inch H2 wheel made of joined prisms, not loose blades.
 
-    The face sits deep in the tire: a thick lip, six wide spokes, a large
-    flat cap and six lug nuts. Diameter is a 17 inch wheel inside the 35.
+    The lip is a ring, the six spokes are thick trapezoids welded to it,
+    and the windows are the open gaps. A disc behind the face shows through
+    those windows. +Y is the outside.
     """
     import bmesh
-    n = 28 if detail == 'high' else 16
     bm = bmesh.new()
-    # +Y is the outside while we build. Flip at the end if needed.
-    y_face = 0.085
-    y_back = -0.055
-    r_lip = 0.228
-    r_barrel = 0.198
-    _annulus(bm, r_barrel, r_lip, y_face - 0.012, y_face + 0.006, n)
-    _annulus(bm, r_barrel - 0.01, r_barrel, y_back, y_face - 0.01, n)
-    spokes = 6
-    half = math.radians(15 if detail == 'high' else 16)
-    r0, r1 = 0.078, 0.206
-    for i in range(spokes):
-        a = 2 * math.pi * i / spokes
-        verts = []
-        for radius, ang, y in (
-            (r0, a - half * 0.72, y_back + 0.02),
-            (r0, a + half * 0.72, y_back + 0.02),
-            (r1, a + half, y_face - 0.004),
-            (r1, a - half, y_face - 0.004),
-        ):
-            verts.append(bm.verts.new((math.cos(ang) * radius, y, math.sin(ang) * radius)))
-        # A second copy offset in Y makes the spoke a solid, not a sheet.
-        inner = []
-        for v in verts:
-            inner.append(bm.verts.new((v.co.x, v.co.y - 0.028, v.co.z)))
-        bm.faces.new(verts)
-        bm.faces.new(list(reversed(inner)))
-        for k in range(4):
-            nxt = (k + 1) % 4
-            bm.faces.new((verts[k], inner[k], inner[nxt], verts[nxt]))
-    _disc(bm, 0.086, y_face + 0.004, 18 if detail == 'high' else 10)
-    lug_r = 0.011 if detail == 'high' else 0.012
-    for i in range(6):
-        a = 2 * math.pi * (i + 0.5) / 6
-        ret = __import__('bmesh').ops.create_cone(
+    n = 48 if detail == 'high' else 24
+    y_f, y_b = 0.056, 0.030
+    r_o, r_i = 0.216, 0.196
+
+    def prism(r0, r1, a0, a1, y0, y1, steps=1):
+        for s in range(steps):
+            t0 = a0 + (a1 - a0) * s / steps
+            t1 = a0 + (a1 - a0) * (s + 1) / steps
+            pts = [(r0, t0), (r0, t1), (r1, t1), (r1, t0)]
+            bot = [bm.verts.new((math.cos(a) * r, y0, math.sin(a) * r)) for r, a in pts]
+            top = [bm.verts.new((math.cos(a) * r, y1, math.sin(a) * r)) for r, a in pts]
+            bm.faces.new(top)
+            bm.faces.new(list(reversed(bot)))
+            for k in range(4):
+                nxt = (k + 1) % 4
+                bm.faces.new((bot[k], top[k], top[nxt], bot[nxt]))
+
+    for i in range(n):
+        prism(r_i, r_o, 2 * math.pi * i / n, 2 * math.pi * (i + 1) / n, y_b, y_f)
+    # Spokes as wide as the windows: 30 degrees of metal, 30 of opening.
+    for s in range(6):
+        a = 2 * math.pi * s / 6
+        prism(0.078, r_i, a - math.radians(15), a + math.radians(15), 0.032, y_f, 3)
+    # Hub and raised cap.
+    prism(0.0, 0.086, 0, 2 * math.pi, 0.032, y_f, n)
+    prism(0.0, 0.052, 0, 2 * math.pi, y_f, y_f + 0.012, 16 if detail == 'high' else 10)
+    for s in range(6):
+        ang = 2 * math.pi * (s + 0.5) / 6
+        ret = bmesh.ops.create_cone(
             bm, cap_ends=True, cap_tris=False, segments=6,
-            radius1=lug_r, radius2=lug_r, depth=0.01,
+            radius1=0.009, radius2=0.009, depth=0.012,
         )
-        __import__('bmesh').ops.rotate(
-            bm, verts=ret['verts'], cent=(0, 0, 0),
-            matrix=Matrix.Rotation(math.pi / 2, 3, 'X'),
-        )
-        __import__('bmesh').ops.translate(
-            bm, verts=ret['verts'],
-            vec=(math.cos(a) * 0.052, y_face + 0.012, math.sin(a) * 0.052),
-        )
+        bmesh.ops.rotate(bm, verts=ret['verts'], cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 2, 3, 'X'))
+        bmesh.ops.translate(bm, verts=ret['verts'], vec=(math.cos(ang) * 0.032, y_f + 0.014, math.sin(ang) * 0.032))
+    # Brake-colored disc behind the spokes, seen through the windows.
+    prism(0.02, 0.190, 0, 2 * math.pi, -0.004, 0.010, n)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     if outside < 0:
         for v in bm.verts:
@@ -787,11 +785,11 @@ def build_rim_mesh(outside, detail='high'):
     bm.to_mesh(mesh)
     bm.free()
     for poly in mesh.polygons:
-        poly.use_smooth = True
+        poly.use_smooth = False
     return mesh
 
 
-def rebuild_rims(objs, detail='high'):
+def rebuild_rims(objs, detail='high', mat=None):
     for obj in objs:
         if obj.get('role') != 'rim':
             continue
@@ -801,6 +799,19 @@ def rebuild_rims(objs, detail='high'):
         obj.data = fresh
         if old.users == 0:
             bpy.data.meshes.remove(old)
+        if mat is not None:
+            assign(obj, mat)
+        # Darken the cavity behind the spokes so the six windows read as openings.
+        mesh = obj.data
+        if 'Color' not in mesh.color_attributes:
+            mesh.color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')
+        colors = mesh.color_attributes['Color']
+        for poly in mesh.polygons:
+            cavity = poly.center.y * sign < 0.008 and math.hypot(poly.center.x, poly.center.z) < 0.19
+            rgba = (0.12, 0.12, 0.13, 1) if cavity else (1, 1, 1, 1)
+            for li in poly.loop_indices:
+                colors.data[li].color = rgba
+            poly.use_smooth = not cavity
         b = bounds(obj)
         d = dims(b)
         print(f'  rim {obj.name} {detail} {d[0]:.3f} {d[1]:.3f} {d[2]:.3f} tris {tri_count(obj)}')
@@ -845,7 +856,7 @@ def apply_tread(obj):
     tex.image = img
     tex.interpolation = 'Linear'
     normal = nt.nodes.new('ShaderNodeNormalMap')
-    normal.inputs['Strength'].default_value = 1.4
+    normal.inputs['Strength'].default_value = 0.35
     nt.links.new(tex.outputs['Color'], normal.inputs['Color'])
     nt.links.new(normal.outputs['Normal'], bsdf.inputs['Normal'])
 
@@ -862,7 +873,7 @@ def _tread_image():
                 col = int(u * 18) % 2
                 row = int((v - 0.34) / 0.32 * 3)
                 if (col + row) % 2 == 0 and (x % 14) > 2 and ((y % 8) > 1):
-                    height[y * w + x] = 1.0
+                    height[y * w + x] = 0.22
             else:
                 # Two raised sidewall ribs.
                 band = abs(v - (0.18 if v < 0.5 else 0.82))
@@ -875,7 +886,7 @@ def _tread_image():
             r = height[y * w + (x + 1) % w]
             d = height[((y - 1) % h) * w + x]
             u = height[((y + 1) % h) * w + x]
-            nx, ny, nz = (l - r) * 2.2, (d - u) * 2.2, 1.0
+            nx, ny, nz = (l - r) * 0.7, (d - u) * 0.7, 1.0
             mag = math.sqrt(nx * nx + ny * ny + nz * nz)
             i = (y * w + x) * 4
             pixels[i] = (nx / mag + 1) * 0.5
@@ -923,209 +934,275 @@ def tuck_fascia(nose):
             obj.data.update()
 
 
-def build_fascia(mats):
-    """Chrome surround, seven recessed black slots, lamps inside the frame.
+def build_tire_mesh(detail='high'):
+    """Smooth 35-inch tire. Rounded shoulder, 0.32 m tread, no paddles."""
+    import bmesh
+    segs = 32 if detail == 'high' else 20
+    R, bead, hw = 0.445, 0.25, 0.16
+    pts = []
+    steps = 10 if detail == 'high' else 7
+    for i in range(steps + 1):
+        t = -1 + 2 * i / steps
+        u = abs(t)
+        y = t * hw
+        if u < 0.62:
+            radius = R - 0.003 * (u / 0.62) ** 2
+        else:
+            s = (u - 0.62) / 0.38
+            radius = bead + (R - 0.018 - bead) * math.cos(s * math.pi / 2)
+            y = math.copysign(hw * (0.62 + 0.38 * math.sin(s * math.pi / 2)), t)
+        pts.append((radius, y))
+    # Close across the bead so the shell is not an open ribbon.
+    pts.append((bead - 0.01, 0.0))
+    pts.append((bead - 0.01, pts[0][1]))
+    bm = bmesh.new()
+    rings = []
+    for i in range(segs):
+        ang = 2 * math.pi * i / segs
+        ca, sa = math.cos(ang), math.sin(ang)
+        rings.append([bm.verts.new((r * ca, y, r * sa)) for r, y in pts])
+    for i in range(segs):
+        j = (i + 1) % segs
+        for k in range(len(pts) - 1):
+            bm.faces.new((rings[i][k], rings[j][k], rings[j][k + 1], rings[i][k + 1]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new('h2-tire')
+    bm.to_mesh(mesh)
+    bm.free()
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+    return mesh
 
-    The slots are the dark opening, not chrome bars standing off the nose.
-    Round headlamps sit in the surround at each end. Amber lamps are outboard,
-    with a thin red line and fog lamps below.
+
+def replace_tires(objs, detail='high', mat=None):
+    for obj in objs:
+        if obj.get('role') != 'tire':
+            continue
+        fresh = build_tire_mesh(detail)
+        old = obj.data
+        obj.data = fresh
+        if old.users == 0:
+            bpy.data.meshes.remove(old)
+        if mat is not None:
+            assign(obj, mat)
+        b = bounds(obj)
+        d = dims(b)
+        print(f'  tire {obj.name} {detail} {d[0]:.3f} {d[1]:.3f} {d[2]:.3f} tris {tri_count(obj)}')
+
+
+def _rounded_plate(width, height, depth, radius):
+    bpy.ops.mesh.primitive_cube_add(size=1)
+    ob = bpy.context.object
+    ob.scale = (depth, width, height)
+    bpy.ops.object.transform_apply(scale=True)
+    bev = ob.modifiers.new('Bevel', 'BEVEL')
+    bev.width = radius
+    bev.segments = 3
+    bev.limit_method = 'ANGLE'
+    bev.angle_limit = math.radians(40)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.modifier_apply(modifier='Bevel')
+    return ob
+
+
+def _box_cutter(sx, sy, sz, loc):
+    bpy.ops.mesh.primitive_cube_add(size=1, location=loc)
+    ob = bpy.context.object
+    ob.scale = (sx, sy, sz)
+    bpy.ops.object.transform_apply(scale=True)
+    bev = ob.modifiers.new('Bevel', 'BEVEL')
+    bev.width = min(sy, sz) * 0.22
+    bev.segments = 2
+    bev.limit_method = 'ANGLE'
+    bev.angle_limit = math.radians(40)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.modifier_apply(modifier='Bevel')
+    return ob
+
+
+def build_fascia(mats):
+    """One chrome casting, flush with the nose, slots recessed into it.
+
+    Seven tall rounded slots and two headlamp holes are cut out of a thick
+    rounded plate. The slot floors stay in the casting, 4 cm back. Lenses
+    and reflector bowls sit in the holes.
     """
     import bmesh
-    nose = fascia_nose()
-    tuck_fascia(nose)
-    front = nose - 0.004
-    back = nose - 0.042
-    made = []
+    xs, ys = [], []
+    for obj in meshes():
+        if obj.get('role') in ('tire', 'rim') or str(obj.name).startswith('h2-fascia') or str(obj.name).startswith('h2-headlamp'):
+            continue
+        for v in obj.data.vertices:
+            if 0.86 < v.co.z < 1.16 and abs(v.co.y) < 1.15:
+                xs.append(v.co.x)
+                if v.co.x > (max(xs) - 0.06 if len(xs) > 8 else -9):
+                    ys.append(v.co.y)
+    if not xs:
+        print('fascia skipped')
+        return []
+    xs.sort()
+    nose = xs[int(len(xs) * 0.97)]
+    front_ys = []
+    for obj in meshes():
+        if obj.get('role') in ('tire', 'rim'):
+            continue
+        for v in obj.data.vertices:
+            if v.co.x > nose - 0.05 and 0.86 < v.co.z < 1.16:
+                front_ys.append(v.co.y)
+    if len(front_ys) < 8:
+        front_ys = ys
+    half = min(0.78, (max(front_ys) - min(front_ys)) * 0.5 * 0.96)
+    height = 0.22
+    depth = 0.055
+    zc = 0.99
+    print(f'fascia nose {nose:.3f} half {half:.3f}')
 
-    def new_obj(name, bm, mat, bucket):
-        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-        mesh = bpy.data.meshes.new(name)
-        bm.to_mesh(mesh)
+    # Remove the source grille and lamp skin so it cannot show through the slots.
+    for obj in list(meshes()):
+        if obj.get('role') in ('tire', 'rim') or str(obj.name).startswith('h2-fascia') or str(obj.name).startswith('h2-headlamp-lens'):
+            continue
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        kill = []
+        for face in bm.faces:
+            c = face.calc_center_median()
+            in_grille = abs(c.y) < half + 0.02 and abs(c.z - zc) < height * 0.55 and c.x > nose - 0.10
+            old_lamp = obj.name.startswith('h2-headlamp') and c.x > nose - 0.16 and c.z < zc - 0.06 and abs(c.y) < 0.95
+            if in_grille or old_lamp:
+                kill.append(face)
+        if kill:
+            bmesh.ops.delete(bm, geom=kill, context='FACES')
+            bm.to_mesh(obj.data)
+            obj.data.update()
         bm.free()
-        obj = bpy.data.objects.new(name, mesh)
-        bpy.context.scene.collection.objects.link(obj)
-        assign(obj, mat)
-        obj['bucket'] = bucket
-        obj['role'] = 'body'
-        made.append(obj)
-        print(f'  fascia {name} {tri_count(obj)} tris')
-        return obj
 
-    # Recessed black backing for the seven slots.
-    y0, y1 = -0.48, 0.48
-    z0, z1 = 0.84, 1.14
-    bm = bmesh.new()
-    _cube(bm, back - 0.01, back, y0, y1, z0, z1)
-    new_obj('h2-fascia-slots', bm, mats['trim'], 'trim')
+    plate = _rounded_plate(half * 2, height, depth, 0.014)
+    # Cube was centered. Put the front face on the nose and the body behind it.
+    plate.location.x = nose - depth / 2
+    plate.location.z = zc
+    bpy.context.view_layer.objects.active = plate
+    bpy.ops.object.transform_apply(location=True)
 
-    # Chrome surround, including the rings that hold the headlamps.
-    bm = bmesh.new()
-    t = 0.028
-    oy0, oy1 = -0.78, 0.78
-    oz0, oz1 = 0.78, 1.20
-    _cube(bm, front - 0.012, front, oy0, oy1, oz1 - t, oz1)
-    _cube(bm, front - 0.012, front, oy0, oy1, oz0, oz0 + t)
-    _cube(bm, front - 0.012, front, oy0, oy0 + t, oz0, oz1)
-    _cube(bm, front - 0.012, front, oy1 - t, oy1, oz0, oz1)
-    # Vertical chrome bars. Six of them make seven dark slots.
-    gap = (y1 - y0) / 7
-    bar = 0.016
-    for i in range(6):
-        c = y0 + gap * (i + 1)
-        _cube(bm, front - 0.008, front, c - bar / 2, c + bar / 2, z0, z1)
-    # Headlamp bezels, inside the surround.
+    lamp_y = half - 0.105
+    slot_half = lamp_y - 0.115
+    bar = 0.028
+    opening = (slot_half * 2 - bar * 6) / 7
+    # Slot floors stop 4 cm behind the front face.
+    for i in range(7):
+        cy = -slot_half + bar + opening / 2 + i * (opening + bar)
+        cutter = _box_cutter(0.048, opening * 0.92, height - 0.055, (nose - 0.012, cy, zc))
+        bpy.context.view_layer.objects.active = plate
+        mod = plate.modifiers.new('Slot', 'BOOLEAN')
+        mod.operation = 'DIFFERENCE'
+        mod.object = cutter
+        mod.solver = 'EXACT'
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+        bpy.data.objects.remove(cutter, do_unlink=True)
     for sign in (1, -1):
-        _annulus(bm, 0.078, 0.118, front - 0.014, front, 24)
-        # The annulus is centered on the origin. Move it onto this lamp.
-        # _annulus already wrote verts at the origin, so shift the ones we just added.
-    # Moving annuli: rebuild them in place instead. The two calls above are
-    # both at the origin and overlap. Delete that approach and place rings
-    # by translating a fresh set.
+        bpy.ops.mesh.primitive_cylinder_add(
+            radius=0.078, depth=0.07, location=(nose - 0.02, sign * lamp_y, zc),
+            rotation=(0, math.pi / 2, 0), vertices=28,
+        )
+        cutter = bpy.context.object
+        bpy.context.view_layer.objects.active = plate
+        mod = plate.modifiers.new('Lamp', 'BOOLEAN')
+        mod.operation = 'DIFFERENCE'
+        mod.object = cutter
+        mod.solver = 'EXACT'
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+        bpy.data.objects.remove(cutter, do_unlink=True)
+
+    plate.name = 'h2-fascia'
+    plate.data.name = 'h2-fascia'
+    plate.data.materials.clear()
+    plate.data.materials.append(mats['chrome'])
+    if 'Color' not in plate.data.color_attributes:
+        plate.data.color_attributes.new(name='Color', type='BYTE_COLOR', domain='CORNER')
+    colors = plate.data.color_attributes['Color']
+    # Pocket floors are near-black. The chrome bars and the surround stay bright.
+    for poly in plate.data.polygons:
+        c = poly.center
+        floor = poly.normal.x > 0.45 and c.x < nose - 0.02 and abs(c.y) < slot_half + 0.02
+        rgba = (0.02, 0.02, 0.025, 1) if floor else (1, 1, 1, 1)
+        for li in poly.loop_indices:
+            colors.data[li].color = rgba
+        poly.use_smooth = True
+    plate['bucket'] = 'chrome'
+    plate['role'] = 'body'
+    print(f'  fascia plate {tri_count(plate)} tris')
+
+    made = [plate]
+    # Reflector bowl and a clear lens, one object per side so the audit ray hits glass-over-bowl.
+    for sign in (1, -1):
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.062, location=(nose - 0.046, sign * lamp_y, zc), segments=24, ring_count=12)
+        bowl = bpy.context.object
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        # Keep the forward hemisphere only, then flatten it into a bowl.
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bm = bmesh.new()
+        bm.from_mesh(bowl.data)
+        drop = [f for f in bm.faces if f.calc_center_median().x < nose - 0.050]
+        bmesh.ops.delete(bm, geom=drop, context='FACES')
+        bm.to_mesh(bowl.data)
+        bm.free()
+        bowl.data.materials.append(mats['bowl'])
+        # Emissive bulb at the center of the bowl.
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.018, location=(nose - 0.034, sign * lamp_y, zc), segments=12, ring_count=8)
+        bulb = bpy.context.object
+        bulb.data.materials.append(mats['lamp'])
+        bpy.ops.object.select_all(action='DESELECT')
+        bowl.select_set(True)
+        bulb.select_set(True)
+        bpy.context.view_layer.objects.active = bowl
+        bpy.ops.object.join()
+        bowl.name = 'h2-headlamp-lens'
+        bowl.data.materials.append(mats['lens'])
+        # Lens: a thin disc just behind the chrome face.
+        bpy.ops.mesh.primitive_cylinder_add(
+            radius=0.070, depth=0.005, location=(nose - 0.014, sign * lamp_y, zc),
+            rotation=(0, math.pi / 2, 0), vertices=28,
+        )
+        lens = bpy.context.object
+        lens.data.materials.append(mats['lens'])
+        bpy.ops.object.select_all(action='DESELECT')
+        bowl.select_set(True)
+        lens.select_set(True)
+        bpy.context.view_layer.objects.active = bowl
+        bpy.ops.object.join()
+        bowl.name = 'h2-headlamp-lens'
+        bowl['bucket'] = 'lamp'
+        bowl['role'] = 'body'
+        made.append(bowl)
+        print(f'  lamp {sign} {tri_count(bowl)} tris')
+
+    # Thin red accent, sitting on the bumper directly under the casting.
+    bm = bmesh.new()
+    _cube(bm, nose - 0.008, nose + 0.001, -half + 0.04, half - 0.04, zc - height / 2 - 0.016, zc - height / 2 - 0.006)
+    mesh = bpy.data.meshes.new('h2-fascia-accent')
+    bm.to_mesh(mesh)
     bm.free()
+    accent = bpy.data.objects.new('h2-fascia-accent', mesh)
+    bpy.context.scene.collection.objects.link(accent)
+    assign(accent, mats['accent'])
+    accent['bucket'] = 'accent'
+    accent['role'] = 'body'
+    made.append(accent)
+
+    # Small amber lamps just outboard of the headlamps, on the casting line.
     bm = bmesh.new()
-    _cube(bm, front - 0.012, front, oy0, oy1, oz1 - t, oz1)
-    _cube(bm, front - 0.012, front, oy0, oy1, oz0, oz0 + t)
-    _cube(bm, front - 0.012, front, oy0, oy0 + t, oz0, oz1)
-    _cube(bm, front - 0.012, front, oy1 - t, oy1, oz0, oz1)
-    for i in range(6):
-        c = y0 + gap * (i + 1)
-        _cube(bm, front - 0.008, front, c - bar / 2, c + bar / 2, z0, z1)
-    lamp_y = 0.60
-    lamp_z = 0.99
     for sign in (1, -1):
-        before = len(bm.verts)
-        _annulus(bm, 0.075, 0.122, front - 0.016, front + 0.001, 24)
-        shift = [v for v in bm.verts if bm.verts[:].index(v) >= before] if False else None
-    # bmesh vert index after append is the tail. Collect by object id of new verts.
-    # The loop above doesn't move them. Do a second pass with a helper.
+        cy = sign * (half - 0.03)
+        _cube(bm, nose - 0.006, nose + 0.002, cy - 0.028, cy + 0.028, zc - 0.025, zc + 0.025)
+    mesh = bpy.data.meshes.new('h2-marker-fascia')
+    bm.to_mesh(mesh)
     bm.free()
-
-    bm = bmesh.new()
-    _cube(bm, front - 0.012, front, oy0, oy1, oz1 - t, oz1)
-    _cube(bm, front - 0.012, front, oy0, oy1, oz0, oz0 + t)
-    _cube(bm, front - 0.012, front, oy0, oy0 + t, oz0, oz1)
-    _cube(bm, front - 0.012, front, oy1 - t, oy1, oz0, oz1)
-    for i in range(6):
-        c = y0 + gap * (i + 1)
-        _cube(bm, front - 0.008, front, c - bar / 2, c + bar / 2, z0, z1)
-    for sign in (1, -1):
-        ring = bmesh.new()
-        _annulus(ring, 0.074, 0.120, front - 0.014, front + 0.001, 26)
-        for v in ring.verts:
-            v.co.y += sign * lamp_y
-            v.co.z += lamp_z
-        ring.to_mesh(bpy.data.meshes.new('_ringtmp'))
-        # Merge by from_mesh
-        tmp = bpy.data.meshes.new('_ringtmp')
-        ring.to_mesh(tmp)
-        ring.free()
-        add = bmesh.new()
-        add.from_mesh(tmp)
-        bpy.data.meshes.remove(tmp)
-        for v in add.verts:
-            bm.verts.new(v.co)
-        # faces don't come across that way. Use bmesh ops instead.
-        add.free()
-    # The ring merge above dropped faces. Rebuild rings directly into bm.
-    bm.free()
-
-    def ring_into(bm, r_in, r_out, y_pos, z_pos, y0d, y1d, n=26):
-        rings = []
-        for radius, x in ((r_in, y0d), (r_out, y0d), (r_out, y1d), (r_in, y1d)):
-            ring = []
-            for i in range(n):
-                a = 2 * math.pi * i / n
-                ring.append(bm.verts.new((x, y_pos + math.cos(a) * radius, z_pos + math.sin(a) * radius)))
-            rings.append(ring)
-        for a, b in ((0, 1), (1, 2), (2, 3), (3, 0)):
-            for i in range(n):
-                j = (i + 1) % n
-                bm.faces.new((rings[a][i], rings[a][j], rings[b][j], rings[b][i]))
-
-    bm = bmesh.new()
-    _cube(bm, front - 0.012, front, oy0, oy1, oz1 - t, oz1)
-    _cube(bm, front - 0.012, front, oy0, oy1, oz0, oz0 + t)
-    _cube(bm, front - 0.012, front, oy0, oy0 + t, oz0, oz1)
-    _cube(bm, front - 0.012, front, oy1 - t, oy1, oz0, oz1)
-    for i in range(6):
-        c = y0 + gap * (i + 1)
-        _cube(bm, front - 0.008, front, c - bar / 2, c + bar / 2, z0, z1)
-    for sign in (1, -1):
-        ring_into(bm, 0.072, 0.118, sign * lamp_y, lamp_z, front - 0.012, front + 0.001, 26)
-    new_obj('h2-fascia-chrome', bm, mats['chrome'], 'chrome')
-
-    # Lenses sit just behind the bezel so the chrome reads as the surround.
-    bm = bmesh.new()
-    for sign in (1, -1):
-        _disc(bm, 0.070, 0)
-        for v in list(bm.verts)[-40:]:
-            pass
-    bm.free()
-    bm = bmesh.new()
-    for sign in (1, -1):
-        disc = bmesh.new()
-        _disc(disc, 0.070, front - 0.008, 22)
-        for v in disc.verts:
-            v.co.y += sign * lamp_y
-            v.co.z += lamp_z
-        tmp = bpy.data.meshes.new('_disc')
-        disc.to_mesh(tmp)
-        disc.free()
-        part = bmesh.new()
-        part.from_mesh(tmp)
-        bpy.data.meshes.remove(tmp)
-        vert_map = {}
-        for v in part.verts:
-            vert_map[v] = bm.verts.new(v.co)
-        for f in part.faces:
-            bm.faces.new([vert_map[v] for v in f.verts])
-        part.free()
-        # Fog lamps, lower and a bit inboard.
-        fog = bmesh.new()
-        _disc(fog, 0.045, front - 0.002, 16)
-        for v in fog.verts:
-            v.co.y += sign * 0.46
-            v.co.z += 0.50 - (front - 0.002)
-        # _disc already placed them at y=front-0.002 which is the X axis in our
-        # coord... wait. _disc puts the disc on the Y axis (axle), not X.
-        fog.free()
-    bm.free()
-
-    # Lenses and fogs, built in vehicle axes (X forward, Y lateral, Z up).
-    bm = bmesh.new()
-
-    def lens(cx, cy, cz, radius, segs):
-        ring = []
-        for i in range(segs):
-            a = 2 * math.pi * i / segs
-            ring.append(bm.verts.new((cx, cy + math.cos(a) * radius, cz + math.sin(a) * radius)))
-        hub = bm.verts.new((cx - 0.004, cy, cz))
-        for i in range(segs):
-            bm.faces.new((hub, ring[i], ring[(i + 1) % segs]))
-
-    for sign in (1, -1):
-        lens(front - 0.006, sign * lamp_y, lamp_z, 0.070, 22)
-        lens(front + 0.002, sign * 0.50, 0.50, 0.042, 16)
-    new_obj('h2-headlamp-fascia', bm, mats['lamp'], 'lamp')
-
-    bm = bmesh.new()
-    for sign in (1, -1):
-        cy, cz = sign * 0.82, 0.97
-        # Sit on whatever body is actually there, just outboard of the surround.
-        sx = front
-        for obj in meshes():
-            if obj.get('role') in ('tire', 'rim') or str(obj.name).startswith('h2-fascia'):
-                continue
-            for v in obj.data.vertices:
-                if abs(v.co.y - cy) < 0.04 and abs(v.co.z - cz) < 0.05:
-                    sx = max(sx, v.co.x)
-        _cube(bm, sx - 0.004, sx + 0.006, cy - 0.035, cy + 0.035, cz - 0.028, cz + 0.028)
-    new_obj('h2-marker-fascia', bm, mats['amber'], 'amber')
-
-    bm = bmesh.new()
-    _cube(bm, front - 0.002, front + 0.003, -0.74, 0.74, oz0 - 0.018, oz0 - 0.006)
-    new_obj('h2-fascia-accent', bm, mats['accent'], 'accent')
-    print(f'fascia nose {nose:.3f} front {front:.3f}')
+    amber = bpy.data.objects.new('h2-marker-fascia', mesh)
+    bpy.context.scene.collection.objects.link(amber)
+    assign(amber, mats['amber'])
+    amber['bucket'] = 'amber'
+    amber['role'] = 'body'
+    made.append(amber)
     return made
 
 
@@ -1222,7 +1299,8 @@ def main():
             obj.name = 'h2-rim' if n_rim == 0 else f'h2-rim{n_rim}'
             n_rim += 1
         print(f'high {obj.name} {tri_count(obj)} tris')
-    rebuild_rims(keep, 'high')
+    rebuild_rims(keep, 'high', mats['rim'])
+    replace_tires(keep, 'high', mats['tire'])
     for obj in keep:
         if obj.get('role') == 'tire':
             apply_tread(obj)
@@ -1238,11 +1316,12 @@ def main():
         role = obj.get('role')
         name = obj.name
         if role == 'rim':
-            rebuild_rims([copy], 'low')
+            rebuild_rims([copy], 'low', mats['rim'])
             count = tri_count(copy)
         elif role == 'tire':
-            count = decimate_to(copy, LOW['tire'])
+            replace_tires([copy], 'low', mats['tire'])
             apply_tread(copy)
+            count = tri_count(copy)
         elif name.startswith('h2-fascia') or name.startswith('h2-headlamp-fascia') or name.startswith('h2-marker-fascia') or name.startswith('h2-step'):
             count = tri_count(copy)
         else:
