@@ -15,8 +15,9 @@ window.addEventListener('error', (e) => {
 </script>
 <script type="module">
 import * as THREE from 'three';
-import { makePaceCar, auditPaceCar } from '../js/pace-car.js';
+import { makePaceCar, auditPaceCar, preloadH2 } from '../js/pace-car.js';
 try {
+await preloadH2();
 const params = new URLSearchParams(location.search);
 const view = params.get('view') || 'front';
 const h2 = makePaceCar(params.get('low') === '1');
@@ -52,7 +53,7 @@ renderer.toneMappingExposure = 1.0;
 renderer.render(scene, cam);
 const log = document.getElementById('log');
 const ok = fails.length === 0;
-log.textContent = `tris ${h2.userData.triangles} draws ${h2.userData.drawCalls} view ${view}\n${ok ? 'PASS' : fails.join('\n')}`;
+log.textContent = `tris ${h2.userData.triangles} draws ${h2.userData.drawCalls} view ${view} ${h2.userData.source || 'procedural'}\n${ok ? 'PASS' : fails.join('\n')}`;
 document.title = ok ? 'PASS' : 'FAIL';
 document.body.dataset.ready = ok ? '1' : '0';
 } catch (err) {

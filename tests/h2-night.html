@@ -8,12 +8,14 @@
 <canvas id="gl"></canvas>
 <script type="module">
 import * as THREE from 'three';
+import { preloadH2 } from '../js/pace-car.js';
 import { RaceScene } from '../js/race.js';
 import { TRACKS } from '../js/data.js';
 const log = document.getElementById('log');
 const fail = (m) => { log.textContent = String(m); document.title = 'FAIL'; document.body.dataset.ready = '0'; };
 window.addEventListener('error', (e) => fail(e.error?.stack || e.message));
 try {
+  await preloadH2();
   const canvas = document.getElementById('gl');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setSize(1280, 720);

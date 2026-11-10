@@ -1,13 +1,87 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { buildH2, H2_LAMP, windAt, rearGlassAt } from './h2-body.js';
+import { beveledBox } from './details.js';
+import { glowTexture } from './gfx.js';
 // Visible pace car on the existing pace logic (formation arc / pace leader).
 // Kinematic only: it is never in the race car list, never collides, and only
-// uses the apron plus an infield spot. The mesh is an original H2-proportioned SUV.
+// uses the apron plus an infield spot. The mesh is an original H2, generated
+// in Blender. The procedural shell is the fallback if the GLB does not load.
 const wrapP=(v,P)=>((v%P)+P)%P,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const glbCache={high:null,low:null};
+let glbPromise=null;
+function paceEnv(){
+ if(paceEnv.tex)return paceEnv.tex;
+ const W=128,H=64,d=new Uint8Array(W*H*4);
+ for(let j=0;j<H;j++)for(let i=0;i<W;i++){
+  const v=(j+.5)/H,u=(i+.5)/W;
+  const sky=v>0.52,k=(j*W+i)*4;
+  const r=sky?170:46,g=sky?188:48,b=sky?206:50;
+  const blob=Math.exp(-((Math.min(Math.abs(u-.08),1-Math.abs(u-.08))**2)/0.002)-((v-.7)**2)/0.01);
+  d[k]=Math.min(255,r+140*blob);d[k+1]=Math.min(255,g+140*blob);d[k+2]=Math.min(255,b+130*blob);d[k+3]=255;
+ }
+ const t=new THREE.DataTexture(d,W,H);t.colorSpace=THREE.SRGBColorSpace;
+ t.mapping=THREE.EquirectangularReflectionMapping;t.needsUpdate=true;paceEnv.tex=t;return t;
+}
+function dressGlb(src,low){
+ const env=paceEnv();
+ const g=src.clone(true);g.name='pace-car';g.rotation.order='YXZ';
+ g.traverse(o=>{
+  if(!o.isMesh)return;
+  const mats=Array.isArray(o.material)?o.material:[o.material];
+  for(const m of mats){
+   if(!m)continue;
+   m.envMap=env;
+   if(m.name==='glass'||o.name.startsWith('h2-glass')){
+    m.side=THREE.DoubleSide;m.transparent=false;m.opacity=1;m.depthWrite=true;
+    m.metalness=Math.max(m.metalness??0,.8);m.roughness=Math.min(m.roughness??1,.08);
+    m.envMapIntensity=1.1;
+   }else if(m.name==='paint'||m.name==='h2-paint'){
+    m.envMapIntensity=.45;
+    if('clearcoat' in m){m.clearcoat=Math.max(m.clearcoat??0,.5);m.clearcoatRoughness=m.clearcoatRoughness??.22;}
+   }else if(m.name==='chrome'||m.metalness>.8){
+    m.envMapIntensity=1.2;m.roughness=Math.min(m.roughness??.2,.16);
+   }
+   m.needsUpdate=true;
+  }
+ });
+ const paceMat=[0,1].map(()=>new THREE.MeshStandardMaterial({color:0xffb000,emissive:0xffaa00,emissiveIntensity:1.4,roughness:.35}));
+ const lamps=[],sprites=[],tex=glowTexture();
+ for(const side of[1,-1]){
+  const pod=new THREE.Mesh(beveledBox(.1,.026,.13,.006,2),paceMat[side>0?0:1]);
+  pod.position.set(.35,1.94,side*.16);pod.name='h2-pace-lamp';g.add(pod);lamps.push(pod);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffb020,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.5}));
+  sp.scale.setScalar(low?0.32:0.46);sp.position.set(.35,1.97,side*.16);g.add(sp);
+  if(!low||side>0)sprites.push(sp);else sp.visible=false;
+ }
+ let tris=0,draws=0;
+ g.traverse(o=>{if(!o.isMesh)return;draws++;
+  const n=o.geometry.index?o.geometry.index.count/3:o.geometry.attributes.position.count/3;
+  tris+=n*(o.isInstancedMesh?o.count:1);
+ });
+ g.userData={lamps,sprites,bar:lamps[0],frontAxle:WB()/2,rearAxle:-WB()/2,trackWidth:69.4*0.0254,
+  halfLength:2.6,halfWidth:1.22,bodyLength:189.8*0.0254,bodyWidth:81.2*0.0254,bodyHeight:77.8*0.0254,
+  grille:'seven-vertical',lampsShape:'round',triangles:Math.round(tris),drawCalls:draws,source:'glb'};
+ return g;
+}
+const WB=()=>122.8*0.0254;
+export function preloadH2(){
+ if(glbPromise)return glbPromise;
+ const loader=new GLTFLoader();
+ const file=name=>new URL('../assets/models/'+name,import.meta.url).href;
+ const load=url=>new Promise((res,rej)=>loader.load(url,res,undefined,rej));
+ glbPromise=Promise.all([load(file('h2.glb')),load(file('h2-low.glb'))]).then(([hi,lo])=>{
+  glbCache.high=hi.scene;glbCache.low=lo.scene;
+ }).catch(err=>{console.warn('H2 model failed, using the procedural shell',err);glbCache.high=glbCache.low=null;});
+ return glbPromise;
+}
 export function makePaceCar(low=false){
+ const src=low?glbCache.low:glbCache.high;
+ if(src)return dressGlb(src,low);
  const g=new THREE.Group();g.name='pace-car';g.rotation.order='YXZ';
  buildH2(g,low);return g;
 }
+preloadH2();
 export function auditPaceCar(group){
  const fails=[],size=new THREE.Vector3();
  let tires=0,rims=0,glass=0;
@@ -21,12 +95,13 @@ export function auditPaceCar(group){
    const l=Math.hypot(n.getX(i),n.getY(i),n.getZ(i));
    if(!Number.isFinite(l)||l<.5||l>1.5){fails.push((o.name||'mesh')+' bad normal');break;}
   }
-  if(o.name==='h2-tire'||o.name==='h2-spare'){
-   if(o.name==='h2-tire')tires+=o.isInstancedMesh?o.count:1;
+  const tireName=/^h2-tire\d*$/.test(o.name),rimName=/^h2-rim\d*$/.test(o.name);
+  if(tireName||o.name==='h2-spare'){
+   if(tireName)tires+=o.isInstancedMesh?o.count:1;
    geo.computeBoundingBox();size.subVectors(geo.boundingBox.max,geo.boundingBox.min);
    if(!(size.z<size.x*.55&&size.z<size.y*.55&&size.x>.7&&size.y>.7))fails.push(`tire axis ${size.x.toFixed(2)} ${size.y.toFixed(2)} ${size.z.toFixed(2)}`);
   }
-  if(o.name==='h2-rim'){
+  if(rimName){
    rims+=o.isInstancedMesh?o.count:1;geo.computeBoundingBox();size.subVectors(geo.boundingBox.max,geo.boundingBox.min);
    if(!(size.z<size.x*.5&&size.z<size.y*.5&&size.x>.35&&size.y>.35))fails.push(`rim axis ${size.x.toFixed(2)} ${size.y.toFixed(2)} ${size.z.toFixed(2)}`);
   }

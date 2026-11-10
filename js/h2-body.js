@@ -13,7 +13,7 @@ const FA = WB / 2, RA = -WB / 2;
 const NOSE = FA + FOH, TAIL = RA - ROH;
 const TIRE_R = 35 * IN / 2, TIRE_W = 0.325;
 // Round lamp, sitting inside the chrome surround, ahead of the bezel.
-export const H2_LAMP = { x: 2.348, y: 1.02, z: 0.62 };
+export const H2_LAMP = { x: 2.40, y: 1.03, z: 0.66 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -168,12 +168,12 @@ function treadMaps() {
 
 // Windshield and rear glass. The gasket and pillars share these edges.
 export function windAt(u, v) {
-  const bow = 0.012 * (1 - u * u);
-  // About 28 degrees off vertical: a short, upright H2 screen.
-  return [lerp(1.16, 0.90, v) + bow, lerp(1.42, 1.84, v), u * lerp(0.74, 0.64, v)];
+  const bow = 0.008 * (1 - u * u);
+  // Matches the GLB windshield. Blender Y becomes Three -Z.
+  return [lerp(1.145, 0.80, v) + bow, lerp(1.34, 1.84, v), -u * lerp(0.72, 0.62, v)];
 }
 export function rearGlassAt(u, v) {
-  return [lerp(-2.16, -2.00, v), lerp(1.46, 1.82, v), u * lerp(0.64, 0.54, v)];
+  return [lerp(-2.18, -2.00, v), lerp(1.38, 1.82, v), -u * lerp(0.66, 0.54, v)];
 }
 
 // Rounded-rectangle chrome tube. halfW/halfH are the tube centerline.
