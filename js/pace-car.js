@@ -5,8 +5,9 @@ import { beveledBox } from './details.js';
 import { glowTexture } from './gfx.js';
 // Visible pace car on the existing pace logic (formation arc / pace leader).
 // Kinematic only: it is never in the race car list, never collides, and only
-// uses the apron plus an infield spot. The mesh is an original H2, generated
-// in Blender. The procedural shell is the fallback if the GLB does not load.
+// uses the apron plus an infield spot. The mesh is the CC0 Hummer H2 from
+// Blend Swap #79973, cleaned up in Blender. The procedural shell is the
+// fallback if the GLB does not load.
 const wrapP=(v,P)=>((v%P)+P)%P,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const glbCache={high:null,low:null};
 let glbPromise=null;
@@ -47,11 +48,12 @@ function dressGlb(src,low){
  });
  const paceMat=[0,1].map(()=>new THREE.MeshStandardMaterial({color:0xffb000,emissive:0xffaa00,emissiveIntensity:1.4,roughness:.35}));
  const lamps=[],sprites=[],tex=glowTexture();
+ const roof=new THREE.Box3().setFromObject(g).max.y;
  for(const side of[1,-1]){
   const pod=new THREE.Mesh(beveledBox(.1,.026,.13,.006,2),paceMat[side>0?0:1]);
-  pod.position.set(.35,1.94,side*.16);pod.name='h2-pace-lamp';g.add(pod);lamps.push(pod);
+  pod.position.set(.2,roof+0.012,side*.16);pod.name='h2-pace-lamp';g.add(pod);lamps.push(pod);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffb020,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.5}));
-  sp.scale.setScalar(low?0.32:0.46);sp.position.set(.35,1.97,side*.16);g.add(sp);
+  sp.scale.setScalar(low?0.32:0.46);sp.position.set(.2,roof+0.04,side*.16);g.add(sp);
   if(!low||side>0)sprites.push(sp);else sp.visible=false;
  }
  let tris=0,draws=0;
@@ -121,6 +123,80 @@ export function auditPaceCar(group){
   const hit=ray.intersectObjects(meshes,false)[0];
   if(!hit||!hit.object.name.startsWith(expect))fails.push(`ray ${expect} hit ${hit?.object.name||'nothing'}`);
  };
+ const toLocal=p=>group.worldToLocal(p);
+ if(group.userData.source==='glb'){
+  // The CC0 glass and lamps are not on the procedural shell's coordinates.
+  // Aim at the real lens and at the real windshield, and require a filled surface.
+  let lampOk=false,lampNote='nothing';
+  for(const lamp of meshes.filter(o=>o.name.startsWith('h2-headlamp'))){
+   const pos=lamp.geometry.attributes.position,pts=[];
+   for(let i=0;i<pos.count;i+=2)pts.push(toLocal(lamp.localToWorld(new THREE.Vector3().fromBufferAttribute(pos,i))));
+   if(pts.length<4)continue;
+   const maxX=Math.max(...pts.map(p=>p.x));
+   const front=pts.filter(p=>p.x>maxX-0.06&&Math.abs(p.z)>0.35);
+   const pool=front.length?front:pts.filter(p=>p.x>maxX-0.06);
+   pool.sort((a,b)=>Math.abs(b.z)-Math.abs(a.z));
+   const aim=pool[Math.min(3,pool.length-1)];
+   for(const dz of [0,.1,-.06,.18]){
+    const c=aim.clone();c.z+=Math.sign(c.z||1)*dz;
+    const origin=c.clone();origin.x+=0.5;
+    ray.set(origin,new THREE.Vector3(-1,0,0));
+    const hit=ray.intersectObjects(meshes,false)[0];
+    lampNote=hit?hit.object.name:'nothing';
+    if(hit&&hit.object.name.startsWith('h2-headlamp')&&hit.distance<0.6){lampOk=true;break;}
+   }
+  }
+  if(!lampOk){
+   const nose=Math.max(...meshes.filter(o=>o.name.startsWith('h2-headlamp')).flatMap(o=>{
+    const pos=o.geometry.attributes.position,xs=[];
+    for(let i=0;i<pos.count;i+=5){const p=toLocal(o.localToWorld(new THREE.Vector3().fromBufferAttribute(pos,i)));xs.push(p.x);} 
+    return xs;
+   }),0);
+   for(const z of [.5,.68,.84,-.5,-.68,-.84])for(const y of [.78,.92,1.05]){
+    ray.set(new THREE.Vector3(nose+0.45,y,z),new THREE.Vector3(-1,0,0));
+    const hit=ray.intersectObjects(meshes,false)[0];
+    lampNote=hit?hit.object.name:'nothing';
+    if(hit&&hit.object.name.startsWith('h2-headlamp')&&hit.distance<0.7){lampOk=true;break;}
+   }
+  }
+  if(!lampOk)fails.push('ray h2-headlamp hit '+lampNote);
+  const glassPts=[];
+  for(const g of meshes.filter(o=>o.name.startsWith('h2-glass'))){
+   const pos=g.geometry.attributes.position;
+   const step=Math.max(1,pos.count/48|0);
+   for(let i=0;i<pos.count;i+=step)glassPts.push(toLocal(g.localToWorld(new THREE.Vector3().fromBufferAttribute(pos,i))));
+  }
+  if(glassPts.length<8)fails.push('glass surface');
+  else{
+   const sideSeesGlass=(sign)=>{
+    const pts=glassPts.filter(p=>Math.sign(p.z)===sign&&p.y>1.3&&p.y<1.9);
+    pts.sort((a,b)=>Math.abs(b.z)-Math.abs(a.z));
+    const tries=pts.filter((_,i)=>i%Math.max(1,pts.length/16|0)===0).slice(0,16);
+    let note='nothing';
+    for(const p of tries){
+     const origin=p.clone();origin.z+=sign*0.5;
+     ray.set(origin,new THREE.Vector3(0,0,-sign));
+     const hit=ray.intersectObjects(meshes,false)[0];
+     note=hit?hit.object.name:'nothing';
+     if(hit&&hit.object.name.startsWith('h2-glass')&&hit.distance<0.55)return '';
+    }
+    return note;
+   };
+   for(const sign of [1,-1]){
+    const note=sideSeesGlass(sign);
+    if(note)fails.push('ray h2-glass hit '+note);
+   }
+   const xs=glassPts.map(p=>p.x),minX=Math.min(...xs),maxX=Math.max(...xs),span=Math.max(0.2,maxX-minX);
+   const band=(pred,n)=>glassPts.filter(pred).filter((_,i,a)=>i%Math.max(1,a.length/n|0)===0).slice(0,n);
+   for(const p of [...band(p=>p.x>maxX-span*0.2,8),...band(p=>p.x<minX+span*0.2,6)]){
+    const origin=p.clone();origin.x+=p.x>=0?0.22:-0.22;
+    const dir=p.clone().sub(origin),dist=dir.length();
+    ray.set(origin,dir.normalize());
+    const hit=ray.intersectObjects(meshes,false)[0];
+    if(!hit||hit.distance>dist+0.04)fails.push(`opening ${p.x.toFixed(2)},${p.y.toFixed(2)} hit ${hit?.object.name||'nothing'}`);
+   }
+  }
+ }else{
  probe(new THREE.Vector3(-.1,1.58,1.7),new THREE.Vector3(0,0,-1),'h2-glass');
  probe(new THREE.Vector3(-.8,1.58,-1.7),new THREE.Vector3(0,0,1),'h2-glass');
  probe(new THREE.Vector3(3.4,H2_LAMP.y,H2_LAMP.z),new THREE.Vector3(-1,0,0),'h2-headlamp');
@@ -139,6 +215,7 @@ export function auditPaceCar(group){
  const rearSamples=[[-1,.08],[-1,.92],[1,.08],[1,.92],[0,.95],[0,.08]];
  seal([[-1,.05],[-1,.5],[-1,.95],[1,.05],[1,.5],[1,.95],[0,.97],[-.7,.95],[.7,.95]],(u,v)=>new THREE.Vector3(.7,.02,Math.sign(u||1)*.22));
  seal(rearSamples,(u)=>new THREE.Vector3(-.65,.02,Math.sign(u||1)*.2));
+ }
  return fails;
 }
 export class PaceCar{
