@@ -137,7 +137,12 @@ export class RevModel {
     if(throttle-this.prevThr>.45&&this.rpm<2500)this.stab=.09;
     this.stab=Math.max(0,(this.stab||0)-dt);
     const launch=this.idle+throttle*6500*Math.max(0,1-Math.abs(speed)/14);
-    let target=free?this.idle+throttle*(7900-this.idle):Math.max(this.idle+throttle*500,wheel+throttleFlare,launch);
+    // Night20: on auto-paced pace/caution laps the car is still rolling in gear (one-speed late model),
+    // so gas loads the engine on wheel speed plus a modest flare instead of free-revving into the limiter.
+    // The flare is released over about a second after the green, so holding gas through the flag no longer drops RPM.
+    const rolling=free&&Math.abs(speed)>2;
+    this.paceFlare=rolling?throttle*1400:throttle>.3?(this.paceFlare||0)*Math.exp(-dt/1):0;
+    let target=free&&!rolling?this.idle+throttle*(7900-this.idle):Math.max(this.idle+throttle*500,wheel+throttleFlare,wheel+this.paceFlare,launch);
     target=Math.max(this.idle-35,target-this.stab/.09*1500);if(throttle<.06&&wheel<1100)target=this.idle+hunt;
     this.demand=target;
     // Schmitt latch: genuine overspeed enters; a 200-RPM demand band prevents
@@ -328,9 +333,10 @@ export class GameAudio {
     // Audio-clock cadence, not render-frame cadence. No topology changes occur
     // here: a bounded persistent voice pool is faded/rebound, never recreated.
     const interval=this.app?.isMobile ? .05 : 1/30;if(this.nextRaceT!==undefined&&t+1e-6<this.nextRaceT)return;
-    const elapsed=this.lastRaceT===undefined?dt:clampAudio(t-this.lastRaceT,.001,.15);this.lastRaceT=t;this.nextRaceT=(this.nextRaceT??t)+interval;if(this.nextRaceT<t)this.nextRaceT=t+interval;this.stats.controlUpdates++;
+    const first=this.lastRaceT===undefined,elapsed=first?dt:clampAudio(t-this.lastRaceT,.001,.15);this.lastRaceT=t;this.nextRaceT=(this.nextRaceT??t)+interval;if(this.nextRaceT<t)this.nextRaceT=t+interval;this.stats.controlUpdates++;
     const L=f.L,lv=this.lPrev?{x:clampAudio((L.x-this.lPrev.x)/elapsed,-75,75),z:clampAudio((L.z-this.lPrev.z)/elapsed,-75,75)}:{x:0,z:0};this.lPrev={x:L.x,z:L.z};this.cam(t,f.cam);
-    if(f.player){const p=f.player,pr=this.playerRev.step(elapsed,p.speed,p.wheelSpin,p.throttle,p.freeRev),vol=.55*v8Vol(pr.rpm,pr.load);this.player.update(t,pr.rpm,{on:pr.load,off:1-pr.load,cut:pr.cut>0},vol,1,.075);this.rpm=pr.rpm;}else this.player.update(t,V8.idle,{on:0,off:1},0);
+    if(f.player){const p=f.player;if(first){this.playerRev.rpm=clampAudio(Math.abs(p.speed)*this.playerRev.perMs,V8.idle,V8.limit);this.playerRev.load=p.throttle||0;} /* Night20: the race opens already rolling; start the engine at road RPM, not a rev-up from idle */
+      const pr=this.playerRev.step(elapsed,p.speed,p.wheelSpin,p.throttle,p.freeRev),vol=.55*v8Vol(pr.rpm,pr.load);this.player.update(t,pr.rpm,{on:pr.load,off:1-pr.load,cut:pr.cut>0},vol,1,.075);this.rpm=pr.rpm;}else this.player.update(t,V8.idle,{on:0,off:1},0);
     if(this.rankAt===undefined||t>=this.rankAt){this.rankAt=t+.4;this.audible=[...f.cars].filter(a=>(a.x-L.x)**2+(a.z-L.z)**2<90**2).sort((a,b)=>((a.x-L.x)**2+(a.z-L.z)**2)*(this.ai.has(a.id)?.72:1)-((b.x-L.x)**2+(b.z-L.z)**2)*(this.ai.has(b.id)?.72:1)).slice(0,this.voiceLimit).map(a=>a.id);}
     const wanted=new Set(this.audible||[]);
     for(const[id,v]of this.ai)if(!wanted.has(id)||!f.cars.some(c=>c.id===id)){v.retire(t);v.availableAt=t+.16;this.ai.delete(id);}

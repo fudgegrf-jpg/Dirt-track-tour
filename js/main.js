@@ -238,6 +238,9 @@ class App {
     const paint=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
     try{await paint();if(token!==this.transitionToken)return;const build=performance.now();this.goto('race',{warmed:true});const race=this.mode;race.updateSurface(0,true);race.grass?.prepare(race.camera,0);if(race.hud){const old=race.hud.msg.textContent;race.hud.msg.textContent='ONE TO GO… GET READY';void race.hud.msg.offsetWidth;await document.fonts.ready;race.hud.msg.textContent=old;}this.transitionMetrics={buildMs:performance.now()-build};await paint();if(token!==this.transitionToken)return;
       const audio=performance.now();this.audio.ensure();this.transitionMetrics.audioMs=performance.now()-audio;
+      // Night20: fetch/decode the V8 sound pack behind this screen (in parallel with shader warm-up) so the
+      // race opens on the real engine instead of the fallback synth swapping over mid pace lap. Capped wait.
+      const enginePack=Promise.race([Promise.resolve(this.audio.loadDyno?.()).catch(()=>false),new Promise(r=>setTimeout(()=>r(false),5000))]);
       const upload=performance.now(),textures=new Set();race.scene.traverse(o=>{for(const m of Array.isArray(o.material)?o.material:[o.material])if(m)for(const v of Object.values(m))if(v?.isTexture)textures.add(v);});for(const t of textures)this.renderer.initTexture(t);this.transitionMetrics.uploadMs=performance.now()-upload;
       // Compile hidden cockpit, low LOD, dust/smoke and flag variants as well as
       // the initial view. Damage changes uniforms only, not shader topology.
@@ -253,6 +256,7 @@ class App {
       // loading screen rather than allowing a first-lap MAX-quality stall.
       if(this.qualityChoice==='auto'&&!this.manual){const ms=drawMs/2;this.transitionMetrics.presentedWarmMs=ms;if(ms>32&&this.quality!=='low'){this.quality='low';this.transitionMetrics.autoTier='low';this.applyQuality();race.updateSurface(0,true);race.grass?.prepare(race.camera,0);}const scale=Math.max(.65,Math.min(1,(this.autoScale||1)*Math.sqrt(16.7/Math.max(ms,1))));this.autoScale=scale;this.applyQuality();await compileScene();this.render();this.renderer.getContext().finish();await paint();this.transitionMetrics.autoScale=scale;}
       for(const c of race.cars){Object.assign(c.previousPose,{x:c.x,z:c.z,th:c.th});Object.assign(c.renderPose,c.previousPose);}race.acc=0;this.keys.clear();this.pressed.clear();this.last=performance.now();this.transitionMetrics.totalMs=performance.now()-start;this.transitionMetrics.programs=this.renderer.info.programs.length;
+      const packWait=performance.now();await enginePack;this.transitionMetrics.enginePackWaitMs=performance.now()-packWait;this.transitionMetrics.enginePack=this.audio.sampleState||'none';this.last=performance.now();
       if(token===this.transitionToken){this.warming=false;this.transitioning=false;overlay.classList.add('ready');setTimeout(()=>overlay.remove(),250);}
     }catch(e){console.error('Race preparation failed',e);if(token===this.transitionToken){this.warming=false;this.transitioning=false;overlay.remove();this.toast('Could not prepare the race. Return to the menu and try again.');}}
   }
