@@ -212,14 +212,15 @@ def boxify(obj, bars=3):
     print(f'  boxify {obj.name} -> {tri_count(obj)} tris')
 
 
-def decimate_to(obj, target):
+def decimate_to(obj, target, planar_first=True):
     if obj.data.users > 1:
         obj.data = obj.data.copy()
     sanitize(obj)
     tris = tri_count(obj)
     # Flatten the nearly-coplanar hood and fender facets before collapse so
-    # the decimate doesn't wrinkle those panels.
-    if tris > 25000:
+    # the decimate doesn't wrinkle those panels. Skip this on the body:
+    # dissolving first, then triangulating, is what cut the doors into wedges.
+    if planar_first and tris > 25000:
         import bmesh
         bm = bmesh.new()
         bm.from_mesh(obj.data)
@@ -474,12 +475,18 @@ def prepare_scene():
         for mod in obj.modifiers:
             if mod.type != 'SUBSURF':
                 continue
+            # Wheels are rebuilt later. The body keeps the author's subdivision
+            # so the doors and hood are not a coarse cage. Collapse decimation
+            # was what pulled those panels into jagged triangles.
             if role in ('tire', 'rim'):
                 level = 1
-            elif verts > 2500:
+            elif verts > 8000:
+                # One subdivision of the main shell. Level 2 is hundreds of
+                # thousands of faces, and dissolving it turns the doors into
+                # long triangles.
                 level = 1
             else:
-                level = 2
+                level = min(2, mod.levels or 2)
             mod.levels = level
             mod.render_levels = level
             print(f'subsurf {obj.name} -> {level} ({verts} cage verts)')
@@ -601,6 +608,10 @@ def retopo(mats):
             decimate_evenly(parts, 1400, floor=200)
         elif bucket == 'amber':
             decimate_evenly(parts, 700, floor=120)
+        elif bucket == 'paint':
+            # Leave the subdivided shell intact. finish() dissolves only
+            # coplanar facets, which does not wrinkle a flat door.
+            pass
         elif bucket in HIGH and bucket != 'decal':
             decimate_parts(parts, HIGH[bucket])
         obj = join_objects(parts, BUCKET_NAME[bucket])
@@ -639,12 +650,17 @@ def smooth_angle(obj, deg=35):
 
 def finish(obj, budget, wheel=None):
     cleanup_mesh(obj)
+    if obj.get('bucket') == 'paint':
+        # One moderate collapse of the subdivided shell. A tiny ratio, or a
+        # planar dissolve, is what creased the doors.
+        count = decimate_to(obj, 20000, planar_first=False)
+        cleanup_mesh(obj)
+        smooth_angle(obj, 45)
+        return count
     count = decimate_to(obj, budget)
     cleanup_mesh(obj)
     if wheel:
         bake_axle(obj, 0.50 if wheel == 'tire' else 0.40)
-    elif obj.get('bucket') == 'paint':
-        smooth_angle(obj, 35)
     return count
 
 
@@ -732,85 +748,92 @@ def _disc(bm, radius, y, n=20, z_axis=False):
 
 
 def build_rim_mesh(outside, detail='high'):
-    """Stock H2 alloy: a lip, exactly six thick spokes, a small cap.
+    """Cast six-spoke alloy. Spokes are bars with a recessed channel, not wedges.
 
-    Nothing else is radial. A dark disc sits behind the windows so the
-    openings read as holes, and it does not reach the face. +Y is outside.
+    They stop at a round hub. The six lugs sit on that hub, between the
+    spokes. The center cap is a dish set below the hub face. +Y is outside.
     """
     import bmesh
     bm = bmesh.new()
-    n = 32 if detail == 'high' else 18
-    y_face, y_root = 0.052, 0.034
-    r_o, r_i = 0.216, 0.186
-    _annulus(bm, r_i, r_o, y_root - 0.006, y_face, n)
+    n = 40 if detail == 'high' else 22
+    y_face, y_channel, y_root = 0.058, 0.048, 0.030
+    _annulus(bm, 0.188, 0.216, 0.026, 0.064, n)
 
     def spoke(angle):
-        # One trapezoid. Outer half-width 16 degrees, inner 13, so the spoke
-        # is about as wide as the window and a little narrower at the cap.
-        # The front face is inset, which is the chamfer, not a second blade.
-        def corners(inset_deg, inset_r):
-            spec = (
-                (0.050 + inset_r, math.radians(-(13 - inset_deg))),
-                (0.184 - inset_r, math.radians(-(16 - inset_deg))),
-                (0.184 - inset_r, math.radians(16 - inset_deg)),
-                (0.050 + inset_r, math.radians(13 - inset_deg)),
-            )
-            return spec
+        rx, rz = math.cos(angle), math.sin(angle)
+        px, pz = -math.sin(angle), math.cos(angle)
 
-        def ring(y, inset_deg, inset_r):
-            made = []
-            for radius, da in corners(inset_deg, inset_r):
-                a = angle + da
-                made.append(bm.verts.new((math.cos(a) * radius, y, math.sin(a) * radius)))
-            return made
+        def P(radius, side, y):
+            return bm.verts.new((rx * radius + px * side, y, rz * radius + pz * side))
 
-        back = ring(y_root, 0.0, 0.0)
-        front = ring(y_face, 1.6, 0.004)
-        bm.faces.new(front)
-        bm.faces.new(list(reversed(back)))
-        for k in range(4):
-            nxt = (k + 1) % 4
-            bm.faces.new((back[k], front[k], front[nxt], back[nxt]))
+        ends = []
+        for radius, half in ((0.086, 0.018), (0.186, 0.036)):
+            ch, rail = half * 0.36, half * 0.68
+            ends.append([
+                P(radius, -half, y_face - 0.007),
+                P(radius, -rail, y_face),
+                P(radius, -ch, y_channel),
+                P(radius, ch, y_channel),
+                P(radius, rail, y_face),
+                P(radius, half, y_face - 0.007),
+            ])
+        inner, outer = ends
+        for k in range(5):
+            bm.faces.new((inner[k], outer[k], outer[k + 1], inner[k + 1]))
+        back_i = [P(0.086, -0.018, y_root), P(0.086, 0.018, y_root)]
+        back_o = [P(0.186, -0.036, y_root), P(0.186, 0.036, y_root)]
+        bm.faces.new((back_i[0], back_i[1], back_o[1], back_o[0]))
+        bm.faces.new((inner[0], back_i[0], back_o[0], outer[0]))
+        bm.faces.new((outer[5], outer[0], back_o[0], back_o[1]))
+        bm.faces.new((inner[5], outer[5], back_o[1], back_i[1]))
+        bm.faces.new((inner[0], inner[5], back_i[1], back_i[0]))
 
     for s in range(6):
         spoke(2 * math.pi * s / 6)
 
-    # Small center cap only. A pie out to the spokes is what read as a turbine.
-    segs = 16 if detail == 'high' else 10
+    # Hub ring, then a cap recessed below it. Lugs live on the ring only.
+    segs = 24 if detail == 'high' else 14
     def circle(radius, y):
         return [
             bm.verts.new((math.cos(2 * math.pi * i / segs) * radius, y, math.sin(2 * math.pi * i / segs) * radius))
             for i in range(segs)
         ]
-    cap0 = circle(0.046, y_face - 0.002)
-    cap1 = circle(0.046, y_face + 0.010)
-    hub = bm.verts.new((0.0, y_face + 0.010, 0.0))
+    hub_in, hub_out = circle(0.034, 0.052), circle(0.070, 0.052)
+    hub_in_b, hub_out_b = circle(0.034, 0.040), circle(0.070, 0.040)
     for i in range(segs):
         j = (i + 1) % segs
-        bm.faces.new((cap0[i], cap0[j], cap1[j], cap1[i]))
-        bm.faces.new((cap1[i], cap1[j], hub))
+        bm.faces.new((hub_in[i], hub_out[i], hub_out[j], hub_in[j]))
+        bm.faces.new((hub_out_b[i], hub_in_b[i], hub_in_b[j], hub_out_b[j]))
+        bm.faces.new((hub_out[i], hub_out_b[i], hub_out_b[j], hub_out[j]))
+        bm.faces.new((hub_in_b[i], hub_in[i], hub_in[j], hub_in_b[j]))
+    cap_n = 16 if detail == 'high' else 10
+    cap_ring = [
+        bm.verts.new((math.cos(2 * math.pi * i / cap_n) * 0.032, 0.040, math.sin(2 * math.pi * i / cap_n) * 0.032))
+        for i in range(cap_n)
+    ]
+    cap_mid = bm.verts.new((0.0, 0.034, 0.0))
+    for i in range(cap_n):
+        j = (i + 1) % cap_n
+        bm.faces.new((cap_ring[i], cap_ring[j], cap_mid))
     for s in range(6):
         ang = 2 * math.pi * (s + 0.5) / 6
         ret = bmesh.ops.create_cone(
             bm, cap_ends=True, cap_tris=False, segments=6,
-            radius1=0.007, radius2=0.007, depth=0.008,
+            radius1=0.0065, radius2=0.0065, depth=0.007,
         )
         bmesh.ops.rotate(bm, verts=ret['verts'], cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 2, 3, 'X'))
         bmesh.ops.translate(
             bm, verts=ret['verts'],
-            vec=(math.cos(ang) * 0.026, y_face + 0.012, math.sin(ang) * 0.026),
+            vec=(math.cos(ang) * 0.046, 0.056, math.sin(ang) * 0.046),
         )
-    # Window interior. Kept well behind the spokes and smooth, so its
-    # segments cannot read as extra blades.
-    back_n = 24 if detail == 'high' else 16
+    back_n = 28 if detail == 'high' else 16
     def back_circle(radius, y):
         return [
             bm.verts.new((math.cos(2 * math.pi * i / back_n) * radius, y, math.sin(2 * math.pi * i / back_n) * radius))
             for i in range(back_n)
         ]
-    b0 = back_circle(0.178, 0.000)
-    b1 = back_circle(0.178, 0.016)
-    bmid = bm.verts.new((0.0, 0.016, 0.0))
+    b0, b1 = back_circle(0.180, 0.000), back_circle(0.180, 0.012)
+    bmid = bm.verts.new((0.0, 0.012, 0.0))
     for i in range(back_n):
         j = (i + 1) % back_n
         bm.faces.new((b0[i], b0[j], b1[j], b1[i]))
@@ -846,11 +869,11 @@ def rebuild_rims(objs, detail='high', mat=None):
         for poly in mesh.polygons:
             r = math.hypot(poly.center.x, poly.center.z)
             face_y = poly.center.y * sign
-            cavity = face_y < 0.022 and 0.015 < r < 0.182
-            rgba = (0.42, 0.43, 0.45, 1) if cavity else (1, 1, 1, 1)
+            cavity = face_y < 0.020 and r < 0.182
+            rgba = (0.40, 0.41, 0.43, 1) if cavity else (1, 1, 1, 1)
             for li in poly.loop_indices:
                 colors.data[li].color = rgba
-            poly.use_smooth = cavity or r > 0.185 or r < 0.050
+            poly.use_smooth = True
         b = bounds(obj)
         d = dims(b)
         print(f'  rim {obj.name} {detail} {d[0]:.3f} {d[1]:.3f} {d[2]:.3f} tris {tri_count(obj)}')
@@ -1075,33 +1098,40 @@ def _x_ring(bm, x0, x1, y, z, r_in, r_out, n):
             bm.faces.new((rings[a][i], rings[a][j], rings[b][j], rings[b][i]))
 
 
+def _valance_profile(frac):
+    """Bottom height, face inset, and how far the chin kicks back. frac is 0 at center."""
+    bz = 0.46 + 0.32 * frac * frac
+    t = max(0.0, (frac - 0.58) / 0.42)
+    inset = 0.008 + 0.12 * (t * t)
+    kick = 0.055
+    return bz, inset, kick
+
+
+def _face_x(nose, frac, z, top):
+    bz, inset, kick = _valance_profile(abs(frac))
+    xf = nose - inset
+    x_bot = xf - kick
+    span = max(0.05, top - bz)
+    u = min(1.0, max(0.0, (top - z) / span))
+    return xf + (x_bot - xf) * u
+
+
 def _shaped_valance(nose, half, top):
-    """Black front cladding. Tall in the middle, swept up and back at the corners."""
+    """Black front cladding. Tall and flat through the lamps, then swept into the corners."""
     import bmesh
     bm = bmesh.new()
-    # fraction of half-width, bottom height, how far the face sits behind the nose
-    profile = (
-        (0.00, 0.50, 0.010),
-        (0.24, 0.51, 0.012),
-        (0.46, 0.55, 0.016),
-        (0.66, 0.62, 0.032),
-        (0.84, 0.70, 0.060),
-        (1.00, 0.76, 0.105),
-    )
-    order = [-f for f, _, _ in reversed(profile) if f != 0] 
-    order += [f for f, _, _ in profile]
-    lookup = {f: (bz, inset) for f, bz, inset in profile}
+    fracs = [i / 12 for i in range(13)]
+    order = [-f for f in reversed(fracs) if f != 0] + fracs
     cols = []
     for frac in order:
-        bz, inset = lookup[abs(frac)]
+        bz, inset, kick = _valance_profile(abs(frac))
         y = frac * half * 0.96
         xf = nose - inset
-        # The chin kicks back, so the side view is a wedge rather than a vertical slab.
         xb = xf - 0.07
         cols.append([
             bm.verts.new((xf, y, top)),
-            bm.verts.new((xf - 0.06, y, bz)),
-            bm.verts.new((xb - 0.03, y, bz + 0.02)),
+            bm.verts.new((xf - kick, y, bz)),
+            bm.verts.new((xb - 0.02, y, bz + 0.02)),
             bm.verts.new((xb, y, top - 0.012)),
         ])
     for i in range(len(cols) - 1):
@@ -1204,8 +1234,7 @@ def build_fascia(mats):
             wedge = obj.get('bucket') in ('chrome', 'trim', 'lamp') and c.x > nose - 0.22 and half + 0.02 < abs(c.y) < 1.15 and 0.55 < c.z < 1.20
             # Source tow-hooks and lamp bits that sit beside the new valance.
             low_junk = obj.get('bucket') in ('chrome', 'trim', 'lamp', 'accent') and c.x > nose - 0.48 and abs(c.y) < 1.15 and 0.20 < c.z < 0.92
-            chunk = c.x > nose - 0.30 and 0.35 < c.z < 0.85 and 0.45 < abs(c.y) < 1.08 and face.calc_area() < 0.06 and face.normal.x > 0.15
-            if (on_nose and not hood) or old_lamp or wedge or low_junk or chunk:
+            if (on_nose and not hood) or old_lamp or wedge or low_junk:
                 kill.append(face)
         if kill:
             bmesh.ops.delete(bm, geom=kill, context='FACES')
@@ -1353,12 +1382,15 @@ def build_fascia(mats):
     # Shaped valance: tallest in the center, sweeping up and back into the corners.
     top_z = zc - height / 2 - 0.020
     bumper = _shaped_valance(nose, half, top_z)
-    fog_y = half * 0.46
-    fog_z = 0.66
+    # Both lamps sit on the flat part of the valance, the same distance from center.
+    fog_frac = 0.32
+    fog_y = fog_frac * half * 0.96
+    fog_z = 0.64
+    face_x = _face_x(nose, fog_frac, fog_z, top_z)
     for sign in (1, -1):
         bpy.ops.mesh.primitive_cylinder_add(
-            radius=0.046, depth=0.12, location=(nose - 0.07, sign * fog_y, fog_z),
-            rotation=(0, math.pi / 2, 0), vertices=20,
+            radius=0.044, depth=0.22, location=(face_x - 0.02, sign * fog_y, fog_z),
+            rotation=(0, math.pi / 2, 0), vertices=24,
         )
         cutter = bpy.context.object
         bpy.context.view_layer.objects.active = bumper
@@ -1368,9 +1400,10 @@ def build_fascia(mats):
         mod.solver = 'EXACT'
         bpy.ops.object.modifier_apply(modifier=mod.name)
         bpy.data.objects.remove(cutter, do_unlink=True)
-    bpy.ops.mesh.primitive_cube_add(size=1, location=(nose - 0.06, 0, 0.70))
+    intake_x = _face_x(nose, 0.0, 0.68, top_z)
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(intake_x - 0.02, 0, 0.68))
     cutter = bpy.context.object
-    cutter.scale = (0.09, 0.40, 0.13)
+    cutter.scale = (0.10, 0.32, 0.12)
     bpy.ops.object.transform_apply(scale=True, location=True)
     bpy.context.view_layer.objects.active = bumper
     mod = bumper.modifiers.new('Intake', 'BOOLEAN')
@@ -1382,12 +1415,12 @@ def build_fascia(mats):
     # Pocket walls, intake slats, and a center skid that kicks backward.
     extra = bmesh.new()
     for sign in (1, -1):
-        _x_ring(extra, nose - 0.078, nose - 0.042, sign * fog_y, fog_z, 0.038, 0.050, 18)
+        _x_ring(extra, face_x - 0.004, face_x + 0.008, sign * fog_y, fog_z, 0.036, 0.050, 20)
     for i in range(3):
-        zz = 0.645 + i * 0.028
-        _cube(extra, nose - 0.078, nose - 0.055, -0.16, 0.16, zz, zz + 0.007)
+        zz = 0.635 + i * 0.030
+        _cube(extra, intake_x - 0.028, intake_x - 0.012, -0.13, 0.13, zz, zz + 0.006)
     # Black wall behind the openings so the body color cannot show through.
-    _cube(extra, nose - 0.14, nose - 0.105, -0.62, 0.62, 0.46, 0.84)
+    _cube(extra, nose - 0.16, nose - 0.11, -0.55, 0.55, 0.48, 0.82)
     _skid(extra, nose, 0.36)
     add_me = bpy.data.meshes.new('_bumpadd')
     extra.to_mesh(add_me)
@@ -1412,8 +1445,8 @@ def build_fascia(mats):
         segs = 16
         for i in range(segs):
             a = 2 * math.pi * i / segs
-            ring.append(bm.verts.new((nose - 0.072, cy + math.cos(a) * 0.034, cz + math.sin(a) * 0.034)))
-        hub = bm.verts.new((nose - 0.074, cy, cz))
+            ring.append(bm.verts.new((face_x - 0.016, cy + math.cos(a) * 0.032, cz + math.sin(a) * 0.032)))
+        hub = bm.verts.new((face_x - 0.018, cy, cz))
         for i in range(segs):
             bm.faces.new((hub, ring[i], ring[(i + 1) % segs]))
     mesh = bpy.data.meshes.new('h2-headlamp-fog')
@@ -1547,6 +1580,9 @@ def main():
             count = tri_count(copy)
         elif name.startswith('h2-fascia') or name.startswith('h2-headlamp-lens') or name.startswith('h2-headlamp-fog') or name.startswith('h2-marker-fascia') or name.startswith('h2-step'):
             count = tri_count(copy)
+        elif obj.get('bucket') == 'paint':
+            count = decimate_to(copy, 8000, planar_first=False)
+            smooth_angle(copy, 45)
         else:
             count = decimate_to(copy, LOW.get(obj.get('bucket'), 200))
         copy.name = '_low_' + obj.name

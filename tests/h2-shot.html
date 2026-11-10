@@ -23,11 +23,27 @@ const view = params.get('view') || 'front';
 const h2 = makePaceCar(params.get('low') === '1');
 const fails = auditPaceCar(h2);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x8aa0b4);
-scene.add(new THREE.HemisphereLight(0xe7f1fb, 0x4a4036, 1.05));
-const key = new THREE.DirectionalLight(0xfff6ea, 1.65); key.position.set(6, 8, 5); scene.add(key);
-const fill = new THREE.DirectionalLight(0xc9d7e6, .85); fill.position.set(-6, 3, 2); scene.add(fill);
-const rim = new THREE.DirectionalLight(0xffe2b8, 1.1); rim.position.set(-3, 5, -6); scene.add(rim);
+const rake = params.get('rake') === '1' || view === 'hood' || view === 'door';
+scene.background = new THREE.Color(rake ? 0x9aa3ab : 0x8aa0b4);
+scene.add(new THREE.HemisphereLight(0xe7f1fb, 0x4a4036, rake ? 0.35 : 1.05));
+if (rake) {
+  h2.traverse(o => {
+    if (!o.isMesh) return;
+    for (const m of [].concat(o.material)) {
+      if (!m || (m.name !== 'paint' && m.name !== 'h2-paint')) continue;
+      m.roughness = 0.82; m.metalness = 0; m.envMapIntensity = 0;
+      if ('clearcoat' in m) m.clearcoat = 0;
+      m.needsUpdate = true;
+    }
+  });
+  const graze = new THREE.DirectionalLight(0xffffff, 2.4);
+  graze.position.set(view === 'door' ? -4 : 3.2, 1.35, view === 'door' ? 0.2 : 2.4);
+  scene.add(graze);
+} else {
+  const key = new THREE.DirectionalLight(0xfff6ea, 1.65); key.position.set(6, 8, 5); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xc9d7e6, .85); fill.position.set(-6, 3, 2); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xffe2b8, 1.1); rim.position.set(-3, 5, -6); scene.add(rim);
+}
 const ground = new THREE.Mesh(new THREE.CircleGeometry(10, 48), new THREE.MeshStandardMaterial({ color: 0x2c3238, roughness: .9 }));
 ground.rotation.x = -Math.PI / 2; scene.add(ground);
 scene.add(h2);
@@ -40,7 +56,9 @@ const shots = {
   side: [[-0.05, 1.15, 6.55], [-0.05, 0.95, 0], 38],
   rear: [[-5.35, 1.20, 3.15], [-0.25, 0.95, 0], 38],
   wheel: [[1.72, 0.48, 2.05], [1.56, 0.44, 0.92], 26],
-  grille: [[3.35, 0.98, 0.55], [2.20, 0.96, 0], 26]
+  grille: [[3.35, 0.98, 0.55], [2.20, 0.96, 0], 26],
+  hood: [[2.55, 1.72, 1.35], [1.15, 1.28, 0.05], 28],
+  door: [[0.15, 1.22, 2.55], [-0.05, 1.12, 0.95], 28]
 };
 const [pos, look, fov] = shots[view] || shots.front;
 if (fov) { cam.fov = fov; cam.updateProjectionMatrix(); }
