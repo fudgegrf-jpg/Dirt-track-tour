@@ -1173,6 +1173,105 @@ def _skid(bm, nose, y_half):
     bm.faces.new((verts[3], verts[2], verts[6], verts[7]))
 
 
+def _nose_profile(paint):
+    """Forward edge of the hood, smoothed across the nose.
+
+    The source nose is not symmetric: one fender sits several centimetres
+    ahead of the other. A flat plate either sinks under that fender or
+    sticks out past the other one.
+    """
+    raw = []
+    for i in range(-14, 15):
+        y = i * 0.06
+        xs = [v.co.x for v in paint.data.vertices
+              if abs(v.co.y - y) < 0.045 and 1.05 < v.co.z < 1.18 and v.co.x > 1.90]
+        if len(xs) < 3:
+            continue
+        xs.sort()
+        raw.append((y, xs[int(len(xs) * 0.9)]))
+    if len(raw) < 4:
+        return None
+    smooth = []
+    for y, _x in raw:
+        win = [xx for yy, xx in raw if abs(yy - y) <= 0.14]
+        smooth.append((y, sum(win) / len(win)))
+    return smooth
+
+
+def _profile_at(profile, y, fallback):
+    if not profile:
+        return fallback
+    if y <= profile[0][0]:
+        return profile[0][1]
+    if y >= profile[-1][0]:
+        return profile[-1][1]
+    for (y0, x0), (y1, x1) in zip(profile, profile[1:]):
+        if y0 <= y <= y1:
+            t = (y - y0) / max(1e-6, y1 - y0)
+            return x0 + (x1 - x0) * t
+    return fallback
+
+
+def _shift_with_nose(obj, delta):
+    """Slide every vertex forward or back with the nose profile.
+
+    Lamps keep a non-zero object location, so the profile is sampled at the
+    vertex's world Y and the shift is applied in local X.
+    """
+    for v in obj.data.vertices:
+        v.co.x += delta(v.co.y + obj.location.y)
+    obj.data.update()
+
+
+def _open_grille_window(paint, half, zc, height):
+    """Cut the yellow skin out of the grille opening.
+
+    The replacement casting sits in that opening. Leaving the old skin
+    there is what covered one headlamp and left the other proud of the fender.
+    """
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(2.16, 0.0, zc - 0.006))
+    cutter = bpy.context.object
+    cutter.scale = (0.58, max(0.2, (half - 0.015) * 2), height - 0.030)
+    bpy.context.view_layer.objects.active = cutter
+    bpy.ops.object.transform_apply(scale=True, location=True)
+    before = tri_count(paint)
+    bpy.context.view_layer.objects.active = paint
+    paint.select_set(True)
+    mod = paint.modifiers.new('GrilleWindow', 'BOOLEAN')
+    mod.operation = 'DIFFERENCE'
+    mod.object = cutter
+    mod.solver = 'EXACT'
+    try:
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+    except Exception as exc:
+        print('grille window failed', exc)
+        if mod.name in paint.modifiers:
+            paint.modifiers.remove(mod)
+    bpy.data.objects.remove(cutter, do_unlink=True)
+    paint.select_set(False)
+    print(f'  grille window {before} -> {tri_count(paint)}')
+
+
+def _ease_front_fender(paint):
+    """A light relax on the front fender only. Doors stay where they are."""
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(paint.data)
+    picked = [v for v in bm.verts
+              if 1.38 < v.co.x < 1.96 and 0.88 < v.co.z < 1.32 and abs(v.co.y) < 1.15]
+    for _ in range(3):
+        if not picked:
+            break
+        bmesh.ops.smooth_vert(
+            bm, verts=picked, factor=0.30,
+            use_axis_x=True, use_axis_y=True, use_axis_z=True,
+        )
+    bm.to_mesh(paint.data)
+    bm.free()
+    paint.data.update()
+    smooth_angle(paint, 45)
+
+
 def build_fascia(mats):
     """One chrome casting, flush with the nose, slots recessed into it.
 
@@ -1210,14 +1309,14 @@ def build_fascia(mats):
     measured = max((abs(y) for y in facing), default=0.9)
     # Clamp so the casting spans the front without sticking past the fenders.
     full_half = min(measured, 0.98)
-    half = min(max(full_half * 0.92, 0.72), 0.76)
+    half = min(max(full_half * 0.90, 0.70), 0.76)
     height = 0.22
     depth = 0.045
     zc = 0.99
     # The measured nose is the hood tip. The fenders sit about 12 cm behind it.
     # A plate parked on the tip sticks out past the corners and leaves a gap.
     tip = nose
-    nose = tip - 0.05
+    nose = tip - 0.07
     print(f'fascia tip {tip:.3f} face {nose:.3f} half {half:.3f}')
 
     # Remove the source grille and lamp skin so it cannot show through the slots.
@@ -1234,13 +1333,24 @@ def build_fascia(mats):
             # Only the opening the new casting covers. The fender corners stay,
             # which is what was leaving the dark triangles beside the grille.
             # Leave the yellow fender. Only the old chrome, lamps, and black fascia go.
-            source_front = (
-                obj.get('bucket') in ('chrome', 'trim', 'lamp')
-                and c.x > 1.40 and abs(c.y) < 1.02 and 0.15 < c.z < 1.18
+            # Old fascia, tow hooks, and the black shards under the nose.
+            # The new bumper and flare are built after this, so they are kept.
+            # Use a vertex, not the face center. The hanging shard is a big
+            # triangle whose center sits back under the truck while one corner
+            # sticks out under the bumper.
+            # The whole old front clip, low and at grille height. One side of the
+            # source trim was still cutting through the hood.
+            poked = any(
+                (v.co.x > 1.20 and abs(v.co.y) < 1.30 and 0.12 < v.co.z < 0.78)
+                or (v.co.x > 1.55 and abs(v.co.y) < 1.25 and 0.78 <= v.co.z < 1.18)
+                # Old arch cladding. The hood scoop (center, higher) stays.
+                or (v.co.x > 1.15 and abs(v.co.y) > 0.70 and 0.45 < v.co.z < 1.16)
+                for v in face.verts
             )
+            source_front = obj.get('bucket') in ('chrome', 'trim', 'lamp') and poked
             old_lamp = (
                 obj.name.startswith('h2-headlamp') and not obj.name.startswith('h2-headlamp-lens')
-                and c.x > 1.05 and c.z < 1.05 and abs(c.y) < 1.05
+                and c.x > 1.20 and c.z < 1.20 and abs(c.y) < 1.25
             )
             if source_front or old_lamp:
                 kill.append(face)
@@ -1249,6 +1359,17 @@ def build_fascia(mats):
             bm.to_mesh(obj.data)
             obj.data.update()
         bm.free()
+
+    paint = next((o for o in meshes() if o.get('bucket') == 'paint'), None)
+    profile = _nose_profile(paint) if paint else None
+    if paint:
+        _open_grille_window(paint, half, zc, height)
+        _ease_front_fender(paint)
+
+    def _delta(y, _profile=profile, _nose=nose, _tip=tip):
+        front = _profile_at(_profile, y, _nose + 0.014) - 0.014
+        front = min(max(front, _tip - 0.15), _tip - 0.008)
+        return front - _nose
 
     plate = _rounded_plate(half * 2, height, depth, 0.014)
     # Cube was centered. Put the front face on the nose and the body behind it.
@@ -1295,7 +1416,7 @@ def build_fascia(mats):
     bm = bmesh.new()
     bm.from_mesh(plate.data)
     for sign in (1, -1):
-        _x_ring(bm, nose - 0.006, nose + 0.008, sign * lamp_y, zc, lamp_r * 0.72, lamp_r * 0.98, 28)
+        _x_ring(bm, nose - 0.010, nose - 0.001, sign * lamp_y, zc, lamp_r * 0.72, lamp_r * 0.98, 28)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     bm.to_mesh(plate.data)
     bm.free()
@@ -1427,8 +1548,6 @@ def build_fascia(mats):
     for i in range(3):
         zz = 0.68 + i * 0.028
         _cube(extra, intake_x - 0.028, intake_x - 0.012, -0.12, 0.12, zz, zz + 0.006)
-    # Behind the grille slots, so the yellow hood cannot show through the bars.
-    _cube(extra, nose - 0.055, nose - 0.040, -0.42, 0.42, zc - 0.08, zc + 0.08)
     # Only behind the intake. A full-width wall was the apron hanging under the chin.
     _cube(extra, nose - 0.10, nose - 0.06, -0.16, 0.16, 0.64, 0.80)
     _skid(extra, nose, 0.36)
@@ -1469,6 +1588,10 @@ def build_fascia(mats):
     fog['role'] = 'body'
     made.append(fog)
     print(f'  bumper {tri_count(bumper)} tris fog {tri_count(fog)} tris')
+    # The nose is deeper on one side. Shift the whole front clip onto that
+    # edge so the casting meets both fenders instead of crossing one of them.
+    for obj in made:
+        _shift_with_nose(obj, _delta)
     return made
 
 
@@ -1499,46 +1622,83 @@ def add_flares(mats):
             bm.to_mesh(obj.data)
             obj.data.update()
         bm.free()
+    paint = next((o for o in meshes() if o.get('bucket') == 'paint'), None)
+    pverts = [(v.co.x, v.co.y, v.co.z) for v in paint.data.vertices] if paint else []
     bm = bmesh.new()
     for center in centers:
         sign = 1.0 if center.y >= 0 else -1.0
-        ys = []
-        for obj in meshes():
-            if obj.get('role') in ('tire', 'rim') or str(obj.name).startswith('h2-'):
-                continue
-            for v in obj.data.vertices:
-                d = math.hypot(v.co.x - center.x, v.co.z - center.z)
-                if 0.52 < d < 0.62 and v.co.z > center.z + 0.28 and abs(v.co.y - center.y) < 0.45:
-                    ys.append(v.co.y)
-        if len(ys) < 8:
-            lip = center.y + sign * 0.24
-        else:
-            ys.sort()
-            lip = ys[len(ys) // 2]
-        print(f'  flare lip y {lip:.3f} at wheel {center.x:.2f}')
-        n = 12
-        # Top of the arch only. The lower quadrants were crossing the bumper.
-        a0, a1 = math.radians(40), math.radians(145)
-        rings = []
+        # One sample per angle, only where the fender actually is. A constant
+        # radius at the crown's Y stuck the forward end out past the nose.
+        n = 16
+        a0, a1 = math.radians(34), math.radians(152)
+        samples = []
         for i in range(n + 1):
             a = a0 + (a1 - a0) * i / n
+            band = []
+            for x, y, z in pverts:
+                if sign * (y - center.y) < 0.08:
+                    continue
+                px, pz = x - center.x, z - center.z
+                r = math.hypot(px, pz)
+                if r < 0.46 or r > 0.80:
+                    continue
+                if abs(math.atan2(pz, px) - a) > math.radians(8):
+                    continue
+                band.append((r, y))
+            if len(band) < 4:
+                samples.append(None)
+                continue
+            band.sort()
+            lip_r = max(0.525, min(band[max(0, len(band) // 5)][0], 0.64))
+            near = [y for r, y in band if abs(r - lip_r) < 0.06]
+            if len(near) < 2:
+                near = [yy for _r, yy in band[:max(3, len(band) // 3)]]
+            near.sort()
+            lip_y = near[int(len(near) * 0.75)] if sign > 0 else near[int(len(near) * 0.25)]
+            ox = center.x + math.cos(a) * lip_r
+            oz = center.z + math.sin(a) * lip_r
+            close = sum(1 for x, y, z in pverts
+                        if abs(x - ox) < 0.07 and abs(z - oz) < 0.07 and abs(y - lip_y) < 0.06)
+            samples.append((lip_r, lip_y) if close >= 4 else None)
+        seated = [s for s in samples if s]
+        if seated:
+            print(f'  flare lip y {seated[len(seated)//2][1]:.3f} r {seated[len(seated)//2][0]:.3f} at wheel {center.x:.2f} ({len(seated)} segs)')
+        rings = []
+        for i, sample in enumerate(samples):
+            if sample is None:
+                rings.append(None)
+                continue
+            lip_r, lip_y = sample
+            a = a0 + (a1 - a0) * i / n
             dx, dz = math.cos(a), math.sin(a)
-            r0, r1 = 0.47, 0.55
-            y_in = lip - sign * 0.004
-            y_out = lip + sign * 0.012
+            r0, r1 = lip_r, lip_r + 0.040
+            y_in = lip_y - sign * 0.004
+            y_out = lip_y + sign * 0.014
             rings.append([
                 bm.verts.new((center.x + dx * r0, y_in, center.z + dz * r0)),
                 bm.verts.new((center.x + dx * r0, y_out, center.z + dz * r0)),
                 bm.verts.new((center.x + dx * r1, y_out, center.z + dz * r1)),
-                bm.verts.new((center.x + dx * r1, y_in - sign * 0.008, center.z + dz * r1)),
+                bm.verts.new((center.x + dx * r1, y_in - sign * 0.006, center.z + dz * r1)),
             ])
         for i in range(n):
             a, b = rings[i], rings[i + 1]
+            if a is None or b is None:
+                continue
             for k in range(4):
                 nxt = (k + 1) % 4
                 bm.faces.new((a[k], b[k], b[nxt], a[nxt]))
-        bm.faces.new(list(reversed(rings[0])))
-        bm.faces.new(rings[-1])
+        # Cap each run of segments.
+        i = 0
+        while i <= n:
+            if rings[i] is None:
+                i += 1
+                continue
+            j = i
+            while j < n and rings[j + 1] is not None:
+                j += 1
+            bm.faces.new(list(reversed(rings[i])))
+            bm.faces.new(rings[j])
+            i = j + 1
     mesh = bpy.data.meshes.new('h2-fascia-flare')
     bm.to_mesh(mesh)
     bm.free()
@@ -1547,6 +1707,17 @@ def add_flares(mats):
     assign(obj, mats['trim'])
     obj['bucket'] = 'trim'
     obj['role'] = 'body'
+    # Tire radius is 0.445. The lip sits on the fender, outside that circle.
+    clipped = 0
+    for v in obj.data.vertices:
+        for center in centers:
+            if abs(v.co.y - center.y) > 0.45:
+                continue
+            if math.hypot(v.co.x - center.x, v.co.z - center.z) < 0.50:
+                clipped += 1
+                break
+    if clipped:
+        raise SystemExit(f'flare clips a tire ({clipped} verts inside the opening)')
     print(f'  flares {tri_count(obj)} tris')
     return obj
 
@@ -1563,7 +1734,15 @@ def replace_steps(mats):
         kill = []
         for face in bm.faces:
             c = face.calc_center_median()
-            if c.z < 0.22 and 0.62 < abs(c.y) < 1.25 and -1.7 < c.x < 1.6:
+            bucket = obj.get('bucket')
+            # Shattered source brackets along the rocker. z == 0.22 was slipping
+            # past a strict less-than and reading as white fins under the doors.
+            low_paint = c.z < 0.24 and 0.62 < abs(c.y) < 1.25 and -1.7 < c.x < 1.6
+            low_trim = bucket in ('trim', 'chrome', 'lamp') and any(
+                v.co.z < 0.42 and abs(v.co.y) > 0.50 and -1.5 < v.co.x < 1.55
+                for v in face.verts
+            )
+            if low_paint or low_trim:
                 kill.append(face)
         if kill:
             bmesh.ops.delete(bm, geom=kill, context='FACES')
@@ -1698,6 +1877,42 @@ def main():
     for obj in keep:
         n = tri_count(obj)
         total += n
+    shards = 0
+    for obj in keep:
+        name = str(obj.name)
+        if name.startswith('h2-fascia') or name.startswith('h2-step') or name.startswith('h2-tire') or name.startswith('h2-rim') or name.startswith('h2-headlamp-fog'):
+            continue
+        if obj.get('bucket') not in ('trim', 'chrome', 'lamp'):
+            continue
+        for poly in obj.data.polygons:
+            co = obj.data.vertices
+            if any(
+                (co[i].co.x > 1.20 and abs(co[i].co.y) < 1.30 and 0.12 < co[i].co.z < 0.78)
+                or (co[i].co.x > 1.55 and abs(co[i].co.y) < 1.25 and 0.78 <= co[i].co.z < 1.18)
+                or (co[i].co.x > 1.15 and abs(co[i].co.y) > 0.70 and 0.45 < co[i].co.z < 1.16)
+                or (co[i].co.z < 0.40 and abs(co[i].co.y) > 0.55 and -1.5 < co[i].co.x < 1.55)
+                for i in poly.vertices
+            ):
+                shards += 1
+    if shards:
+        raise SystemExit(f'front shards remain: {shards}')
+    # Yellow skin still in front of the casting, inside the grille opening.
+    paint = next((o for o in keep if o.get('bucket') == 'paint'), None)
+    plate = next((o for o in keep if o.name == 'h2-fascia'), None)
+    covered = 0
+    if paint and plate:
+        front = {}
+        for v in plate.data.vertices:
+            key = round(v.co.y / 0.04)
+            front[key] = max(front.get(key, -9), v.co.x + plate.location.x)
+        for v in paint.data.vertices:
+            if abs(v.co.y) > 0.62 or not (0.90 < v.co.z < 1.05) or v.co.x < 1.9:
+                continue
+            face = front.get(round(v.co.y / 0.04))
+            if face and v.co.x > face + 0.012:
+                covered += 1
+    if covered:
+        raise SystemExit(f'body still covers the grille ({covered} verts)')
     print('HIGH TOTAL', total, 'objects', len(keep))
 
 
