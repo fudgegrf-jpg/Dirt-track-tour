@@ -24,7 +24,7 @@ const cam = new THREE.PerspectiveCamera(42, 1280 / 720, .05, 40);
 const shots = {
   front: [0, [4.2, 1.42, 3.35], [.1, .95, 0]],
   rear: [Math.PI, [4.15, 1.45, -3.3], [-.15, 1.0, 0]],
-  side: [Math.PI / 2, [0.1, 1.25, 6.4], [0, .95, 0]]
+  side: [0, [.15, 1.35, 7.4], [0, .95, 0]]
 };
 const [yaw, pos, look] = shots[view] || shots.front;
 h2.rotation.y = yaw;
