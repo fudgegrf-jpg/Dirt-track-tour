@@ -898,8 +898,8 @@ def apply_tread(obj):
             along = (v.y - y0) / span
             # Tread band sits in the middle of V. Sidewalls fall off to the edges.
             # Crown and the shoulder you see from the side both carry the blocks.
-            if radial > 0.84:
-                vv = 0.32 + (radial - 0.84) / 0.16 * 0.36
+            if radial > 0.94:
+                vv = 0.40 + (radial - 0.94) / 0.06 * 0.20
             elif v.y >= 0:
                 vv = 0.62 + (1 - radial) * 0.34
             else:
@@ -919,7 +919,7 @@ def apply_tread(obj):
     tex.image = img
     tex.interpolation = 'Linear'
     normal = nt.nodes.new('ShaderNodeNormalMap')
-    normal.inputs['Strength'].default_value = 2.2
+    normal.inputs['Strength'].default_value = 0.45
     nt.links.new(tex.outputs['Color'], normal.inputs['Color'])
     nt.links.new(normal.outputs['Normal'], bsdf.inputs['Normal'])
 
@@ -932,11 +932,11 @@ def _tread_image():
         for x in range(w):
             u = x / w
             # Repeating tread blocks across the contact band.
-            if 0.30 < v < 0.70:
-                col = int(u * 28) % 2
-                row = int((v - 0.30) / 0.40 * 4)
-                if (col + row) % 2 == 0 and (x % 9) > 1 and ((y % 6) > 1):
-                    height[y * w + x] = 1.0
+            if 0.38 < v < 0.62:
+                col = int(u * 22) % 2
+                row = int((v - 0.38) / 0.24 * 3)
+                if (col + row) % 2 == 0 and (x % 11) > 2 and ((y % 7) > 2):
+                    height[y * w + x] = 0.28
             else:
                 # Two raised sidewall ribs.
                 band = abs(v - (0.18 if v < 0.5 else 0.82))
@@ -949,7 +949,7 @@ def _tread_image():
             r = height[y * w + (x + 1) % w]
             d = height[((y - 1) % h) * w + x]
             u = height[((y + 1) % h) * w + x]
-            nx, ny, nz = (l - r) * 3.2, (d - u) * 3.2, 1.0
+            nx, ny, nz = (l - r) * 1.1, (d - u) * 1.1, 1.0
             mag = math.sqrt(nx * nx + ny * ny + nz * nz)
             i = (y * w + x) * 4
             pixels[i] = (nx / mag + 1) * 0.5
@@ -1099,11 +1099,11 @@ def _x_ring(bm, x0, x1, y, z, r_in, r_out, n):
 
 
 def _valance_profile(frac):
-    """Bottom height, face inset, and how far the chin kicks back. frac is 0 at center."""
-    bz = 0.46 + 0.32 * frac * frac
-    t = max(0.0, (frac - 0.58) / 0.42)
-    inset = 0.008 + 0.12 * (t * t)
-    kick = 0.055
+    """Compact chin. Bottom stays above the hub and rises toward the flares."""
+    bz = 0.62 + 0.14 * frac * frac
+    t = max(0.0, (frac - 0.55) / 0.45)
+    inset = 0.015 + 0.06 * (t * t)
+    kick = 0.035
     return bz, inset, kick
 
 
@@ -1156,9 +1156,9 @@ def _shaped_valance(nose, half, top):
 
 def _skid(bm, nose, y_half):
     """Center chin. The bottom edge is kicked back, so it is not a hanging box."""
-    top_z, bot_z = 0.52, 0.40
+    top_z, bot_z = 0.64, 0.56
     y0, y1 = -y_half, y_half
-    top_x, bot_x, back_x = nose - 0.075, nose - 0.13, nose - 0.16
+    top_x, bot_x, back_x = nose - 0.04, nose - 0.07, nose - 0.10
     verts = [
         bm.verts.new((top_x, y0, top_z)), bm.verts.new((top_x, y1, top_z)),
         bm.verts.new((bot_x, y1, bot_z)), bm.verts.new((bot_x, y0, bot_z)),
@@ -1210,11 +1210,15 @@ def build_fascia(mats):
     measured = max((abs(y) for y in facing), default=0.9)
     # Clamp so the casting spans the front without sticking past the fenders.
     full_half = min(measured, 0.98)
-    half = min(max(full_half * 0.92, 0.80), 0.86)
+    half = min(max(full_half * 0.92, 0.72), 0.76)
     height = 0.22
-    depth = 0.055
+    depth = 0.045
     zc = 0.99
-    print(f'fascia nose {nose:.3f} half {half:.3f}')
+    # The measured nose is the hood tip. The fenders sit about 12 cm behind it.
+    # A plate parked on the tip sticks out past the corners and leaves a gap.
+    tip = nose
+    nose = tip - 0.05
+    print(f'fascia tip {tip:.3f} face {nose:.3f} half {half:.3f}')
 
     # Remove the source grille and lamp skin so it cannot show through the slots.
     for obj in list(meshes()):
@@ -1227,14 +1231,18 @@ def build_fascia(mats):
             c = face.calc_center_median()
             # The whole front skin the new casting and bumper replace, plus every
             # leftover source lamp on the nose (the white hexagons and blocks).
-            on_nose = c.x > nose - 0.16 and abs(c.y) < full_half + 0.06 and 0.16 < c.z < zc + height * 0.55
-            hood = face.normal.z > 0.5 and c.z > zc + height * 0.4
-            old_lamp = obj.name.startswith('h2-headlamp') and not obj.name.startswith('h2-headlamp-lens') and c.x > 0.9 and c.z < 1.30
-            # Black wedges and leftover lamp bits outboard of the casting.
-            wedge = obj.get('bucket') in ('chrome', 'trim', 'lamp') and c.x > nose - 0.22 and half + 0.02 < abs(c.y) < 1.15 and 0.55 < c.z < 1.20
-            # Source tow-hooks and lamp bits that sit beside the new valance.
-            low_junk = obj.get('bucket') in ('chrome', 'trim', 'lamp', 'accent') and c.x > nose - 0.48 and abs(c.y) < 1.15 and 0.20 < c.z < 0.92
-            if (on_nose and not hood) or old_lamp or wedge or low_junk:
+            # Only the opening the new casting covers. The fender corners stay,
+            # which is what was leaving the dark triangles beside the grille.
+            # Leave the yellow fender. Only the old chrome, lamps, and black fascia go.
+            source_front = (
+                obj.get('bucket') in ('chrome', 'trim', 'lamp')
+                and c.x > 1.40 and abs(c.y) < 1.02 and 0.15 < c.z < 1.18
+            )
+            old_lamp = (
+                obj.name.startswith('h2-headlamp') and not obj.name.startswith('h2-headlamp-lens')
+                and c.x > 1.05 and c.z < 1.05 and abs(c.y) < 1.05
+            )
+            if source_front or old_lamp:
                 kill.append(face)
         if kill:
             bmesh.ops.delete(bm, geom=kill, context='FACES')
@@ -1385,7 +1393,7 @@ def build_fascia(mats):
     # Both lamps sit on the flat part of the valance, the same distance from center.
     fog_frac = 0.32
     fog_y = fog_frac * half * 0.96
-    fog_z = 0.64
+    fog_z = 0.73
     face_x = _face_x(nose, fog_frac, fog_z, top_z)
     for sign in (1, -1):
         bpy.ops.mesh.primitive_cylinder_add(
@@ -1417,10 +1425,12 @@ def build_fascia(mats):
     for sign in (1, -1):
         _x_ring(extra, face_x - 0.004, face_x + 0.008, sign * fog_y, fog_z, 0.036, 0.050, 20)
     for i in range(3):
-        zz = 0.635 + i * 0.030
-        _cube(extra, intake_x - 0.028, intake_x - 0.012, -0.13, 0.13, zz, zz + 0.006)
-    # Black wall behind the openings so the body color cannot show through.
-    _cube(extra, nose - 0.16, nose - 0.11, -0.55, 0.55, 0.48, 0.82)
+        zz = 0.68 + i * 0.028
+        _cube(extra, intake_x - 0.028, intake_x - 0.012, -0.12, 0.12, zz, zz + 0.006)
+    # Behind the grille slots, so the yellow hood cannot show through the bars.
+    _cube(extra, nose - 0.055, nose - 0.040, -0.42, 0.42, zc - 0.08, zc + 0.08)
+    # Only behind the intake. A full-width wall was the apron hanging under the chin.
+    _cube(extra, nose - 0.10, nose - 0.06, -0.16, 0.16, 0.64, 0.80)
     _skid(extra, nose, 0.36)
     add_me = bpy.data.meshes.new('_bumpadd')
     extra.to_mesh(add_me)
@@ -1460,6 +1470,85 @@ def build_fascia(mats):
     made.append(fog)
     print(f'  bumper {tri_count(bumper)} tris fog {tri_count(fog)} tris')
     return made
+
+
+def add_flares(mats):
+    """Black molded lip around each wheel arch, sitting on the fender."""
+    import bmesh
+    # Clear broken source cladding inside the openings before the new lip.
+    centers = [o.location.copy() for o in meshes() if o.get('role') == 'tire']
+    for obj in list(meshes()):
+        if obj.get('role') in ('tire', 'rim') or str(obj.name).startswith('h2-'):
+            continue
+        if obj.get('bucket') not in ('trim', 'chrome', 'lamp'):
+            continue
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        kill = []
+        for face in bm.faces:
+            c = face.calc_center_median()
+            if c.z < 0.25:
+                continue
+            for center in centers:
+                d = math.hypot(c.x - center.x, c.z - center.z)
+                if 0.40 < d < 0.70 and abs(c.y - center.y) < 0.50:
+                    kill.append(face)
+                    break
+        if kill:
+            bmesh.ops.delete(bm, geom=kill, context='FACES')
+            bm.to_mesh(obj.data)
+            obj.data.update()
+        bm.free()
+    bm = bmesh.new()
+    for center in centers:
+        sign = 1.0 if center.y >= 0 else -1.0
+        ys = []
+        for obj in meshes():
+            if obj.get('role') in ('tire', 'rim') or str(obj.name).startswith('h2-'):
+                continue
+            for v in obj.data.vertices:
+                d = math.hypot(v.co.x - center.x, v.co.z - center.z)
+                if 0.52 < d < 0.62 and v.co.z > center.z + 0.28 and abs(v.co.y - center.y) < 0.45:
+                    ys.append(v.co.y)
+        if len(ys) < 8:
+            lip = center.y + sign * 0.24
+        else:
+            ys.sort()
+            lip = ys[len(ys) // 2]
+        print(f'  flare lip y {lip:.3f} at wheel {center.x:.2f}')
+        n = 12
+        # Top of the arch only. The lower quadrants were crossing the bumper.
+        a0, a1 = math.radians(40), math.radians(145)
+        rings = []
+        for i in range(n + 1):
+            a = a0 + (a1 - a0) * i / n
+            dx, dz = math.cos(a), math.sin(a)
+            r0, r1 = 0.47, 0.55
+            y_in = lip - sign * 0.004
+            y_out = lip + sign * 0.012
+            rings.append([
+                bm.verts.new((center.x + dx * r0, y_in, center.z + dz * r0)),
+                bm.verts.new((center.x + dx * r0, y_out, center.z + dz * r0)),
+                bm.verts.new((center.x + dx * r1, y_out, center.z + dz * r1)),
+                bm.verts.new((center.x + dx * r1, y_in - sign * 0.008, center.z + dz * r1)),
+            ])
+        for i in range(n):
+            a, b = rings[i], rings[i + 1]
+            for k in range(4):
+                nxt = (k + 1) % 4
+                bm.faces.new((a[k], b[k], b[nxt], a[nxt]))
+        bm.faces.new(list(reversed(rings[0])))
+        bm.faces.new(rings[-1])
+    mesh = bpy.data.meshes.new('h2-fascia-flare')
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new('h2-fascia-flare', mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    assign(obj, mats['trim'])
+    obj['bucket'] = 'trim'
+    obj['role'] = 'body'
+    print(f'  flares {tri_count(obj)} tris')
+    return obj
 
 
 def replace_steps(mats):
@@ -1561,8 +1650,10 @@ def main():
         if obj.get('role') == 'tire':
             apply_tread(obj)
     fascia = build_fascia(mats)
+    flare = add_flares(mats)
     step = replace_steps(mats)
     keep.extend(fascia)
+    keep.append(flare)
     keep.append(step)
     # Low LOD is a second decimate of the high meshes. Rebuilt rims and the
     # fascia are copied, not collapsed, so the spokes and the slots stay crisp.
