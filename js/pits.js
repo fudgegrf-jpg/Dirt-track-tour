@@ -2,11 +2,28 @@ import {groundObject,groundFoot} from './grounding.js';
 import {pitLayout,createPitRoad} from './pit-road.js';
 import {canvasTexture,enrichPaddock,pitchedRoof,beveledBox} from './details.js';
 import * as THREE from 'three';
-import {makeSemi} from './gfx.js';
+import {makeSemi,glowTexture} from './gfx.js';
+import {pitGateHalfArc} from './pit-gate.js';
 import {createPitLot} from './pit-lot.js';
 import {matteClay} from './clay-matte.js';
 import {AI_DRIVERS} from './data.js';
 import {polishPaddock,polishPitRoad} from './paddock-polish.js';
+// Flashing amber marker beside the pit entrance. Replaces the old billboard.
+// No real light: one emissive head, and a sprite only above Low.
+function pitEntranceBeacon(race,root,origin,trk,gateS,road){
+ const low=race.app.quality==='low',S=gateS-pitGateHalfArc(trk)*.15,p=trk.point(S,trk.outer+8.15);
+ const gy=road.heightAt(p.x,p.z)??trk.height(S,trk.outer);
+ const pole=new THREE.Mesh(new THREE.CylinderGeometry(.07,.09,4.5,low?6:8),new THREE.MeshStandardMaterial({color:0x2c3134,roughness:.72,metalness:.3}));
+ pole.name='pit-entrance-beacon-pole';pole.position.set(p.x-origin.x,gy+2.25,p.z-origin.z);root.add(pole);
+ const lampMat=new THREE.MeshStandardMaterial({color:0xffc24a,emissive:0xffb000,emissiveIntensity:.35,roughness:.32});
+ const lamp=new THREE.Mesh(new THREE.BoxGeometry(.38,.26,.38),lampMat);lamp.name='pit-entrance-beacon-lamp';lamp.position.y=2.38;pole.add(lamp);
+ const hood=new THREE.Mesh(new THREE.BoxGeometry(.48,.06,.48),new THREE.MeshStandardMaterial({color:0x1c2022,roughness:.6}));hood.position.y=2.56;pole.add(hood);
+ let sprite=null;if(!low){sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTexture(),color:0xffb21a,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.8}));sprite.scale.setScalar(1.55);sprite.position.y=2.38;pole.add(sprite);}
+ lamp.onBeforeRender=()=>{const on=((performance.now()/420)|0)%2===0;lampMat.emissiveIntensity=on?3.3:.1;if(sprite)sprite.visible=on;};
+ pole.userData.kind='pit-entrance-beacon';
+ groundObject(race.groundSupports,pole,(x,z)=>road.heightAt(x,z)??race.terrainHeight(x,z),{kind:'pit entrance beacon'});
+ return pole;
+}
 // One paddock generator, located from the actual backstretch of each oval.
 export function createPitWorld(race){
  const {app,trk,T,scene}=race,st=app.state||app.profile||{};
@@ -20,7 +37,8 @@ export function createPitWorld(race){
  const posts=[];for(const dx of[-w*.38,w*.38]){const post=new THREE.Mesh(new THREE.BoxGeometry(.10,y,.10),steel);post.position.set(dx,-y/2,-.08);m.add(post);posts.push(post);}
  m.userData.groundSign=()=>{for(const post of posts)groundFoot(race.groundSupports,post,(wx,wz)=>Math.abs(wx-origin.x)<=75&&wz>=-51&&wz<=41?0:(road.heightAt(wx,wz)??race.terrainHeight(wx,wz)),{kind:'pit sign post'});};
  return m;}
- const signAt=trk.point(gateS-14,trk.outer+3.2),entrySign=sign('PITS / 25 MPH',signAt.x-origin.x,signAt.z-origin.z,trk.height(gateS-14,trk.outer)+3.7,10);entrySign.rotation.y=-gate.th+Math.PI/2;sign('PADDOCK / 25 MPH',52,-45,3.5,9);
+ sign('PADDOCK / 25 MPH',52,-45,3.5,9);
+ pitEntranceBeacon(race,root,origin,trk,gateS,road);
  const semi=makeSemi({team:st.team||'Red Clay Racing',num:st.num||'42',color:st.color??0xf1f0e7,accent:st.accent??0x135bc4,cabColor:st.accent??0x135bc4,scheme:st.scheme,detail:app.quality});semi.rotation.y=Math.PI;semi.position.x=-17.8;root.add(semi);semi.userData.rampPivot.scale.x=4.6/semi.userData.rampLen;semi.userData.rampPivot.rotation.z=Math.asin(1.25/4.6);
  obstacles.push({x:-31,z:0,w:5,d:1.8});
  // Player's parking bay and centerline are paint, never light flares.

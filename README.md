@@ -174,3 +174,11 @@ Paddock polish adds painted bay marks, pit-exit lettering, bollards, canopy/lot 
 **Pace truck:** the pace car is now an original lifted full-size 4x4 pace truck (big off-road tires, flares, steel bumpers, roof rack, amber light bar). Generic design, no real-vehicle badges.
 
 **Engine sound at the start:** the V8 sound pack loads behind the "Preparing the clay" screen, so races open on the real engine instead of the fallback synth swapping over mid pace lap. Gas on auto-paced laps loads the engine on wheel speed instead of ringing the rev limiter, so holding gas into the green no longer drops RPM at the flag.
+
+## Night21 — level pit lane, entrance beacon, H2 pace car
+
+The pit lane on both Salina and Batesville now runs parallel to the backstretch on a level shelf, then descends on one gentle curve into the paddock. The old straight peel sat about 11° off the straight and kept that heading into the banked turn, while the surface was stretched between the rising wall and a falling centreline, so the lane tilted sideways (about 26° of cross-slope at Salina). The driving lane is flat across its width. The entrance meets the wall at the same height, and the grade into the lot ends flat. Walls, cones and the gate opening follow that surface. Saves from an older lane shape resume on this one (`routeVersion` 5). The 25 mph pit limit is unchanged.
+
+The large pit-entrance billboard is gone. A small flashing amber beacon stands just off the driving line at the opening. The catch fence stays.
+
+The pace car is an original low-poly SUV proportioned to the 2003 Hummer H2 (published length, width, height, wheelbase and track). It keeps the amber roof bar, the two-wide caution lead and the infield pull-off. There is no Hummer badge or copied vehicle mesh.

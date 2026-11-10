@@ -1,49 +1,57 @@
 import * as THREE from 'three';
 import {beveledBox} from './details.js';
 import {glowTexture} from './gfx.js';
-// Night19: visible street-style pace car attached to the existing invisible
-// pace logic (formation arc / pace leader). Kinematic only: it is never in the
-// race car list, never collides, and only uses the apron + an infield spot.
+// Visible pace car on the existing pace logic (formation arc / pace leader).
+// Kinematic only: it is never in the race car list, never collides, and only
+// uses the apron plus an infield spot. The mesh is an original H2-proportioned SUV.
 const wrapP=(v,P)=>((v%P)+P)%P,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+// Original low-poly Hummer H2 pace SUV. Proportions follow the published 2003 H2
+// spec (189.8 x 81.2 x 77.8 in, 122.8 in wheelbase, 69.4 in track, LT315/70R17).
+// No Hummer wordmark, badge, or copied mesh — shape only, plus the pace light bar.
 export function makePaceCar(low=false){
  const g=new THREE.Group();g.name='pace-car';g.rotation.order='YXZ';
- const n=low?2:4,paint=new THREE.MeshStandardMaterial({color:0xf3f1ea,metalness:.35,roughness:.38}),black=new THREE.MeshStandardMaterial({color:0x141618,roughness:.6}),glass=new THREE.MeshStandardMaterial({color:0x10171d,metalness:.4,roughness:.15}),amberStripe=new THREE.MeshStandardMaterial({color:0xf0a21a,roughness:.5});
+ const n=low?2:3;
+ const L=4.821,WB=3.119,frontOH=.78,frontAxle=L/2-frontOH,rearAxle=frontAxle-WB,trackW=1.763,tireR=(17*0.0254+2*0.315*0.70)/2;
+ const paint=new THREE.MeshStandardMaterial({color:0xf3f1ea,metalness:.28,roughness:.42}),black=new THREE.MeshStandardMaterial({color:0x141618,roughness:.72}),glass=new THREE.MeshStandardMaterial({color:0x243848,metalness:.35,roughness:.18}),amber=new THREE.MeshStandardMaterial({color:0xf0a21a,roughness:.5});
  const add=(geo,mat,x,y,z,p=g)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=!low;m.receiveShadow=!low;p.add(m);return m;};
- // Night20: original lifted full-size 4x4 pace truck (generic design, no real-vehicle badges): tall slab-sided body,
- // big off-road tires under black flares, steel bumpers, roof rack and the amber light bar.
- const rubber=new THREE.MeshStandardMaterial({color:0x111213,roughness:.92}),rim=new THREE.MeshStandardMaterial({color:0x5d6166,metalness:.6,roughness:.4}),
-  steel=new THREE.MeshStandardMaterial({color:0x1d2022,metalness:.5,roughness:.55}),chrome=new THREE.MeshStandardMaterial({color:0xb8bec4,metalness:.85,roughness:.25});
- add(beveledBox(5.0,.8,2.0,.12,n),paint,0,.96,0);                          // body sides / doors
- add(beveledBox(1.55,.07,1.9,.03,n),paint,1.72,1.38,0);                    // flat hood
- add(beveledBox(3.05,.62,1.86,.1,n),glass,-.62,1.67,0);                     // tall greenhouse
- add(beveledBox(3.12,.08,1.92,.04,n),paint,-.62,2.0,0);                     // roof
- for(const px of[.92,-.42,-1.98])add(new THREE.BoxGeometry(px>0?.12:.16,.62,1.9),paint,px,1.67,0); // A/B/D pillars
- for(const z of[-.86,.86])add(new THREE.BoxGeometry(2.8,.05,.06),steel,-.62,2.08,z);           // roof rack rails
- for(const px of[-1.7,.45])add(new THREE.BoxGeometry(.06,.05,1.74),steel,px,2.1,0);
- for(const z of[-1.005,1.005])add(new THREE.BoxGeometry(4.5,.14,.02),amberStripe,-.05,1.14,z); // amber body stripe
- // grille (horizontal bars), slim LED headlamps, steel bumpers with tow hooks, side steps, mirrors
- add(new THREE.BoxGeometry(.06,.4,1.36),black,2.49,1.1,0);
- for(const y of[.98,1.1,1.22])add(new THREE.BoxGeometry(.05,.035,1.32),chrome,2.52,y,0);
- add(beveledBox(.32,.28,2.06,.05,2),steel,2.5,.66,0);add(beveledBox(.3,.28,2.06,.05,2),steel,-2.5,.7,0);
- const hook=new THREE.MeshStandardMaterial({color:0xc4271d,roughness:.5});for(const z of[-.55,.55])add(new THREE.BoxGeometry(.12,.08,.1),hook,2.68,.62,z);
- for(const z of[-1.07,1.07]){add(new THREE.BoxGeometry(2.3,.05,.2),steel,.05,.52,z);add(new THREE.BoxGeometry(.18,.16,.08),black,.95,1.52,z);}
- // door lettering
- const c=document.createElement('canvas');c.width=512;c.height=96;const x=c.getContext('2d');x.fillStyle='#000';x.font='900 64px Arial Black, Arial';x.textAlign='center';x.textBaseline='middle';x.fillText('PACE CAR',256,50);
- const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;const label=new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false});
- for(const s of[-1,1]){const m=new THREE.Mesh(new THREE.PlaneGeometry(1.8,.34),label);m.position.set(-.35,.88,s*1.008);if(s<0)m.rotation.y=Math.PI;g.add(m);}
- for(const [px,pz]of[[1.62,-.9],[1.62,.9],[-1.5,-.9],[-1.5,.9]]){
-  const w=add(new THREE.CylinderGeometry(.46,.46,.34,low?12:20).rotateX(Math.PI/2),rubber,px,.46,pz);w.castShadow=false;
-  add(new THREE.CylinderGeometry(.25,.25,.36,low?8:12).rotateX(Math.PI/2),rim,px,.46,pz).castShadow=false;
-  if(pz>0)add(beveledBox(1.22,.16,2.12,.05,2),black,px,1.0,0);             // fender flare over each axle
+ const rubber=new THREE.MeshStandardMaterial({color:0x111213,roughness:.94}),rim=new THREE.MeshStandardMaterial({color:0xb7bcc2,metalness:.72,roughness:.32}),
+  steel=new THREE.MeshStandardMaterial({color:0x1a1e20,metalness:.45,roughness:.55}),chrome=new THREE.MeshStandardMaterial({color:0xc5ccd2,metalness:.82,roughness:.22});
+ // High beltline, short flat hood, black cladding, upright glass band. Roof at the 77.8 in spec.
+ add(beveledBox(4.62,.32,2.06,.05,n),black,-.04,.56,0);
+ add(beveledBox(4.35,.62,1.98,.06,n),paint,-.12,1.05,0);
+ add(beveledBox(1.28,.06,1.92,.02,2),paint,1.48,1.28,0);
+ add(beveledBox(2.05,.5,1.8,.04,n),glass,-.32,1.64,0);
+ add(beveledBox(2.28,.06,1.92,.02,2),paint,-.28,1.94,0);
+ add(new THREE.BoxGeometry(.1,.52,1.82),paint,.72,1.64,0);
+ add(new THREE.BoxGeometry(.12,.52,1.82),paint,-1.38,1.64,0);
+ if(!low)for(const z of[-.88,.88])add(new THREE.BoxGeometry(1.9,.04,.045),steel,-.28,2.01,z);
+ for(const z of[-1.0,1.0])add(new THREE.BoxGeometry(3.9,.055,.02),amber,-.15,.74,z);
+ // Squared grille of horizontal slats between rectangular lamps. No name badge.
+ add(new THREE.BoxGeometry(.07,.58,1.16),black,2.4,1.02,0);
+ const bars=low?5:7;for(let i=0;i<bars;i++)add(new THREE.BoxGeometry(.045,.028,1.08),chrome,2.45,.78+i*(.46/(bars-1)),0);
+ const head=new THREE.MeshBasicMaterial({color:0xf4f6ff}),tail=new THREE.MeshBasicMaterial({color:0xff2a1a}),turn=new THREE.MeshBasicMaterial({color:0xffb03a});
+ for(const z of[-.78,.78]){add(new THREE.BoxGeometry(.05,.22,.3),head,2.42,1.16,z).castShadow=false;add(new THREE.BoxGeometry(.04,.08,.28),turn,2.43,.96,z).castShadow=false;}
+ add(beveledBox(.34,.28,2.06,.04,2),steel,2.34,.52,0);
+ add(beveledBox(.22,.26,2.02,.04,2),steel,-2.28,.54,0);
+ for(const z of[-.82,.82])add(new THREE.BoxGeometry(.04,.36,.18),tail,-2.4,1.16,z).castShadow=false;
+ for(const [px,pz]of[[frontAxle,-trackW/2],[frontAxle,trackW/2],[rearAxle,-trackW/2],[rearAxle,trackW/2]]){
+  add(new THREE.CylinderGeometry(tireR,tireR,.3,low?12:18).rotateX(Math.PI/2),rubber,px,tireR,pz).castShadow=false;
+  add(new THREE.CylinderGeometry(.2,.2,.32,low?8:12).rotateX(Math.PI/2),rim,px,tireR,pz).castShadow=false;
  }
- const head=new THREE.MeshBasicMaterial({color:0xf4f6ff}),tail=new THREE.MeshBasicMaterial({color:0xff2a1a});
- for(const z of[-.82,.82]){add(new THREE.BoxGeometry(.04,.09,.3),head,2.51,1.27,z).castShadow=false;add(new THREE.BoxGeometry(.04,.34,.1),tail,-2.51,1.18,z*1.1).castShadow=false;}
- // roof light bar: two emissive halves + additive glow sprites (no real lights)
- const bar=new THREE.Group();bar.position.set(-.1,2.17,0);g.add(bar);add(beveledBox(.34,.1,1.42,.04,2),black,0,0,0,bar);
+ for(const px of[frontAxle,rearAxle])add(beveledBox(.98,.18,2.08,.04,2),black,px,.98,0);
+ for(const z of[-1.04,1.04])add(new THREE.BoxGeometry(1.9,.05,.14),steel,.1,.4,z);
+ for(const z of[-1,1])add(new THREE.BoxGeometry(.14,.1,.16),black,.7,1.5,z*1.02).castShadow=false;
+ // Tailgate-mounted spare, the H2's rear silhouette, without a logo cover.
+ add(new THREE.CylinderGeometry(.42,.42,.2,low?12:16).rotateZ(Math.PI/2),rubber,-2.58,1.18,0).castShadow=false;
+ if(!low)add(new THREE.TorusGeometry(.42,.045,6,14).rotateY(Math.PI/2),steel,-2.66,1.18,0).castShadow=false;
+ const c=document.createElement('canvas');c.width=512;c.height=96;const ctx=c.getContext('2d');ctx.fillStyle='#111';ctx.font='900 64px Arial Black, Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('PACE CAR',256,50);
+ const texLabel=new THREE.CanvasTexture(c);texLabel.colorSpace=THREE.SRGBColorSpace;const label=new THREE.MeshBasicMaterial({map:texLabel,transparent:true,depthWrite:false});
+ for(const s of[-1,1]){const m=new THREE.Mesh(new THREE.PlaneGeometry(1.2,.26),label);m.position.set(-.25,1.05,s*0.995);if(s<0)m.rotation.y=Math.PI;g.add(m);}
+ const bar=new THREE.Group();bar.position.set(-.2,2.04,0);g.add(bar);add(beveledBox(.28,.07,1.05,.03,2),black,0,0,0,bar);
  const lamps=[],sprites=[],tex=glowTexture();
- for(const s of[-1,1]){const mat=new THREE.MeshStandardMaterial({color:0x6b3e00,emissive:0xffa000,emissiveIntensity:2.5,roughness:.3});const lamp=add(new THREE.BoxGeometry(.28,.12,.6),mat,0,.09,s*.36,bar);lamp.castShadow=false;lamps.push(lamp);
-  if(!low||s>0){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffa21c,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.9}));sp.scale.setScalar(low?2.4:1.9);sp.position.set(0,.2,low?0:s*.36);bar.add(sp);sprites.push(sp);}}
- g.userData={lamps,sprites,bar};return g;
+ for(const s of[-1,1]){const mat=new THREE.MeshStandardMaterial({color:0x6b3e00,emissive:0xffa000,emissiveIntensity:2.5,roughness:.3});const lamp=add(new THREE.BoxGeometry(.22,.08,.42),mat,0,.07,s*.24,bar);lamp.castShadow=false;lamps.push(lamp);
+  if(!low||s>0){const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffa21c,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.85}));sp.scale.setScalar(low?1.5:1.05);sp.position.set(0,.12,low?0:s*.24);bar.add(sp);sprites.push(sp);}}
+ g.userData={lamps,sprites,bar,frontAxle,rearAxle,trackWidth:trackW,halfLength:2.7,halfWidth:1.08,bodyLength:L,bodyWidth:2.062,bodyHeight:1.976};return g;
 }
 export class PaceCar{
  constructor(race){
@@ -102,9 +110,10 @@ export class PaceCar{
  pose(dt=0){
   const t=this.race.trk,P=t.P,s=wrapP(this.arc,P),p=t.point(s,this.d),m=this.mesh,ahead=t.point(s+1.5,this.d+(this.lastDD||0));
   const th=Math.atan2(ahead.z-p.z,ahead.x-p.x);this.x=p.x;this.z=p.z;this.th=th;
+  const ud=m.userData,xf=ud.frontAxle??1.63,xr=ud.rearAxle??-1.49,halfT=(ud.trackWidth??1.76)/2;
   const h=(f,q)=>{const cs=Math.cos(th),sn=Math.sin(th),x=p.x+cs*f-sn*q,z=p.z+sn*f+cs*q,pr=t.project(x,z);return t.height(pr.s,pr.d);};
-  const fl=h(1.4,-.85),fr=h(1.4,.85),rl=h(-1.4,-.85),rr=h(-1.4,.85);
-  m.position.set(p.x,(fl+fr+rl+rr)/4,p.z);m.rotation.y=-th;m.rotation.z=Math.atan2((fl+fr)-(rl+rr),2*2.8);m.rotation.x=-Math.atan2((fr+rr)-(fl+rl),2*1.7);
+  const fl=h(xf,-halfT),fr=h(xf,halfT),rl=h(xr,-halfT),rr=h(xr,halfT);
+  m.position.set(p.x,(fl+fr+rl+rr)/4,p.z);m.rotation.y=-th;m.rotation.z=Math.atan2((fl+fr)-(rl+rr),xf-xr);m.rotation.x=-Math.atan2((fr+rr)-(fl+rl),halfT*2);
  }
  lights(on){
   const u=this.mesh.userData,ph=Math.floor(this.t*6)%2;
@@ -114,7 +123,7 @@ export class PaceCar{
  // Oriented-box clearance (metres) to every race car, for QA. Never alters cars.
  clearance(){
   const corners=(x,z,th,hl,hw)=>{const c=Math.cos(th),s=Math.sin(th);return[[hl,hw],[hl,-hw],[-hl,hw],[-hl,-hw]].map(([a,b])=>({x:x+c*a-s*b,z:z+s*a+c*b}));};
-  const A=corners(this.x,this.z,this.th,2.6,1.07);let min=Infinity;
+  const ud=this.mesh.userData,A=corners(this.x,this.z,this.th,ud.halfLength??2.55,ud.halfWidth??1.06);let min=Infinity;
   for(const c of this.race.cars){if(Math.hypot(c.x-this.x,c.z-this.z)>12)continue;const B=corners(c.x,c.z,c.th,2.7,1.05);let sep=-Infinity;
    for(const th of[this.th,this.th+Math.PI/2,c.th,c.th+Math.PI/2]){const ax=Math.cos(th),az=Math.sin(th),pa=A.map(p=>p.x*ax+p.z*az),pb=B.map(p=>p.x*ax+p.z*az);sep=Math.max(sep,Math.max(Math.min(...pa)-Math.max(...pb),Math.min(...pb)-Math.max(...pa)));}
    min=Math.min(min,sep);}
