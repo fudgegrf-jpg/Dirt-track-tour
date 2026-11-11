@@ -115,7 +115,9 @@ def hold_seams(obj):
     for edge in bm.edges:
         border = len(edge.link_faces) < 2
         angle = 0.0 if border else edge.calc_face_angle(0.0)
-        weight = 1.0 if border else (0.72 if angle > math.radians(48) else 0.0)
+        # Borders stay put. Only the sharp cage corners keep a partial crease,
+        # so the panels can become continuous surfaces.
+        weight = 1.0 if border else (0.28 if angle > math.radians(62) else 0.0)
         edge.smooth = weight < 0.5
         if crease is not None:
             edge[crease] = weight
@@ -257,20 +259,43 @@ def build_body(arch_steps):
                 drop.append(face)
                 break
     bmesh.ops.delete(bm, geom=drop, context='FACES')
-    for v in bm.verts:
-        if abs(v.co.y) < 0.8:
+    # Turn the stair-step bite into a semicircle, then give the fascia holes
+    # a short return so the grille and lamps sit in a recess instead of a gap.
+    arch_edges = []
+    fascia_edges = []
+    for edge in bm.edges:
+        if len(edge.link_faces) != 1:
             continue
-        boundary = any(len(e.link_faces) == 1 for e in v.link_edges)
-        if not boundary:
+        mid = (edge.verts[0].co + edge.verts[1].co) * 0.5
+        if mid.x > 2.05:
+            fascia_edges.append(edge)
+            continue
+        if abs(mid.y) < 0.75 or mid.z > 1.02:
+            continue
+        for axle in wheels:
+            if math.hypot(mid.x - axle, mid.z - WHEEL_Z) < 0.85:
+                arch_edges.append(edge)
+                break
+    if arch_edges:
+        bmesh.ops.subdivide_edges(bm, edges=arch_edges, cuts=4)
+    for v in bm.verts:
+        if not any(len(e.link_faces) == 1 for e in v.link_edges):
+            continue
+        if v.co.x > 2.0 or abs(v.co.y) < 0.75 or v.co.z > 1.02:
             continue
         for axle in wheels:
             dx, dz = v.co.x - axle, v.co.z - WHEEL_Z
             radius = math.hypot(dx, dz)
-            if 0.20 < radius < 0.72 and v.co.z < 1.02:
+            if 0.12 < radius < 0.9:
                 scale = ARCH_R / radius
                 v.co.x = axle + dx * scale
                 v.co.z = WHEEL_Z + dz * scale
                 break
+    if fascia_edges:
+        extruded = bmesh.ops.extrude_edge_only(bm, edges=fascia_edges)
+        for item in extruded['geom']:
+            if isinstance(item, bmesh.types.BMVert):
+                item.co.x -= 0.016
 
     bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
     roof_face = max(bm.faces, key=lambda f: f.calc_center_median().z)
@@ -532,15 +557,14 @@ def build_fascia_inserts():
             (gx + 0.006, 0.58, z + 0.016), (gx + 0.006, -0.58, z + 0.016),
         ])
     for sign in (1, -1):
-        lx = 2.148
-        y = sign * 0.82
+        lx = 2.142
         q(lamps, [
-            (lx, y - 0.12, 0.64), (lx, y + 0.12, 0.64),
-            (lx, y + 0.12, 0.90), (lx, y - 0.12, 0.90),
+            (lx, sign * 0.70, 0.58), (lx, sign * 0.94, 0.58),
+            (lx, sign * 0.94, 0.94), (lx, sign * 0.70, 0.94),
         ])
         q(amber, [
-            (lx + 0.002, y + sign * 0.05, 0.66), (lx + 0.002, y + sign * 0.11, 0.66),
-            (lx + 0.002, y + sign * 0.11, 0.88), (lx + 0.002, y + sign * 0.05, 0.88),
+            (lx + 0.003, sign * 0.86, 0.60), (lx + 0.003, sign * 0.93, 0.60),
+            (lx + 0.003, sign * 0.93, 0.92), (lx + 0.003, sign * 0.86, 0.92),
         ])
         q(tail, [
             (-2.055, sign * 0.42, 0.78), (-2.055, sign * 0.72, 0.78),
@@ -882,9 +906,9 @@ def tri_count(obj):
 def build(high, mats):
     body = build_body(14 if high else 8)
     if high:
-        subdivide_shell(body, 1)
+        subdivide_shell(body, 2)
     else:
-        bevel(body, 0.008, 1)
+        subdivide_shell(body, 1)
     print('  body clearance', push_clear(body, 0.06))
     # Black lower cladding is the bottom of the same shell, cut on a plane
     # so the break is a line and not a second intersecting skin.
