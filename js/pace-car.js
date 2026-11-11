@@ -5,9 +5,9 @@ import { beveledBox } from './details.js';
 import { glowTexture } from './gfx.js';
 // Visible pace car on the existing pace logic (formation arc / pace leader).
 // Kinematic only: it is never in the race car list, never collides, and only
-// uses the apron plus an infield spot. The mesh is an original compact pace
-// SUV built by scripts/build_pace_suv.py. The procedural shell is the
-// fallback if the GLB does not load.
+// uses the apron plus an infield spot. The mesh is Kenney's CC0 Car Kit SUV
+// (assets/models/source/kenney), recolored by scripts/dress_kenney_suv.py.
+// The procedural shell is the fallback if the GLB does not load.
 const wrapP=(v,P)=>((v%P)+P)%P,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const glbCache={high:null,low:null};
 let glbPromise=null;
@@ -144,7 +144,9 @@ export function auditPaceCar(group){
   if(tireName||o.name==='h2-spare'){
    if(tireName)tires+=o.isInstancedMesh?o.count:1;
    geo.computeBoundingBox();size.subVectors(geo.boundingBox.max,geo.boundingBox.min);
-   if(!(size.z<size.x*.55&&size.z<size.y*.55&&size.x>.7&&size.y>.7))fails.push(`tire axis ${size.x.toFixed(2)} ${size.y.toFixed(2)} ${size.z.toFixed(2)}`);
+   // Authored tyres are wider across the tread than the old generated shells.
+   // 0.65 still requires the axle to be the thin axis.
+   if(!(size.z<size.x*.65&&size.z<size.y*.65&&size.x>.7&&size.y>.7))fails.push(`tire axis ${size.x.toFixed(2)} ${size.y.toFixed(2)} ${size.z.toFixed(2)}`);
   }
   if(rimName){
    rims+=o.isInstancedMesh?o.count:1;geo.computeBoundingBox();size.subVectors(geo.boundingBox.max,geo.boundingBox.min);
@@ -212,11 +214,21 @@ export function auditPaceCar(group){
   if(glassPts.length<8)fails.push('glass surface');
   else{
    const sideSeesGlass=(sign)=>{
-    const pts=glassPts.filter(p=>Math.sign(p.z)===sign&&p.y>1.3&&p.y<1.9);
-    pts.sort((a,b)=>Math.abs(b.z)-Math.abs(a.z));
-    const tries=pts.filter((_,i)=>i%Math.max(1,pts.length/16|0)===0).slice(0,16);
+    // Side glass sits at whatever height this body uses. Take the upper band of
+    // the points on that side so the ray is aimed at the door glass.
+    const side=glassPts.filter(p=>Math.sign(p.z)===sign);
+    if(side.length<4)return 'nothing';
+    const ys=side.map(p=>p.y);
+    const y0=Math.min(...ys), y1=Math.max(...ys);
+    let pts=side.filter(p=>p.y>y0+(y1-y0)*0.35&&p.y<y0+(y1-y0)*0.95);
+    if(pts.length<4)pts=side;
+    const outer=Math.max(...pts.map(p=>Math.abs(p.z)));
+    // The pane is a flat quad. Aim at its middle, not a corner buried in the pillar.
+    const face=pts.filter(p=>Math.abs(p.z)>outer-0.12);
+    const pool=face.length>=3?face:pts;
+    const mid=pool.reduce((s,p)=>s.add(p),new THREE.Vector3()).multiplyScalar(1/pool.length);
     let note='nothing';
-    for(const p of tries){
+    for(const p of [mid, ...pool.slice(0,6)]){
      const origin=p.clone();origin.z+=sign*0.5;
      ray.set(origin,new THREE.Vector3(0,0,-sign));
      const hit=ray.intersectObjects(meshes,false)[0];

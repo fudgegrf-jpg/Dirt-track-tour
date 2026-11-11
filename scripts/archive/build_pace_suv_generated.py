@@ -1,6 +1,8 @@
-# Original compact pace SUV. Panels and openings, not a subdivided blob.
+# RETIRED. This generated the shell that used to be h2.glb. The game no longer
+# loads that mesh. The pace SUV is Kenney's CC0 Car Kit model, dressed by
+# scripts/dress_kenney_suv.py. Kept so the earlier attempt stays in the tree.
 #
-#   blender --background --python scripts/build_pace_suv.py
+#   blender --background --python scripts/archive/build_pace_suv_generated.py
 #
 # Blender Z-up, +X forward, +Y left. Export is glTF Y-up: three.js +X forward,
 # +Y up, wheel axle along Z.
@@ -10,8 +12,8 @@ import math
 import os
 from mathutils import Vector
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-OUT = os.path.join(ROOT, 'assets', 'models')
+# Do not write the runtime models. A run of this retired script stays in archive/out.
+OUT = os.path.join(os.path.dirname(__file__), 'out')
 
 FRONT_X = 1.34
 REAR_X = -1.38
