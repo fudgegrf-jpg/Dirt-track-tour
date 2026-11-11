@@ -181,4 +181,8 @@ The pit lane on both Salina and Batesville now runs parallel to the backstretch 
 
 The large pit-entrance billboard is gone. A small flashing amber beacon stands just off the driving line at the opening. The catch fence stays.
 
-The pace car is an original SUV in the shape of the 2003 Hummer H2: published length, width, height, wheelbase and overhangs, a short flat hood, a steep windshield, a black greenhouse with the glass set inside the frames, a recessed seven-slot grille, round headlights, separate bumpers, squared fender lips and chunky tires. It keeps the amber roof bar, the two-wide caution lead and the infield pull-off. There is no Hummer badge or copied vehicle mesh.
+The pace car in that release was an original SUV in the shape of the 2003 Hummer H2. There was no Hummer badge or copied vehicle mesh. The current pace car is the original compact SUV described below. It keeps the amber roof bar, the two-wide caution lead and the infield pull-off.
+
+## Pace SUV
+
+The pace car is an original compact performance SUV, modeled for this game. Yellow body, black lower cladding, dark glass, a slatted grille, swept headlamps, silver six-spoke wheels and a roof light bar. It is not a branded vehicle. The procedural shell remains the fallback if the GLB does not load. Pit road, the entrance beacon, the synthesized V8 and Classic 42 are unchanged.

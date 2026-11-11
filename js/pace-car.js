@@ -5,8 +5,8 @@ import { beveledBox } from './details.js';
 import { glowTexture } from './gfx.js';
 // Visible pace car on the existing pace logic (formation arc / pace leader).
 // Kinematic only: it is never in the race car list, never collides, and only
-// uses the apron plus an infield spot. The mesh is the CC0 Hummer H2 from
-// Blend Swap #79973, cleaned up in Blender. The procedural shell is the
+// uses the apron plus an infield spot. The mesh is an original compact pace
+// SUV built by scripts/build_pace_suv.py. The procedural shell is the
 // fallback if the GLB does not load.
 const wrapP=(v,P)=>((v%P)+P)%P,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const glbCache={high:null,low:null};
@@ -62,13 +62,25 @@ function dressGlb(src,low){
   if(!low||side>0)sprites.push(sp);else sp.visible=false;
  }
  let tris=0,draws=0;
+ const tires=[];
+ g.updateMatrixWorld(true);
  g.traverse(o=>{if(!o.isMesh)return;draws++;
   const n=o.geometry.index?o.geometry.index.count/3:o.geometry.attributes.position.count/3;
   tris+=n*(o.isInstancedMesh?o.count:1);
+  if(/^h2-tire\d*$/.test(o.name)){
+   const box=new THREE.Box3().setFromObject(o);
+   tires.push(g.worldToLocal(box.getCenter(new THREE.Vector3())));
+  }
  });
- g.userData={lamps,sprites,bar:lamps[0],frontAxle:WB()/2,rearAxle:-WB()/2,trackWidth:69.4*0.0254,
-  halfLength:2.6,halfWidth:1.22,bodyLength:189.8*0.0254,bodyWidth:81.2*0.0254,bodyHeight:77.8*0.0254,
-  grille:'seven-vertical',lampsShape:'round',triangles:Math.round(tris),drawCalls:draws,source:'glb'};
+ const box=new THREE.Box3().setFromObject(g),size=box.getSize(new THREE.Vector3());
+ tires.sort((a,b)=>b.x-a.x);
+ const axle=list=>list.reduce((s,p)=>s+p.x,0)/list.length;
+ const frontAxle=tires.length>=4?axle(tires.slice(0,2)):WB()/2;
+ const rearAxle=tires.length>=4?axle(tires.slice(-2)):-WB()/2;
+ const trackWidth=tires.length?Math.max(...tires.map(p=>p.z))-Math.min(...tires.map(p=>p.z)):69.4*0.0254;
+ g.userData={lamps,sprites,bar:lamps[0],frontAxle,rearAxle,trackWidth,
+  halfLength:size.x*0.5,halfWidth:size.z*0.5,bodyLength:size.x,bodyWidth:size.z,bodyHeight:size.y,
+  grille:'slats',lampsShape:'swept',triangles:Math.round(tris),drawCalls:draws,source:'glb'};
  return g;
 }
 const WB=()=>122.8*0.0254;

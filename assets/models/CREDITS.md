@@ -1,10 +1,10 @@
 # Model credits
 
-Hummer H2 by brzynak, Blend Swap #79973, CC0 1.0.
-https://creativecommons.org/publicdomain/zero/1.0/
+The pace SUV in `h2.glb` and `h2-low.glb` is original geometry modeled for
+this game by `scripts/build_pace_suv.py`. It is not a branded vehicle and it
+does not use a downloaded mesh.
 
-`src/HUMMER.blend` is that scene. `scripts/build_h2_cc0.py` strips the camera,
-ground and world, applies the subdivision at a reduced level, and writes
-`h2.glb` and `h2-low.glb`. The parking-lot HDRI referenced by the blend is not
-included. The yellow paint, pace-car lamps and door lettering are added for
-the game.
+`src/HUMMER.blend` is the earlier CC0 Hummer H2 by brzynak, Blend Swap #79973
+(https://creativecommons.org/publicdomain/zero/1.0/). It is kept as retired
+source. It is not the mesh the game loads. The parking-lot HDRI referenced by
+that blend is not included.
