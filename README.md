@@ -182,3 +182,7 @@ The pit lane on both Salina and Batesville now runs parallel to the backstretch 
 The large pit-entrance billboard is gone. A small flashing amber beacon stands just off the driving line at the opening. The catch fence stays.
 
 The pace car is an original SUV in the shape of the 2003 Hummer H2: published length, width, height, wheelbase and overhangs, a short flat hood, a steep windshield, a black greenhouse with the glass set inside the frames, a recessed seven-slot grille, round headlights, separate bumpers, squared fender lips and chunky tires. It keeps the amber roof bar, the two-wide caution lead and the infield pull-off. There is no Hummer badge or copied vehicle mesh.
+
+## Night21 — pace car touch-up
+
+The pace car's wheels now roll with its speed and the front wheels steer into the turns. The body leans slightly in corners and dips or squats under braking and throttle. The four wheels in the source model sat rotated about 5° (one side tucked in, the other poking out), so they are re-seated square on the same wheelbase and track. A full-width amber roof light bar replaces the two small pods, with a left/right double-flash pattern under pace and caution. At night the headlamps and tail lamps glow, and PACE CAR lettering sits on both front doors. When parked in the infield it rests on the real infield ground height. Shape and paint are unchanged.

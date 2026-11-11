@@ -51,22 +51,75 @@ function dressGlb(src,low){
    m.needsUpdate=true;
   }
  });
- const paceMat=[0,1].map(()=>new THREE.MeshStandardMaterial({color:0xffb000,emissive:0xffaa00,emissiveIntensity:1.4,roughness:.35}));
- const lamps=[],sprites=[],tex=glowTexture();
- const roof=new THREE.Box3().setFromObject(g).max.y;
- for(const side of[1,-1]){
-  const pod=new THREE.Mesh(beveledBox(.1,.026,.13,.006,2),paceMat[side>0?0:1]);
-  pod.position.set(.2,roof+0.012,side*.16);pod.name='h2-pace-lamp';g.add(pod);lamps.push(pod);
-  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffb020,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.5}));
-  sp.scale.setScalar(low?0.32:0.46);sp.position.set(.2,roof+0.04,side*.16);g.add(sp);
-  if(!low||side>0)sprites.push(sp);else sp.visible=false;
+ // Night21 touch-up (no shape changes): square wheel hubs that roll and steer, a full-width roof light bar,
+ // night head/tail glow and PACE CAR door lettering.
+ g.updateMatrixWorld(true);
+ const body=[];g.traverse(o=>{if(o.isMesh&&/^h2-(body|trim|fascia-flare)$/.test(o.name))body.push(o);});
+ // surface probes straight from the vertices (some CC0 faces are wound inward, so raycasts miss them)
+ const V=[],tmp=new THREE.Vector3();for(const o of body){const pa=o.geometry.attributes.position;for(let i=0;i<pa.count;i+=1)V.push(tmp.fromBufferAttribute(pa,i).applyMatrix4(o.matrixWorld).toArray());}
+ const top=(x0,x1,z0,z1)=>V.reduce((m,[x,y,z])=>x>=x0&&x<=x1&&z>=z0&&z<=z1&&y>m?y:m,-Infinity);
+ const side=(sgn,x0,x1,y0,y1)=>V.reduce((m,[x,y,z])=>x>=x0&&x<=x1&&y>=y0&&y<=y1&&z*sgn>m?z*sgn:m,-Infinity);
+ // The CC0 file's four wheels sit rotated ~5 deg about the centre (one side tucked in, the other poking out).
+ // Re-seat them square on the same wheelbase/track and give each a hub pivot so it can roll and steer.
+ const tires=[],rims=[],wheels=[];
+ g.traverse(o=>{if(/^h2-tire\d*$/.test(o.name)&&!o.isInstancedMesh)tires.push(o);else if(/^h2-rim\d*$/.test(o.name)&&!o.isInstancedMesh)rims.push(o);});
+ let hwb=WB()/2,htr=69.4*0.0254/2;
+ const F=tires.filter(t=>t.position.x>0),R=tires.filter(t=>t.position.x<=0);
+ if(F.length===2&&R.length===2){
+  const mid=a=>({x:(a[0].position.x+a[1].position.x)/2,z:(a[0].position.z+a[1].position.z)/2}),fm=mid(F),rm=mid(R),
+   ang=Math.atan2(fm.z-rm.z,fm.x-rm.x),ox=(fm.x+rm.x)/2,oz=(fm.z+rm.z)/2,ca=Math.cos(ang),sa=Math.sin(ang),
+   span=a=>Math.hypot(a[0].position.x-a[1].position.x,a[0].position.z-a[1].position.z);
+  hwb=Math.hypot(fm.x-rm.x,fm.z-rm.z)/2;htr=(span(F)+span(R))/4;
+  for(const t of tires){
+   const dx=t.position.x-ox,dz=t.position.z-oz,lx=dx*ca+dz*sa,lz=-dx*sa+dz*ca;
+   const rim=rims.reduce((b,r)=>!b||r.position.distanceTo(t.position)<b.position.distanceTo(t.position)?r:b,null);
+   const hub=new THREE.Object3D();hub.name=t.name.replace('tire','hub');hub.rotation.order='YZX';
+   hub.position.set(ox+Math.sign(lx)*hwb,t.position.y,oz+Math.sign(lz)*htr);t.parent.add(hub);
+   const off=rim?rim.position.clone().sub(t.position):null;
+   hub.add(t);t.position.set(0,0,0);
+   if(rim&&off.length()<.2){hub.add(rim);rim.position.set(off.x*ca+off.z*sa,off.y,-off.x*sa+off.z*ca);}
+   t.geometry.computeBoundingBox();
+   wheels.push({hub,front:lx>0,r:Math.max(.2,(t.geometry.boundingBox.max.y-t.geometry.boundingBox.min.y)/2)});
+  }
  }
+ // roof light bar: black housing across the roof with amber lens segments (3 per side) and glow sprites
+ const bx=.12,roofTop=top(bx-.18,bx+.18,-.55,.55),roofY=Number.isFinite(roofTop)?roofTop:1.84;
+ const housing=new THREE.MeshStandardMaterial({color:0x101214,metalness:.35,roughness:.5}),bar=new THREE.Group();
+ bar.name='h2-pace-bar';bar.position.set(bx,roofY,0);g.add(bar);
+ const base=new THREE.Mesh(beveledBox(.3,.07,1.26,.02,2),housing);base.position.y=.075;bar.add(base);
+ for(const z of[-.42,.42]){const foot=new THREE.Mesh(new THREE.BoxGeometry(.18,.05,.06),housing);foot.position.set(0,.02,z);bar.add(foot);}
+ const lamps=[],sprites=[],tex=glowTexture();
+ for(let i=0;i<6;i++){
+  const side=i<3?-1:1,k=i<3?2-i:i-3,z=side*(.12+k*.19);
+  const mat=new THREE.MeshStandardMaterial({color:0xffa400,emissive:0xff9a00,emissiveIntensity:.35,roughness:.25,transparent:true,opacity:.92});
+  const lens=new THREE.Mesh(beveledBox(.24,.075,.17,.02,2),mat);lens.position.set(0,.135,z);lens.name='h2-pace-lamp';
+  lens.userData={side,k};bar.add(lens);lamps.push(lens);
+ }
+ for(const side of[-1,1]){
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xffa018,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.75}));
+  sp.scale.setScalar(low?1.1:1.5);sp.position.set(0,.16,side*.36);sp.userData.side=side;sp.visible=false;bar.add(sp);sprites.push(sp);
+ }
+ // head/tail glow sprites (shown at night) at the real lamp positions
+ const glows=[];const headNodes=[];g.traverse(o=>{if(o.isMesh&&o.name.startsWith('h2-headlamp-lens'))headNodes.push(o);});
+ const hb=new THREE.Box3(),hc=new THREE.Vector3();
+ const seen=new Set();for(const o of headNodes){hb.setFromObject(o).getCenter(hc);const key=Math.round(hc.z*10);if(seen.has(key))continue;seen.add(key);const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xfff2d8,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.7}));sp.scale.setScalar(.9);sp.position.set(hb.max.x+.06,hc.y,hc.z);sp.visible=false;g.add(sp);glows.push(sp);}
+ // tail glows at the centre of the red lamp clusters on the rear corners
+ const gb=new THREE.Box3().setFromObject(g),TP=[];g.traverse(o=>{if(!o.isMesh||![].concat(o.material).some(m=>m?.name==='tail'))return;const pa=o.geometry.attributes.position;for(let i=0;i<pa.count;i++){tmp.fromBufferAttribute(pa,i).applyMatrix4(o.matrixWorld);if(tmp.x<gb.min.x+.2)TP.push(tmp.toArray());}});
+ for(const sg of[-1,1]){const pts=TP.filter(p=>p[2]*sg>.3),n=pts.length||1,y=pts.length?pts.reduce((a,p)=>a+p[1],0)/n:1.12,z=pts.length?pts.reduce((a,p)=>a+p[2],0)/n:sg*.82,x=pts.length?Math.min(...pts.map(p=>p[0])):gb.min.x;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,color:0xff2a14,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.6}));sp.scale.setScalar(.55);sp.position.set(x-.05,y,z);sp.visible=false;sp.userData.tail=true;g.add(sp);glows.push(sp);}
+ // PACE CAR lettering on both front doors, seated on the real panel surface
+ const cv=document.createElement('canvas');cv.width=512;cv.height=96;const ctx=cv.getContext('2d');
+ ctx.font='italic 900 62px Arial, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=10;ctx.strokeStyle='#fff3c4';ctx.strokeText('PACE CAR',256,50);ctx.fillStyle='#111';ctx.fillText('PACE CAR',256,50);
+ const ltex=new THREE.CanvasTexture(cv);ltex.colorSpace=THREE.SRGBColorSpace;ltex.anisotropy=4;
+ const lmat=new THREE.MeshStandardMaterial({map:ltex,transparent:true,alphaTest:.3,roughness:.5,polygonOffset:true,polygonOffsetFactor:-2});
+ for(const sgn of[-1,1]){const out=side(sgn,-.08,.78,.98,1.14);if(!Number.isFinite(out))continue;
+  const d=new THREE.Mesh(new THREE.PlaneGeometry(.82,.155),lmat);d.position.set(.35,1.06,sgn*(out+.012));if(sgn<0)d.rotation.y=Math.PI;d.name='h2-decal';g.add(d);}
  let tris=0,draws=0;
  g.traverse(o=>{if(!o.isMesh)return;draws++;
   const n=o.geometry.index?o.geometry.index.count/3:o.geometry.attributes.position.count/3;
   tris+=n*(o.isInstancedMesh?o.count:1);
  });
- g.userData={lamps,sprites,bar:lamps[0],frontAxle:WB()/2,rearAxle:-WB()/2,trackWidth:69.4*0.0254,
+ g.userData={lamps,sprites,glows,wheels,bar,frontAxle:hwb,rearAxle:-hwb,trackWidth:htr*2,
   halfLength:2.6,halfWidth:1.22,bodyLength:189.8*0.0254,bodyWidth:81.2*0.0254,bodyHeight:77.8*0.0254,
   grille:'seven-vertical',lampsShape:'round',triangles:Math.round(tris),drawCalls:draws,source:'glb'};
  return g;
@@ -309,12 +362,32 @@ export class PaceCar{
   const t=this.race.trk,P=t.P,s=wrapP(this.arc,P),p=t.point(s,this.d),m=this.mesh,ahead=t.point(s+1.5,this.d+(this.lastDD||0));
   const th=Math.atan2(ahead.z-p.z,ahead.x-p.x);this.x=p.x;this.z=p.z;this.th=th;
   const ud=m.userData,xf=ud.frontAxle??1.63,xr=ud.rearAxle??-1.49,halfT=(ud.trackWidth??1.76)/2;
-  const h=(f,q)=>{const cs=Math.cos(th),sn=Math.sin(th),x=p.x+cs*f-sn*q,z=p.z+sn*f+cs*q,pr=t.project(x,z);return t.height(pr.s,pr.d);};
+  const h=(f,q)=>{const cs=Math.cos(th),sn=Math.sin(th),x=p.x+cs*f-sn*q,z=p.z+sn*f+cs*q;if(this.race.terrainHeight)return this.race.terrainHeight(x,z);const pr=t.project(x,z);return t.height(pr.s,pr.d);}; /* Night21: real infield ground when parked */
   const fl=h(xf,-halfT),fr=h(xf,halfT),rl=h(xr,-halfT),rr=h(xr,halfT);
   m.position.set(p.x,(fl+fr+rl+rr)/4,p.z);m.rotation.y=-th;m.rotation.z=Math.atan2((fl+fr)-(rl+rr),xf-xr);m.rotation.x=-Math.atan2((fr+rr)-(fl+rl),halfT*2);
+  // Night21: wheels roll with speed and the fronts steer into the turn; the body leans a touch outward in
+  // turns and dips its nose under braking (squats under throttle).
+  if(dt>0){
+   const yaw=Math.atan2(Math.sin(th-(this.prevTh??th)),Math.cos(th-(this.prevTh??th)))/dt,acc=(this.v-(this.prevV??this.v))/dt;this.prevTh=th;this.prevV=this.v;
+   const wb=xf-xr,want=this.v>.3?clamp(Math.atan(wb*yaw/Math.max(this.v,1)),-.5,.5):(this.steer||0),k=Math.min(1,dt*8);
+   this.steer=(this.steer||0)+(want-(this.steer||0))*k;
+   this.roll=(this.roll||0)+(clamp(-this.v*yaw*.006,-.045,.045)-(this.roll||0))*Math.min(1,dt*4);
+   this.pitch=(this.pitch||0)+(clamp(acc*.006,-.03,.025)-(this.pitch||0))*Math.min(1,dt*4);
+   for(const w of ud.wheels||[]){w.hub.rotation.z=(w.hub.rotation.z-this.v*dt/w.r)%(Math.PI*2);w.hub.rotation.y=w.front?-this.steer:0;}
+  }
+  m.rotation.x+=this.roll||0;m.rotation.z+=this.pitch||0;
  }
  lights(on){
-  const u=this.mesh.userData,ph=Math.floor(this.t*6)%2;
+  const u=this.mesh.userData;
+  if(u.source==='glb'){
+   // left / right double-flash wig-wag with a soft sweep along each half of the bar
+   const c=this.t%1.1,flash=(a)=>(c>a&&c<a+.07)||(c>a+.13&&c<a+.2),L=flash(0),Rt=flash(.55);
+   u.lamps.forEach(l=>{const lit=l.userData.side<0?L:Rt,sweep=.5+.5*Math.sin(this.t*9-l.userData.k*1.3);l.material.emissiveIntensity=on?(lit?4.2:.25+.35*sweep):.05;});
+   u.sprites.forEach(s=>{s.visible=on&&(s.userData.side<0?L:Rt);});
+   const night=this.race.skyPreset==='night';u.glows?.forEach(g=>{g.visible=night;});
+   return;
+  }
+  const ph=Math.floor(this.t*6)%2;
   u.lamps.forEach((l,i)=>{l.material.emissiveIntensity=on?(i===ph?3.2:.35):.06;});
   u.sprites.forEach((s,i)=>{s.visible=on&&(this.low||i===ph);});
  }
